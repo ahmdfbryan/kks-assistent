@@ -82,27 +82,13 @@ async function getThumbnails(universeIds) {
   return map;
 }
 
-/** Icon game (untuk ikon kecil di footer). */
-async function getIcons(universeIds) {
-  const map = new Map();
-  for (const ids of chunk(universeIds, 50)) {
-    const url =
-      `${API('thumbnails')}/v1/games/icons?universeIds=${ids.join(',')}` +
-      '&returnPolicy=PlaceHolder&size=150x150&format=Png&isCircular=false';
-    const json = await getJson(url);
-    for (const item of json.data || []) {
-      if (item.state === 'Completed' && item.imageUrl) map.set(item.targetId, item.imageUrl);
-    }
-  }
-  return map;
-}
-
 const time = (d) => (d ? new Date(d).getTime() || 0 : 0);
 
 const SORTERS = {
   // Map yang paling awal dibuat tampil paling atas (dikirim pertama).
   created: (a, b) => time(a.created) - time(b.created) || a.universeId - b.universeId,
-  visits: (a, b) => b.visits - a.visits,
+  // Visits paling sedikit di atas, visits terbanyak dikirim paling terakhir (paling bawah).
+  visits: (a, b) => a.visits - b.visits || time(a.created) - time(b.created),
   playing: (a, b) => b.playing - a.playing || b.visits - a.visits,
   name: (a, b) => a.name.localeCompare(b.name, 'id'),
   updated: (a, b) => new Date(b.updated) - new Date(a.updated),
@@ -110,7 +96,7 @@ const SORTERS = {
 
 /**
  * Ambil semua map grup lengkap dengan statistiknya.
- * Thumbnail/icon bersifat opsional — kalau gagal, card tetap tampil tanpa gambar.
+ * Thumbnail bersifat opsional — kalau gagal, card tetap tampil tanpa gambar.
  */
 async function fetchGroupMaps() {
   const games = (await getGroupGames(config.groupId)).filter(
@@ -120,10 +106,9 @@ async function fetchGroupMaps() {
 
   const ids = games.map((g) => g.universeId);
   const details = await getGameDetails(ids);
-  const [thumbs, icons] = await Promise.all([
-    getThumbnails(ids).catch((e) => (console.warn('[roblox] thumbnail gagal:', e.message), new Map())),
-    getIcons(ids).catch((e) => (console.warn('[roblox] icon gagal:', e.message), new Map())),
-  ]);
+  const thumbs = await getThumbnails(ids).catch(
+    (e) => (console.warn('[roblox] thumbnail gagal:', e.message), new Map()),
+  );
 
   const maps = games.map((g) => {
     const d = details.get(g.universeId) || {};
@@ -138,12 +123,11 @@ async function fetchGroupMaps() {
       created: d.created || g.created || null,
       updated: d.updated || null,
       thumbnail: thumbs.get(g.universeId) || null,
-      icon: icons.get(g.universeId) || null,
       url: `https://www.roblox.com/games/${placeId}`,
     };
   });
 
-  return maps.sort(SORTERS[config.sortBy] || SORTERS.created);
+  return maps.sort(SORTERS[config.sortBy] || SORTERS.visits);
 }
 
 module.exports = { fetchGroupMaps };
