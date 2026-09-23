@@ -87,7 +87,18 @@ async function handleStop(interaction) {
 }
 
 async function execute(interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } catch (err) {
+    if (err.code === 10062 || err.code === 40060) {
+      console.warn(
+        `[command] /maps tidak sempat dijawab (kode ${err.code}). Biasanya karena ada 2 proses bot ` +
+          'dengan token yang sama. Cek `pm2 list` / `ps aux | grep node` dan matikan proses lama.',
+      );
+      return;
+    }
+    throw err;
+  }
   const sub = interaction.options.getSubcommand();
   if (sub === 'kirim') return handleKirim(interaction);
   if (sub === 'refresh') return handleRefresh(interaction);
