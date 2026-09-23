@@ -31,8 +31,8 @@ module.exports = {
   robloxDomain: process.env.ROBLOX_DOMAIN || 'roblox.com',
   // Universe ID map yang tidak ingin ditampilkan (pisahkan dengan koma).
   excludeUniverseIds: parseIdList(process.env.EXCLUDE_UNIVERSE_IDS),
-  // Urutan card: created (map terlama duluan) | visits | playing | name | updated
-  sortBy: (process.env.SORT_BY || 'created').toLowerCase(),
+  // Urutan card: visits (terbanyak paling akhir) | created (map terlama duluan) | playing | name | updated
+  sortBy: (process.env.SORT_BY || 'visits').toLowerCase(),
 
   embedColor: parseColor(process.env.EMBED_COLOR, 0xe53935),
   footerText: process.env.FOOTER_TEXT || 'Update setiap 1 hari • Made by KokoKrunch Studios',
