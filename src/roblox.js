@@ -130,4 +130,4 @@ async function fetchGroupMaps() {
   return maps.sort(SORTERS[config.sortBy] || SORTERS.visits);
 }
 
-module.exports = { fetchGroupMaps };
+module.exports = { fetchGroupMaps, getJson, chunk, API, sleep };
