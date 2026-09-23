@@ -50,7 +50,6 @@ function buildCatalogCard(item, { footerIcon } = {}) {
     .setFooter({ text: config.footerText, iconURL: footerIcon || undefined })
     .setTimestamp(new Date());
 
-  if (item.description) embed.setDescription(item.description.slice(0, 300));
   if (item.thumbnail) embed.setImage(item.thumbnail);
   return { embeds: [embed], components: [linkButton('Beli di Catalog', item.url)] };
 }
