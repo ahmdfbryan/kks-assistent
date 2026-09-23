@@ -9,6 +9,14 @@ const CHANNEL_GONE = new Set([RESTJSONErrorCodes.UnknownChannel, RESTJSONErrorCo
 let running = false;
 
 /**
+ * "Sidik jari" tampilan card. Kalau urutan/footer/warna berubah (mis. setelah update kode
+ * lalu restart), card langsung diperbarui saat bot menyala tanpa menunggu 24 jam.
+ */
+const CARD_VERSION = 3; // naikkan angka ini setiap mengubah tampilan card
+const layoutSignature = () =>
+  JSON.stringify([CARD_VERSION, config.sortBy, config.footerText, config.embedColor, config.excludeUniverseIds]);
+
+/**
  * Sinkronkan card di satu channel dengan daftar map terbaru.
  * Card disimpan per "slot" (urutan). Slot yang ada di-edit, slot baru dikirim,
  * slot berlebih (map dihapus/diprivate) dihapus.
@@ -66,6 +74,7 @@ async function syncChannel(client, channelId, maps) {
     guildId: channel.guildId,
     messageIds: newIds,
     lastUpdatedAt: Date.now(),
+    layout: layoutSignature(),
   });
   return { ok: true, count: maps.length };
 }
@@ -80,7 +89,12 @@ async function runUpdate(client, { force = false, onlyChannelId = null } = {}) {
   const targets = store
     .allChannels()
     .filter((c) => (onlyChannelId ? c.channelId === onlyChannelId : true))
-    .filter((c) => force || now - (c.lastUpdatedAt || 0) >= config.updateIntervalMs);
+    .filter(
+      (c) =>
+        force ||
+        c.layout !== layoutSignature() ||
+        now - (c.lastUpdatedAt || 0) >= config.updateIntervalMs,
+    );
 
   if (!targets.length) return { ok: true, count: 0, skipped: true };
 
