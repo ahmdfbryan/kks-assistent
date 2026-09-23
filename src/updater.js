@@ -35,7 +35,7 @@ const KINDS = {
     },
     layout: () =>
       JSON.stringify([
-        1,
+        2,
         config.catalogSortBy,
         config.catalogIncludeOffsale,
         config.catalogLimit,
