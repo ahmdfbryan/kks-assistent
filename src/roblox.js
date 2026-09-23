@@ -49,7 +49,7 @@ async function getGroupGames(groupId) {
       (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
     const json = await getJson(url);
     for (const g of json.data || []) {
-      games.push({ universeId: g.id, name: g.name, rootPlaceId: g.rootPlace?.id ?? null });
+      games.push({ universeId: g.id, name: g.name, rootPlaceId: g.rootPlace?.id ?? null, created: g.created || null });
     }
     cursor = json.nextPageCursor || '';
   } while (cursor);
@@ -97,7 +97,11 @@ async function getIcons(universeIds) {
   return map;
 }
 
+const time = (d) => (d ? new Date(d).getTime() || 0 : 0);
+
 const SORTERS = {
+  // Map yang paling awal dibuat tampil paling atas (dikirim pertama).
+  created: (a, b) => time(a.created) - time(b.created) || a.universeId - b.universeId,
   visits: (a, b) => b.visits - a.visits,
   playing: (a, b) => b.playing - a.playing || b.visits - a.visits,
   name: (a, b) => a.name.localeCompare(b.name, 'id'),
@@ -131,6 +135,7 @@ async function fetchGroupMaps() {
       playing: Number(d.playing) || 0,
       visits: Number(d.visits) || 0,
       price: d.price ?? null,
+      created: d.created || g.created || null,
       updated: d.updated || null,
       thumbnail: thumbs.get(g.universeId) || null,
       icon: icons.get(g.universeId) || null,
@@ -138,7 +143,7 @@ async function fetchGroupMaps() {
     };
   });
 
-  return maps.sort(SORTERS[config.sortBy] || SORTERS.visits);
+  return maps.sort(SORTERS[config.sortBy] || SORTERS.created);
 }
 
 module.exports = { fetchGroupMaps };
