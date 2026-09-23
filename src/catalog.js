@@ -132,17 +132,33 @@ async function getThumbs(items) {
   return map;
 }
 
+/**
+ * Harga + status "bisa dibeli".
+ * Item Limited / Collectible hanya dianggap bisa dibeli kalau stok resmi masih ada
+ * atau ada reseller yang menjual. Limited yang habis / tanpa penjual → disembunyikan.
+ */
 function priceInfo(item) {
   const restrictions = item.itemRestrictions || [];
   const isLimited = restrictions.some((r) => /limited|collectible/i.test(r));
   const status = String(item.priceStatus || '');
+  const lowest = typeof item.lowestPrice === 'number' && item.lowestPrice > 0 ? item.lowestPrice : null;
+  const rupiah = (v) => ({ label: `R$ ${Number(v).toLocaleString('id-ID')}`, value: v, onSale: true });
+  const notBuyable = { label: 'Off Sale', value: null, onSale: false };
 
-  if (/off\s*sale/i.test(status) && !(isLimited && item.lowestPrice)) return { label: 'Off Sale', value: null, onSale: false };
+  if (isLimited) {
+    const stockLeft =
+      typeof item.unitsAvailableForConsumption === 'number' ? item.unitsAvailableForConsumption > 0 : null;
+    const officialOnSale =
+      !/off\s*sale|no\s*resellers/i.test(status) && typeof item.price === 'number' && stockLeft !== false;
+    if (officialOnSale && stockLeft === true) return item.price === 0 ? { label: 'Free', value: 0, onSale: true } : rupiah(item.price);
+    if (lowest) return rupiah(lowest); // dibeli dari reseller
+    return notBuyable; // limited habis / tidak ada penjual
+  }
+
+  if (/off\s*sale|no\s*resellers/i.test(status)) return notBuyable;
   if (/free/i.test(status) || item.price === 0) return { label: 'Free', value: 0, onSale: true };
-
-  const value = isLimited && item.lowestPrice ? item.lowestPrice : item.price;
-  if (typeof value !== 'number') return { label: 'Off Sale', value: null, onSale: false };
-  return { label: `R$ ${Number(value).toLocaleString('id-ID')}`, value, onSale: true };
+  if (typeof item.price !== 'number') return notBuyable;
+  return rupiah(item.price);
 }
 
 const time = (d) => (d ? new Date(d).getTime() || 0 : 0);
