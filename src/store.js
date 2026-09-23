@@ -6,19 +6,33 @@ const path = require('path');
  * Struktur:
  * {
  *   "channels": {
- *     "<channelId>": { "guildId": "...", "messageIds": ["..."], "lastUpdatedAt": 0 }
+ *     "maps:<channelId>":    { "kind": "maps", "channelId": "...", "guildId": "...", "messageIds": [], "lastUpdatedAt": 0 },
+ *     "catalog:<channelId>": { "kind": "catalog", ... }
  *   }
  * }
+ * Data versi lama (key = channelId saja) otomatis dianggap card "maps".
  */
 const FILE = path.join(__dirname, '..', 'data', 'state.json');
 
+const keyOf = (kind, channelId) => `${kind}:${channelId}`;
+
 function load() {
+  let data = {};
   try {
-    const data = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-    return { channels: data.channels || {} };
+    data = JSON.parse(fs.readFileSync(FILE, 'utf8'));
   } catch {
     return { channels: {} };
   }
+  const channels = {};
+  for (const [key, value] of Object.entries(data.channels || {})) {
+    if (key.includes(':')) {
+      channels[key] = value;
+    } else {
+      // migrasi format lama
+      channels[keyOf('maps', key)] = { ...value, kind: 'maps', channelId: key };
+    }
+  }
+  return { channels };
 }
 
 let state = load();
@@ -31,18 +45,19 @@ function save() {
 }
 
 module.exports = {
-  allChannels() {
-    return Object.entries(state.channels).map(([channelId, v]) => ({ channelId, ...v }));
+  all(kind = null) {
+    return Object.values(state.channels).filter((c) => !kind || c.kind === kind);
   },
-  getChannel(channelId) {
-    return state.channels[channelId] || null;
+  get(kind, channelId) {
+    return state.channels[keyOf(kind, channelId)] || null;
   },
-  setChannel(channelId, data) {
-    state.channels[channelId] = { ...(state.channels[channelId] || {}), ...data };
+  set(kind, channelId, data) {
+    const key = keyOf(kind, channelId);
+    state.channels[key] = { ...(state.channels[key] || {}), ...data, kind, channelId };
     save();
   },
-  removeChannel(channelId) {
-    delete state.channels[channelId];
+  remove(kind, channelId) {
+    delete state.channels[keyOf(kind, channelId)];
     save();
   },
 };
