@@ -32,7 +32,11 @@ async function syncChannel(client, channelId, maps) {
     return { ok: false, reason: 'Channel bukan text channel.' };
   }
 
-  const payloads = maps.length ? maps.map(buildMapCard) : [buildEmptyCard()];
+  // Logo server Discord untuk ikon footer (kosong kalau server belum punya logo).
+  const footerIcon = channel.guild?.iconURL({ extension: 'png', size: 128 }) || null;
+  const payloads = maps.length
+    ? maps.map((m) => buildMapCard(m, { footerIcon }))
+    : [buildEmptyCard({ footerIcon })];
   const oldIds = saved.messageIds || [];
   const newIds = [];
 
