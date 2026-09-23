@@ -1,8 +1,9 @@
 const { Client, GatewayIntentBits, Events, MessageFlags } = require('discord.js');
 const config = require('./config');
-const maps = require('./commands');
+const { commands } = require('./commands');
 const { startScheduler } = require('./updater');
 
+const byName = new Map(commands.map((c) => [c.data.name, c]));
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.once(Events.ClientReady, (c) => {
@@ -11,9 +12,11 @@ client.once(Events.ClientReady, (c) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand() || interaction.commandName !== maps.data.name) return;
+  if (!interaction.isChatInputCommand()) return;
+  const command = byName.get(interaction.commandName);
+  if (!command) return;
   try {
-    await maps.execute(interaction);
+    await command.execute(interaction);
   } catch (err) {
     console.error('[command] error:', err);
     const msg = { content: '❌ Terjadi kesalahan saat menjalankan perintah.', flags: MessageFlags.Ephemeral };
