@@ -37,7 +37,7 @@ module.exports = {
   // === Catalog ===
   // Urutan card catalog: favorit (terbanyak paling akhir) | terbaru (item terlama duluan) | harga | name
   catalogSortBy: (process.env.CATALOG_SORT_BY || 'favorit').toLowerCase(),
-  // true = item Off Sale ikut ditampilkan
+  // true = item yang tidak bisa dibeli (Off Sale / Limited habis) ikut ditampilkan
   catalogIncludeOffsale: /^(1|true|ya|yes)$/i.test(process.env.CATALOG_INCLUDE_OFFSALE || 'false'),
   // Batas jumlah card catalog (0 = semua). Kalau dibatasi, yang diambil item dengan favorit terbanyak.
   catalogLimit: Math.max(0, Number(process.env.CATALOG_LIMIT) || 0),
