@@ -1,3 +1,6 @@
+const { ensureSingleInstance } = require('./single-instance');
+ensureSingleInstance(); // tolak jalan kalau bot sudah jalan di proses lain
+
 const { Client, GatewayIntentBits, Events, MessageFlags } = require('discord.js');
 const config = require('./config');
 const { commands } = require('./commands');
