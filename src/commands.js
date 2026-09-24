@@ -7,6 +7,7 @@ const {
 const store = require('./store');
 const { KINDS, runUpdate } = require('./updater');
 const config = require('./config');
+const { sendWelcome } = require('./welcome');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 const NEEDED = [
@@ -116,9 +117,36 @@ function makeCardCommand({ name, kind, description }) {
   return { data, execute };
 }
 
+/** /welcome test → kirim contoh pesan welcome memakai akun kamu sendiri. */
+const welcomeCommand = {
+  data: new SlashCommandBuilder()
+    .setName('welcome')
+    .setDescription('Pesan welcome member baru')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDMPermission(false)
+    .addSubcommand((s) =>
+      s
+        .setName('test')
+        .setDescription('Kirim contoh pesan welcome (pakai akun kamu) untuk cek tampilan')
+        .addChannelOption((o) =>
+          o
+            .setName('channel')
+            .setDescription('Kirim contoh ke channel ini (default: channel welcome di welcome.json)')
+            .addChannelTypes(...TEXT_CHANNELS),
+        ),
+    ),
+  async execute(interaction) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const res = await sendWelcome(member, { channelOverride: interaction.options.getChannel('channel') });
+    return interaction.editReply(res.ok ? `✅ Contoh welcome dikirim ke ${res.channel}.` : `❌ ${res.reason}`);
+  },
+};
+
 const commands = [
   makeCardCommand({ name: 'maps', kind: 'maps', description: 'Card daftar map Roblox KokoKrunch Studios' }),
   makeCardCommand({ name: 'catalog', kind: 'catalog', description: 'Card item catalog KokoKrunch Studios' }),
+  welcomeCommand,
 ];
 
 module.exports = { commands };
