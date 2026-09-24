@@ -2,9 +2,12 @@ const { Client, GatewayIntentBits, Events, MessageFlags } = require('discord.js'
 const config = require('./config');
 const { commands } = require('./commands');
 const { startScheduler } = require('./updater');
+const { registerWelcome } = require('./welcome');
 
 const byName = new Map(commands.map((c) => [c.data.name, c]));
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+// GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
+registerWelcome(client);
 
 client.once(Events.ClientReady, (c) => {
   console.log(`🤖 Login sebagai ${c.user.tag}`);
