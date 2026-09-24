@@ -9,7 +9,7 @@
 
   "enabled": true,
   "channelId": "1523618383902408797",
-  "mentionMember": true,
+  "mentionMember": false,
   "accentColor": "#E53935",
 
   "welcome": {
