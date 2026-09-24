@@ -23,7 +23,7 @@
     "description": "Before you join our active gaming parties, please verify and review community terms.\n\nSilahkan ambil role di pencet Verify Disini kanan atas\n\nAnnouncement 📢 {channel:1523618383902408798}",
     "buttons": [
       { "label": "Verify Disini", "channelId": "1552529630127456326" },
-      { "label": "Baca Rules", "channelId": "1525878579794280458" }
+      { "label": "Baca Rules", "channelId": "1552532239902838894" }
     ]
   }
 }
