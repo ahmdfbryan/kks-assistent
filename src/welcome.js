@@ -15,7 +15,6 @@ const {
 } = require('discord.js');
 
 const FILE = path.join(__dirname, '..', 'welcome.json');
-const WELCOMED_FILE = path.join(__dirname, '..', 'data', 'welcomed.json');
 const isId = (v) => /^\d{17,20}$/.test(String(v || ''));
 
 /** Dibaca ulang tiap dipakai → edit welcome.json tidak perlu restart bot. */
@@ -134,29 +133,20 @@ async function sendWelcome(member, { channelOverride = null } = {}) {
 }
 
 /**
- * Catatan member yang sudah pernah disambut → { "<guildId>": { "<userId>": timestamp } }.
- * Dipakai supaya welcome hanya dikirim 1x per akun walaupun keluar-masuk server.
+ * Catatan member yang sudah pernah disambut: 1 file kecil per member di data/welcomed/.
+ * Dibuat dengan mode "wx" (gagal kalau sudah ada) → aman walaupun ada 2 proses bot sekaligus.
+ * Mengembalikan true kalau member ini BARU pertama kali disambut.
  */
-function loadWelcomed() {
+const WELCOMED_DIR = path.join(__dirname, '..', 'data', 'welcomed');
+function claimFirstWelcome(guildId, userId) {
+  fs.mkdirSync(WELCOMED_DIR, { recursive: true });
   try {
-    return JSON.parse(fs.readFileSync(WELCOMED_FILE, 'utf8'));
-  } catch {
-    return {};
+    fs.writeFileSync(path.join(WELCOMED_DIR, `${guildId}-${userId}`), String(Date.now()), { flag: 'wx' });
+    return true;
+  } catch (err) {
+    if (err.code === 'EEXIST') return false;
+    throw err;
   }
-}
-let welcomed = loadWelcomed();
-
-function hasBeenWelcomed(guildId, userId) {
-  return Boolean(welcomed[guildId]?.[userId]);
-}
-
-function markWelcomed(guildId, userId) {
-  welcomed[guildId] = welcomed[guildId] || {};
-  welcomed[guildId][userId] = Date.now();
-  fs.mkdirSync(path.dirname(WELCOMED_FILE), { recursive: true });
-  const tmp = `${WELCOMED_FILE}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(welcomed));
-  fs.renameSync(tmp, WELCOMED_FILE);
 }
 
 const REGISTERED = Symbol('welcomeRegistered');
@@ -188,12 +178,10 @@ function registerWelcome(client) {
     const cfg = loadConfig();
     const onlyOnce = cfg?.onlyOnce !== false; // default: 1x per akun
 
-    if (onlyOnce && hasBeenWelcomed(member.guild.id, member.id)) {
+    if (onlyOnce && !claimFirstWelcome(member.guild.id, member.id)) {
       console.log(`[welcome] ${member.user.tag} join lagi → sudah pernah disambut, dilewati.`);
       return;
     }
-    // Tandai sebelum kirim, supaya event join ganda (join-keluar-join cepat) tidak kirim 2x.
-    if (onlyOnce) markWelcomed(member.guild.id, member.id);
 
     try {
       const res = await sendWelcome(member);
