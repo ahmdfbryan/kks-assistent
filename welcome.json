@@ -1,0 +1,29 @@
+{
+  "_petunjuk": [
+    "File ini dibaca ulang setiap ada member join, jadi perubahan langsung berlaku TANPA restart bot.",
+    "Placeholder yang bisa dipakai di teks: {name} = nama tampilan member, {username} = username, {mention} = @member,",
+    "{server} = nama server, {memberCount} = urutan member (mis. 95.661), {channel:ID} = link ke channel (mis. {channel:123456789}).",
+    "thumbnail: \"avatar\" = foto profil member, \"server\" = logo server, atau isi link gambar langsung.",
+    "Tombol: isi \"url\" untuk link bebas, ATAU \"channelId\" untuk langsung membuka channel di server ini."
+  ],
+
+  "enabled": true,
+  "channelId": "1523618383902408797",
+  "mentionMember": false,
+  "accentColor": "#E53935",
+
+  "welcome": {
+    "title": "Selamat datang, {name} di {server}!",
+    "description": "Kamu member ke #{memberCount}. wajib untuk membaca Rules & Guide Server di bawah ini.",
+    "thumbnail": "avatar"
+  },
+
+  "rules": {
+    "title": "🔔 Rules & Guide Server",
+    "description": "Before you join our active gaming parties, please verify and review community terms.\n\nAmbil role di pencet Verify Disini kanan atas\n\nAnnouncement 📢 {channel:ISI_ID_CHANNEL_ANNOUNCEMENT}",
+    "buttons": [
+      { "label": "Verify Disini", "channelId": "1552529630127456326" },
+      { "label": "Baca Rules", "channelId": "1525878579794280458" }
+    ]
+  }
+}
