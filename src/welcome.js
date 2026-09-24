@@ -15,6 +15,7 @@ const {
 } = require('discord.js');
 
 const FILE = path.join(__dirname, '..', 'welcome.json');
+const WELCOMED_FILE = path.join(__dirname, '..', 'data', 'welcomed.json');
 const isId = (v) => /^\d{17,20}$/.test(String(v || ''));
 
 /** Dibaca ulang tiap dipakai → edit welcome.json tidak perlu restart bot. */
@@ -132,10 +133,68 @@ async function sendWelcome(member, { channelOverride = null } = {}) {
   return { ok: true, channel };
 }
 
-/** Pasang listener member join. */
+/**
+ * Catatan member yang sudah pernah disambut → { "<guildId>": { "<userId>": timestamp } }.
+ * Dipakai supaya welcome hanya dikirim 1x per akun walaupun keluar-masuk server.
+ */
+function loadWelcomed() {
+  try {
+    return JSON.parse(fs.readFileSync(WELCOMED_FILE, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+let welcomed = loadWelcomed();
+
+function hasBeenWelcomed(guildId, userId) {
+  return Boolean(welcomed[guildId]?.[userId]);
+}
+
+function markWelcomed(guildId, userId) {
+  welcomed[guildId] = welcomed[guildId] || {};
+  welcomed[guildId][userId] = Date.now();
+  fs.mkdirSync(path.dirname(WELCOMED_FILE), { recursive: true });
+  const tmp = `${WELCOMED_FILE}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(welcomed));
+  fs.renameSync(tmp, WELCOMED_FILE);
+}
+
+const REGISTERED = Symbol('welcomeRegistered');
+const recentJoins = new Map(); // "<guild>:<user>" → waktu terakhir diproses
+
+/**
+ * Pasang listener member join — CUKUP DIPANGGIL SEKALI saat bot menyala (di index.js, di luar event lain).
+ * Kalau terpanggil berkali-kali, panggilan berikutnya diabaikan supaya welcome tidak terkirim dobel.
+ */
 function registerWelcome(client) {
+  if (client[REGISTERED]) {
+    console.warn(
+      '[welcome] registerWelcome() dipanggil lebih dari sekali — diabaikan. ' +
+        'Pindahkan pemanggilannya ke luar event (lihat stack di bawah):\n' + new Error().stack,
+    );
+    return;
+  }
+  client[REGISTERED] = true;
+
   client.on('guildMemberAdd', async (member) => {
+    // Pengaman tambahan: event join yang sama dalam 10 detik hanya diproses 1x.
+    const key = `${member.guild.id}:${member.id}`;
+    const last = recentJoins.get(key) || 0;
+    if (Date.now() - last < 10_000) return;
+    recentJoins.set(key, Date.now());
+    if (recentJoins.size > 5000) recentJoins.clear();
+
     if (member.user.bot) return;
+    const cfg = loadConfig();
+    const onlyOnce = cfg?.onlyOnce !== false; // default: 1x per akun
+
+    if (onlyOnce && hasBeenWelcomed(member.guild.id, member.id)) {
+      console.log(`[welcome] ${member.user.tag} join lagi → sudah pernah disambut, dilewati.`);
+      return;
+    }
+    // Tandai sebelum kirim, supaya event join ganda (join-keluar-join cepat) tidak kirim 2x.
+    if (onlyOnce) markWelcomed(member.guild.id, member.id);
+
     try {
       const res = await sendWelcome(member);
       if (!res.ok) console.warn(`[welcome] ${member.user.tag}: ${res.reason}`);
