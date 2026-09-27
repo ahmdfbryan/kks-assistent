@@ -14,9 +14,15 @@ const byName = new Map(commands.map((c) => [c.data.name, c]));
 // GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
 // GuildVoiceStates dipakai fitur cari voice (tidak perlu diaktifkan di Developer Portal).
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildVoiceStates],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildMessages, // untuk panel cari voice yang sticky (tidak membaca isi pesan)
+  ],
 });
 registerWelcome(client);
+voiceFinder.registerStickyPanel(client);
 
 client.once(Events.ClientReady, (c) => {
   console.log(`🤖 Login sebagai ${c.user.tag}`);
@@ -43,14 +49,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
-  // Cari member di voice: tombol "Cari Username" → form → hasil
-  if (interaction.isButton() && interaction.customId === voiceFinder.OPEN_BUTTON) {
-    await voiceFinder.handleOpenButton(interaction).catch((err) => console.error('[voice-finder] error:', err));
-    return;
-  }
-  if (interaction.isModalSubmit() && interaction.customId === voiceFinder.MODAL_ID) {
+  // Cari member di voice: pilih member dari daftar → hasil
+  if (interaction.isUserSelectMenu() && interaction.customId === voiceFinder.SELECT_ID) {
     try {
-      await voiceFinder.handleSearchModal(interaction);
+      await voiceFinder.handleSelect(interaction);
     } catch (err) {
       console.error('[voice-finder] error:', err);
       const msg = { content: '❌ Pencarian gagal, coba lagi.', flags: MessageFlags.Ephemeral };
