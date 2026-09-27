@@ -1,0 +1,86 @@
+{
+  "_petunjuk": [
+    "File ini dibaca ulang setiap /rules dijalankan atau tombol Bahasa Inggris diklik — tidak perlu restart bot.",
+    "languages.id = versi Indonesia (dikirim ke channel). languages.en = versi Inggris (muncul khusus untuk yang klik tombol).",
+    "Setiap section = 1 kotak dengan garis warna 'color'. Setiap isi 'texts' = 1 blok teks. Mendukung markdown Discord: # judul, ### subjudul, - bullet, **tebal**, *miring*, `kode`, >>> kutipan.",
+    "Kalau teks terlalu panjang untuk 1 pesan, bot otomatis memecahnya jadi beberapa pesan. @everyone/@here di teks TIDAK akan mem-ping siapa pun."
+  ],
+  "translateButton": {
+    "label": "Bahasa Inggris",
+    "emoji": "🇬🇧"
+  },
+  "languages": {
+    "id": [
+      {
+        "color": "#5865F2",
+        "texts": [
+          "## ✦ NCS — COMMUNITY GUIDELINES\nNoname Studios Creative (NCS) adalah ruang untuk bertemu orang baru, membangun pertemanan, berbagi cerita, dan menikmati komunitas bersama.",
+          ">>> **Menjadi bagian dari NCS berarti ikut menjaga suasana komunitas.**\nGunakan akal sehat, saling menghargai, dan perlakukan anggota lain sebagaimana kamu ingin diperlakukan.\n\nAgar suasana tetap nyaman, aman, dan menyenangkan untuk semua anggota, mohon luangkan waktu untuk membaca dan memahami panduan berikut."
+        ]
+      },
+      {
+        "color": "#57F287",
+        "texts": [
+          "### `Rule 1` Saling Menghargai\n- Hormati setiap anggota tanpa memandang latar belakang, usia, pengalaman, maupun pendapat mereka.\n- Hindari penghinaan, provokasi, pelecehan, ujaran kebencian, bullying, atau tindakan lain yang sengaja membuat anggota lain merasa tidak nyaman.",
+          "### `Rule 2` 💬 Jaga Percakapan Tetap Nyaman\n- Gunakan bahasa dan sikap yang pantas ketika berinteraksi dengan anggota lain.\n- Perbedaan pendapat merupakan hal yang wajar. Namun, jangan biarkan sebuah perbedaan berubah menjadi pertengkaran atau konflik yang mengganggu suasana komunitas.\n- **Bercanda boleh, tetapi tetap perhatikan batas kenyamanan orang lain.**",
+          "### `Rule 3` 🚫 Dilarang Spam & Flood\n- Jangan mengirim pesan, emoji, mention, gambar, stiker, atau konten lainnya secara berulang dalam waktu singkat.\n- Hindari penggunaan @everyone, @here, maupun mention anggota lain secara berlebihan tanpa alasan yang jelas.\n- Satu pesan yang tepat jauh lebih baik daripada memenuhi chat dengan pesan yang tidak diperlukan.",
+          "### `Rule 4` 📢 Dilarang Promosi & Iklan\n- NCS bukan tempat untuk melakukan promosi pribadi, iklan, maupun menyebarkan tautan ke komunitas, server, produk, layanan, akun, atau proyek pribadi tanpa izin dari pengelola.\n- Promosi yang tidak diminta dapat mengganggu pengalaman anggota lain.\n- **Jika memiliki sesuatu yang ingin dipromosikan, pastikan terlebih dahulu bahwa kamu telah mendapatkan izin dari pihak yang berwenang.**",
+          "### `Rule 5` 🤖 Gunakan Bot dengan Bijak\n- Jangan menggunakan bot secara sembarangan, terutama bot yang dapat mengirim pesan secara otomatis, melakukan spam, menjalankan command berulang, atau mengganggu aktivitas anggota lain.\n- Gunakan bot hanya pada channel dan sesuai fungsi yang telah disediakan.\n- **Bot dibuat untuk membantu komunitas, bukan untuk memenuhi channel dengan aktivitas yang tidak diperlukan.**",
+          "### `Rule 6` 🔒 Hormati Privasi\n- Jangan membagikan informasi pribadi milik diri sendiri maupun orang lain tanpa persetujuan.\n- Termasuk namun tidak terbatas pada **nama lengkap, alamat, nomor telepon, akun pribadi, lokasi, foto pribadi, percakapan privat, maupun informasi sensitif lainnya.**\n- Jika seseorang meminta agar informasi tertentu tidak dibagikan, hormati permintaan tersebut.",
+          "### `Rule 7` 🌱 Aktif & Berpartisipasi\n- NCS dibangun dari interaksi antaranggota. Jangan ragu untuk menyapa, ikut berdiskusi, bermain bersama, atau bergabung dalam aktivitas komunitas.\n- Kamu tidak harus selalu aktif setiap saat, tetapi ketika berada di dalam komunitas, **berikan kontribusi positif dan ikut menjaga kehidupan komunitas.**",
+          "### `Rule 8` 🗂️ Gunakan Channel yang Tepat\n- Setiap channel dibuat dengan fungsi tertentu. Pastikan kamu mengirimkan pesan pada channel yang sesuai dengan topik pembahasannya.\n- Hindari memindahkan percakapan yang tidak relevan ke channel lain atau menggunakan channel khusus untuk keperluan yang berbeda.\n- Dengan menggunakan channel yang tepat, informasi menjadi lebih mudah ditemukan dan percakapan tetap tertata.",
+          "### `Rule 9` 💰 Dilarang Jual Beli\n- Aktivitas jual beli, menawarkan jasa, mencari pembeli, melakukan transaksi, maupun mempromosikan barang atau layanan berbayar tidak diperbolehkan di dalam komunitas tanpa izin resmi dari pengelola.\n- Aturan ini dibuat untuk menjaga NCS tetap menjadi ruang komunitas dan mengurangi potensi penipuan, perselisihan, maupun transaksi yang tidak dapat dipertanggungjawabkan.\n- Jangan melakukan transaksi dengan anggota lain melalui server tanpa izin resmi dari pengelola.",
+          "### `Rule 10` 🛡️ Hormati Keamanan & Kenyamanan Bersama\n- Jangan melakukan tindakan yang dapat mengganggu, merusak, atau menyalahgunakan sistem maupun komunitas NCS.\n- Termasuk mencoba mengeksploitasi bot, sistem server, permission, atau fitur lainnya untuk kepentingan pribadi maupun mengganggu anggota lain.\n- Jika menemukan bug atau celah keamanan, laporkan kepada pengelola secara privat dan jangan menyalahgunakannya."
+        ]
+      },
+      {
+        "color": "#ED4245",
+        "texts": [
+          "# PENEGAKAN ATURAN\n- Pelanggaran terhadap panduan komunitas dapat ditindak sesuai tingkat pelanggaran dan situasi yang terjadi. Tindakan dapat berupa peringatan, penghapusan konten, timeout, kick, hingga ban dari komunitas.\n- Staff berhak mengambil tindakan yang diperlukan untuk menjaga keamanan, kenyamanan, dan ketertiban NCS."
+        ]
+      },
+      {
+        "color": "#5865F2",
+        "texts": [
+          ">>> Rules dibuat bukan untuk membatasi pertemanan, tetapi untuk memastikan semua orang memiliki ruang yang nyaman untuk mendapatkannya.\n\n**Meet people. Make friends. Build memories.**"
+        ]
+      }
+    ],
+    "en": [
+      {
+        "color": "#5865F2",
+        "texts": [
+          "## ✦ NCS — COMMUNITY GUIDELINES\nNoname Studios Creative (NCS) is a place to meet new people, build friendships, share stories, and enjoy being part of a community together.",
+          ">>> **Being part of NCS means helping to take care of the community's atmosphere.**\nUse common sense, respect one another, and treat other members the way you would like to be treated.\n\nTo keep things comfortable, safe, and enjoyable for every member, please take a moment to read and understand the following guidelines."
+        ]
+      },
+      {
+        "color": "#57F287",
+        "texts": [
+          "### `Rule 1` Respect Each Other\n- Respect every member regardless of their background, age, experience, or opinions.\n- Avoid insults, provocation, harassment, hate speech, bullying, or any other actions meant to make other members feel uncomfortable.",
+          "### `Rule 2` 💬 Keep Conversations Comfortable\n- Use appropriate language and behavior when interacting with other members.\n- Differences of opinion are normal. However, don't let a disagreement turn into an argument or conflict that disrupts the community.\n- **Jokes are fine, but always be mindful of other people's comfort.**",
+          "### `Rule 3` 🚫 No Spam & Flooding\n- Do not send messages, emojis, mentions, images, stickers, or any other content repeatedly within a short period of time.\n- Avoid excessive use of @everyone, @here, or mentioning other members without a clear reason.\n- One well-placed message is far better than filling the chat with unnecessary ones.",
+          "### `Rule 4` 📢 No Promotion & Advertising\n- NCS is not a place for self-promotion, advertising, or sharing links to communities, servers, products, services, accounts, or personal projects without permission from the management.\n- Unsolicited promotion can disrupt other members' experience.\n- **If you have something you'd like to promote, make sure you have received permission from the authorized staff first.**",
+          "### `Rule 5` 🤖 Use Bots Responsibly\n- Do not misuse bots, especially bots that send automated messages, spam, run repeated commands, or disrupt other members' activities.\n- Only use bots in the designated channels and for their intended purpose.\n- **Bots are here to help the community, not to fill channels with unnecessary activity.**",
+          "### `Rule 6` 🔒 Respect Privacy\n- Do not share personal information about yourself or others without consent.\n- This includes but is not limited to **full names, addresses, phone numbers, personal accounts, locations, personal photos, private conversations, and other sensitive information.**\n- If someone asks that certain information not be shared, respect their request.",
+          "### `Rule 7` 🌱 Be Active & Participate\n- NCS is built on interaction between members. Don't hesitate to say hello, join discussions, play together, or take part in community activities.\n- You don't have to be active all the time, but while you're in the community, **make a positive contribution and help keep the community alive.**",
+          "### `Rule 8` 🗂️ Use the Right Channels\n- Every channel has a specific purpose. Make sure you post in the channel that matches the topic of discussion.\n- Avoid moving unrelated conversations into other channels or using dedicated channels for different purposes.\n- Using the right channels makes information easier to find and keeps conversations organized.",
+          "### `Rule 9` 💰 No Buying & Selling\n- Buying and selling, offering services, looking for buyers, making transactions, or promoting paid goods or services is not allowed in the community without official permission from the management.\n- This rule keeps NCS a community space and reduces the risk of scams, disputes, and transactions that no one can be held accountable for.\n- Do not make transactions with other members through the server without official permission from the management.",
+          "### `Rule 10` 🛡️ Respect Everyone's Safety & Comfort\n- Do not take any action that could disrupt, damage, or abuse the NCS systems or community.\n- This includes attempting to exploit bots, server systems, permissions, or other features for personal gain or to disturb other members.\n- If you find a bug or security vulnerability, report it privately to the management and do not abuse it."
+        ]
+      },
+      {
+        "color": "#ED4245",
+        "texts": [
+          "# RULE ENFORCEMENT\n- Violations of the community guidelines may be acted upon according to the severity of the violation and the situation. Actions may include a warning, content removal, timeout, kick, or a ban from the community.\n- Staff have the right to take any action necessary to maintain the safety, comfort, and order of NCS."
+        ]
+      },
+      {
+        "color": "#5865F2",
+        "texts": [
+          ">>> Rules are not made to limit friendships, but to make sure everyone has a comfortable space to build them.\n\n**Meet people. Make friends. Build memories.**"
+        ]
+      }
+    ]
+  }
+}
