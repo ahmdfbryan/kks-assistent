@@ -47,7 +47,8 @@ function buildPanel(guild, cfg) {
     .setColor(parseColor(cfg.color, 0x5865f2))
     .setTitle(p.title || '🔎 Cari Teman di Voice')
     .setDescription(p.description || 'Pilih member di bawah untuk melihat dia sedang di voice mana.')
-    .setFooter({ text: p.footer || guild.name, iconURL: icon });
+    .setFooter({ text: p.footer || guild.name, iconURL: icon })
+    .setTimestamp(new Date());
   if (icon) embed.setThumbnail(icon);
 
   const select = new UserSelectMenuBuilder()
@@ -96,7 +97,12 @@ async function handleSelect(interaction) {
         member
           ? `${member} (\`${member.user.username}\`) sedang **tidak berada di voice channel** mana pun.`
           : 'Member tidak ditemukan di server ini.',
-      );
+      )
+      .setFooter({
+        text: cfg.panel?.footer || guild.name,
+        iconURL: guild.iconURL({ extension: 'png', size: 128 }) || undefined,
+      })
+      .setTimestamp(new Date());
     return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
 
@@ -112,6 +118,10 @@ async function handleSelect(interaction) {
       { name: 'Isi Voice', value: `👥 ${channel.members.size}${limit} orang`, inline: true },
       { name: 'Status', value: statusText(vs), inline: false },
     )
+    .setFooter({
+      text: cfg.panel?.footer || guild.name,
+      iconURL: guild.iconURL({ extension: 'png', size: 128 }) || undefined,
+    })
     .setTimestamp(new Date());
 
   const row = new ActionRowBuilder().addComponents(
