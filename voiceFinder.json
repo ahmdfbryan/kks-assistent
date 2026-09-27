@@ -1,0 +1,23 @@
+{
+  "_petunjuk": [
+    "File ini dibaca ulang setiap dipakai — tidak perlu restart bot.",
+    "Setelah mengubah teks panel, jalankan /cari-voice lagi supaya panel ikut berubah (hapus panel lama)."
+  ],
+
+  "color": "#5865F2",
+  "foundColor": "#43B581",
+  "notFoundColor": "#ED4245",
+
+  "panel": {
+    "title": "🔎 Cari Teman di Voice",
+    "description": "Mau nyusul temanmu yang lagi di voice?\n\nKlik tombol **Cari Username** di bawah, ketik username atau nama temanmu, dan bot akan menunjukkan dia sedang berada di voice channel mana — lengkap dengan tombol untuk langsung join.",
+    "footer": "Noname Studios Creative",
+    "button": "Cari Username"
+  },
+
+  "modal": {
+    "title": "Cari Member di Voice",
+    "label": "Username / nama member",
+    "placeholder": "contoh: andiraharja"
+  }
+}
