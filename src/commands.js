@@ -8,6 +8,7 @@ const store = require('./store');
 const { KINDS, runUpdate } = require('./updater');
 const config = require('./config');
 const { sendWelcome } = require('./welcome');
+const { verifyCommand } = require('./verify');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 const NEEDED = [
@@ -147,6 +148,7 @@ const commands = [
   makeCardCommand({ name: 'maps', kind: 'maps', description: 'Card daftar map Roblox KokoKrunch Studios' }),
   makeCardCommand({ name: 'catalog', kind: 'catalog', description: 'Card item catalog KokoKrunch Studios' }),
   welcomeCommand,
+  verifyCommand,
 ];
 
 module.exports = { commands };
