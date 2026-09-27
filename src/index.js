@@ -6,6 +6,7 @@ const config = require('./config');
 const { commands } = require('./commands');
 const { startScheduler } = require('./updater');
 const { registerWelcome } = require('./welcome');
+const { handleVerifyButton, BUTTON_ID: VERIFY_BUTTON } = require('./verify');
 
 const byName = new Map(commands.map((c) => [c.data.name, c]));
 // GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
@@ -18,6 +19,19 @@ client.once(Events.ClientReady, (c) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  // Tombol "Verify Sekarang"
+  if (interaction.isButton() && interaction.customId === VERIFY_BUTTON) {
+    try {
+      await handleVerifyButton(interaction);
+    } catch (err) {
+      console.error('[verify] error:', err);
+      const msg = { content: '❌ Verifikasi gagal diproses. Silakan hubungi admin.', flags: MessageFlags.Ephemeral };
+      if (interaction.deferred || interaction.replied) await interaction.editReply(msg).catch(() => {});
+      else await interaction.reply(msg).catch(() => {});
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
   const command = byName.get(interaction.commandName);
   if (!command) return;
