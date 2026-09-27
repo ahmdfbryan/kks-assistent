@@ -2,7 +2,8 @@
   "_petunjuk": [
     "File ini dibaca ulang setiap dipakai, jadi perubahan langsung berlaku TANPA restart bot.",
     "roleId = ID role yang diberikan setelah verifikasi (role inilah yang membuka semua channel).",
-    "Setelah mengubah teks panel, jalankan /verify kirim lagi di channel verification supaya panel ikut berubah."
+    "Setelah mengubah teks panel, jalankan /verify kirim lagi di channel verification supaya panel ikut berubah.",
+    "verifiedPanel = panel hijau (tombol mati) yang muncul KHUSUS untuk member yang sudah verifikasi saat klik tombol. {role} = nama role."
   ],
 
   "roleId": "1553826604982214768",
@@ -15,9 +16,16 @@
     "button": "Verify Sekarang"
   },
 
+  "verifiedPanel": {
+    "color": "#43B581",
+    "title": "✅ Verifikasi Berhasil",
+    "description": "Kamu sudah terverifikasi dan mendapatkan role {role}. Semua channel di Noname Studios Creative sudah terbuka, selamat bergabung!",
+    "button": "Terverifikasi"
+  },
+
   "messages": {
-    "success": "✅ Verifikasi berhasil! Kamu sudah mendapatkan role {role}. Sekarang semua channel sudah terbuka, selamat bergabung!",
-    "already": "Kamu sudah terverifikasi sebelumnya. Semua channel sudah bisa kamu akses.",
+    "success": "",
+    "already": "Kamu sudah terverifikasi sebelumnya.",
     "failed": "❌ Verifikasi gagal diproses. Silakan hubungi admin."
   }
 }
