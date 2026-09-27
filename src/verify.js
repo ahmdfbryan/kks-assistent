@@ -47,27 +47,38 @@ async function resolveRole(guild, cfg) {
   return { role };
 }
 
-/** Panel verifikasi: embed + tombol "Verify Sekarang". */
-function buildPanel(guild, cfg) {
+/**
+ * Panel verifikasi.
+ * - verified: false → panel utama (merah) + tombol "Verify Sekarang" aktif. Dikirim ke channel.
+ * - verified: true  → panel hijau + tombol mati "Terverifikasi". Ditampilkan KHUSUS ke member
+ *   yang klik (ephemeral), karena panel utama dilihat semua orang dan harus tetap aktif untuk member baru.
+ */
+function buildPanel(guild, cfg, { verified = false, role = null } = {}) {
   const p = cfg.panel || {};
+  const v = cfg.verifiedPanel || {};
   const icon = guild.iconURL({ extension: 'png', size: 256 }) || undefined;
+  const fillRole = (t) => String(t).replace(/\{role\}/g, role ? `${role}` : 'member');
 
   const embed = new EmbedBuilder()
-    .setColor(parseColor(cfg.color))
-    .setTitle(p.title || 'Verifikasi Diperlukan')
-    .setDescription(p.description || 'Klik tombol di bawah untuk verifikasi.')
+    .setColor(parseColor(verified ? v.color || '#43B581' : cfg.color))
+    .setTitle(verified ? v.title || '✅ Verifikasi Berhasil' : p.title || 'Verifikasi Diperlukan')
+    .setDescription(
+      verified
+        ? fillRole(v.description || 'Kamu sudah terverifikasi dan mendapatkan role {role}. Semua channel sudah terbuka!')
+        : p.description || 'Klik tombol di bawah untuk verifikasi.',
+    )
     .setFooter({ text: p.footer || guild.name, iconURL: icon })
     .setTimestamp(new Date());
   if (icon) embed.setThumbnail(icon);
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(BUTTON_ID)
-      .setStyle(ButtonStyle.Success)
-      .setLabel(p.button || 'Verify Sekarang')
-      .setEmoji('✅'),
-  );
-  return { embeds: [embed], components: [row] };
+  const button = new ButtonBuilder()
+    .setCustomId(BUTTON_ID)
+    .setStyle(ButtonStyle.Success)
+    .setLabel(verified ? v.button || 'Terverifikasi' : p.button || 'Verify Sekarang')
+    .setEmoji('✅')
+    .setDisabled(verified);
+
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(button)] };
 }
 
 /** Saat member klik "Verify Sekarang". */
@@ -83,8 +94,11 @@ async function handleVerifyButton(interaction) {
   }
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
+  const greenPanel = buildPanel(interaction.guild, cfg, { verified: true, role });
+
   if (member.roles.cache.has(role.id)) {
-    return interaction.editReply(msg.already || 'Kamu sudah terverifikasi.');
+    // Sudah member → tampilkan panel hijau dengan tombol mati.
+    return interaction.editReply({ content: msg.already || null, ...greenPanel });
   }
 
   try {
@@ -95,9 +109,10 @@ async function handleVerifyButton(interaction) {
   }
 
   console.log(`[verify] ${interaction.user.tag} terverifikasi.`);
-  return interaction.editReply(
-    (msg.success || '✅ Verifikasi berhasil! Role {role} sudah diberikan.').replace(/\{role\}/g, `${role}`),
-  );
+  return interaction.editReply({
+    content: String(msg.success ?? '').replace(/\{role\}/g, `${role}`) || null,
+    ...greenPanel,
+  });
 }
 
 /** /verify kirim | beri-semua */
