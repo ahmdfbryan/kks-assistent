@@ -7,6 +7,7 @@ const { commands } = require('./commands');
 const { startScheduler } = require('./updater');
 const { registerWelcome } = require('./welcome');
 const { handleVerifyButton, BUTTON_ID: VERIFY_BUTTON } = require('./verify');
+const { handleTranslateButton, TRANSLATE_BUTTON } = require('./rules');
 
 const byName = new Map(commands.map((c) => [c.data.name, c]));
 // GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
@@ -29,6 +30,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (interaction.deferred || interaction.replied) await interaction.editReply(msg).catch(() => {});
       else await interaction.reply(msg).catch(() => {});
     }
+    return;
+  }
+
+  // Tombol "Bahasa Inggris" di rules
+  if (interaction.isButton() && interaction.customId === TRANSLATE_BUTTON) {
+    await handleTranslateButton(interaction).catch((err) => console.error('[rules] error:', err));
     return;
   }
 
