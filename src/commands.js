@@ -10,6 +10,7 @@ const config = require('./config');
 const { sendWelcome } = require('./welcome');
 const { verifyCommand } = require('./verify');
 const { rulesCommand } = require('./rules');
+const { voiceFinderCommand } = require('./voice-finder');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 const NEEDED = [
@@ -151,6 +152,7 @@ const commands = [
   welcomeCommand,
   verifyCommand,
   rulesCommand,
+  voiceFinderCommand,
 ];
 
 module.exports = { commands };
