@@ -5,9 +5,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
+  UserSelectMenuBuilder,
   MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
@@ -15,38 +13,49 @@ const {
 } = require('discord.js');
 
 const FILE = path.join(__dirname, '..', 'voice-finder.json');
-const OPEN_BUTTON = 'vf:open';
-const MODAL_ID = 'vf:modal';
-const INPUT_ID = 'vf:query';
-const MAX_RESULTS = 5;
+const VERIFY_FILE = path.join(__dirname, '..', 'verify.json');
+const PANEL_FILE = path.join(__dirname, '..', 'data', 'voice-finder-panel.json');
+const SELECT_ID = 'vf:select';
+const isId = (v) => /^\d{17,20}$/.test(String(v || ''));
 
-function loadConfig() {
+function readJson(file, fallback) {
   try {
-    return JSON.parse(fs.readFileSync(FILE, 'utf8'));
-  } catch (err) {
-    console.error('[voice-finder] voice-finder.json tidak bisa dibaca:', err.message);
-    return {};
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return fallback;
   }
 }
+const loadConfig = () => readJson(FILE, {});
 
 function parseColor(value, fallback) {
   const n = parseInt(String(value || '').replace('#', ''), 16);
   return Number.isNaN(n) ? fallback : n;
 }
 
-const norm = (s) => String(s || '').toLowerCase().replace(/^@/, '').trim();
+// ---------- Lokasi panel (untuk sticky) ----------
+let panels = readJson(PANEL_FILE, {}); // { "<channelId>": "<messageId>" }
+function savePanels() {
+  fs.mkdirSync(path.dirname(PANEL_FILE), { recursive: true });
+  fs.writeFileSync(PANEL_FILE, JSON.stringify(panels, null, 2));
+}
 
-/** Skor kecocokan: 3 = sama persis, 2 = diawali, 1 = mengandung, 0 = tidak cocok. */
-function matchScore(member, query) {
-  const names = [member.user.username, member.user.globalName, member.displayName, member.nickname].map(norm);
-  let best = 0;
-  for (const n of names) {
-    if (!n) continue;
-    if (n === query) return 3;
-    if (n.startsWith(query)) best = Math.max(best, 2);
-    else if (n.includes(query)) best = Math.max(best, 1);
-  }
-  return best;
+// ---------- Tampilan ----------
+function buildPanel(guild, cfg) {
+  const p = cfg.panel || {};
+  const icon = guild.iconURL({ extension: 'png', size: 256 }) || undefined;
+  const embed = new EmbedBuilder()
+    .setColor(parseColor(cfg.color, 0x5865f2))
+    .setTitle(p.title || '🔎 Cari Teman di Voice')
+    .setDescription(p.description || 'Pilih member di bawah untuk melihat dia sedang di voice mana.')
+    .setFooter({ text: p.footer || guild.name, iconURL: icon });
+  if (icon) embed.setThumbnail(icon);
+
+  const select = new UserSelectMenuBuilder()
+    .setCustomId(SELECT_ID)
+    .setPlaceholder(p.placeholder || '🔍 Ketik username / nama member...')
+    .setMinValues(1)
+    .setMaxValues(1);
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(select)] };
 }
 
 function statusText(vs) {
@@ -59,128 +68,129 @@ function statusText(vs) {
   return s.join(' • ');
 }
 
-/** Panel: embed + tombol "Cari Username". */
-function buildPanel(guild, cfg) {
-  const p = cfg.panel || {};
-  const icon = guild.iconURL({ extension: 'png', size: 256 }) || undefined;
-  const embed = new EmbedBuilder()
-    .setColor(parseColor(cfg.color, 0x5865f2))
-    .setTitle(p.title || '🔎 Cari Teman di Voice')
-    .setDescription(p.description || 'Klik tombol di bawah untuk mencari member di voice.')
-    .setFooter({ text: p.footer || guild.name, iconURL: icon })
-    .setTimestamp(new Date());
-  if (icon) embed.setThumbnail(icon);
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(OPEN_BUTTON)
-      .setStyle(ButtonStyle.Primary)
-      .setLabel(p.button || 'Cari Username')
-      .setEmoji('🔍'),
-  );
-  return { embeds: [embed], components: [row] };
+/**
+ * Role yang dipakai untuk menilai "voice ini boleh diumumkan ke publik?".
+ * Pakai role verifikasi dari verify.json kalau ada, kalau tidak pakai @everyone.
+ */
+function publicRole(guild) {
+  const roleId = readJson(VERIFY_FILE, {}).roleId;
+  return (isId(roleId) && guild.roles.cache.get(roleId)) || guild.roles.everyone;
 }
 
-/** Klik "Cari Username" → munculkan form. */
-async function handleOpenButton(interaction) {
-  const m = loadConfig().modal || {};
-  const modal = new ModalBuilder()
-    .setCustomId(MODAL_ID)
-    .setTitle((m.title || 'Cari Member di Voice').slice(0, 45))
-    .addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId(INPUT_ID)
-          .setLabel((m.label || 'Username / nama member').slice(0, 45))
-          .setPlaceholder((m.placeholder || 'contoh: andiraharja').slice(0, 100))
-          .setStyle(TextInputStyle.Short)
-          .setMinLength(2)
-          .setMaxLength(32)
-          .setRequired(true),
-      ),
-    );
-  return interaction.showModal(modal);
-}
-
-/** Form dikirim → cari member di semua voice channel. */
-async function handleSearchModal(interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+// ---------- Saat member dipilih ----------
+async function handleSelect(interaction) {
   const cfg = loadConfig();
-  const query = norm(interaction.fields.getTextInputValue(INPUT_ID));
   const guild = interaction.guild;
-  const searcher = interaction.member;
+  const userId = interaction.values[0];
+  const member = await guild.members.fetch(userId).catch(() => null);
+  const vs = guild.voiceStates.cache.get(userId);
+  const channel = vs?.channel;
 
-  // Kandidat = semua orang yang sedang di voice DAN voice-nya boleh dilihat oleh si pencari.
-  const matches = [];
-  for (const vs of guild.voiceStates.cache.values()) {
-    if (!vs.channelId || !vs.member || vs.member.user.bot) continue;
-    const channel = vs.channel;
-    if (!channel?.permissionsFor(searcher)?.has(PermissionFlagsBits.ViewChannel)) continue;
-    const score = matchScore(vs.member, query);
-    if (score > 0) matches.push({ vs, member: vs.member, channel, score });
-  }
-  matches.sort((a, b) => b.score - a.score || a.member.displayName.localeCompare(b.member.displayName));
-
-  if (!matches.length) {
-    // Cek apakah orangnya ada di server tapi tidak sedang di voice.
-    const found = await guild.members.search({ query, limit: 1 }).catch(() => null);
-    const who = found?.first();
+  // Tidak di voice / voice tidak bisa dilihat pencari → balasan pribadi saja.
+  const canSee = channel?.permissionsFor(interaction.member)?.has(PermissionFlagsBits.ViewChannel);
+  if (!member || member.user.bot || !channel || !canSee) {
     const embed = new EmbedBuilder()
       .setColor(parseColor(cfg.notFoundColor, 0xed4245))
-      .setTitle('❌ Tidak ditemukan di voice')
+      .setTitle('❌ Tidak sedang di voice')
       .setDescription(
-        who
-          ? `${who} (\`${who.user.username}\`) sedang **tidak berada di voice channel** mana pun.`
-          : `Tidak ada member dengan nama \`${query}\` yang sedang berada di voice.\nPastikan ejaan username-nya benar.`,
+        member
+          ? `${member} (\`${member.user.username}\`) sedang **tidak berada di voice channel** mana pun.`
+          : 'Member tidak ditemukan di server ini.',
       );
-    return interaction.editReply({ embeds: [embed] });
+    return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
 
-  const top = matches.slice(0, MAX_RESULTS);
-  const embeds = top.map(({ vs, member, channel }) => {
-    const limit = channel.userLimit ? `/${channel.userLimit}` : '';
-    return new EmbedBuilder()
-      .setColor(parseColor(cfg.foundColor, 0x43b581))
-      .setAuthor({ name: member.displayName, iconURL: member.displayAvatarURL({ size: 128 }) })
-      .setTitle('🔊 Sedang di voice')
-      .setThumbnail(member.displayAvatarURL({ extension: 'png', size: 256 }))
-      .addFields(
-        { name: 'Member', value: `${member}\n\`${member.user.username}\``, inline: true },
-        { name: 'Voice Channel', value: `${channel}`, inline: true },
-        { name: 'Isi Voice', value: `👥 ${channel.members.size}${limit} orang`, inline: true },
-        { name: 'Status', value: statusText(vs), inline: false },
-      );
-  });
+  const limit = channel.userLimit ? `/${channel.userLimit}` : '';
+  const embed = new EmbedBuilder()
+    .setColor(parseColor(cfg.foundColor, 0x43b581))
+    .setAuthor({ name: `Dicari oleh ${interaction.member.displayName}`, iconURL: interaction.user.displayAvatarURL({ size: 64 }) })
+    .setTitle(`🔊 ${member.displayName} sedang di voice`)
+    .setThumbnail(member.displayAvatarURL({ extension: 'png', size: 256 }))
+    .addFields(
+      { name: 'Member', value: `${member}\n\`${member.user.username}\``, inline: true },
+      { name: 'Voice Channel', value: `${channel}`, inline: true },
+      { name: 'Isi Voice', value: `👥 ${channel.members.size}${limit} orang`, inline: true },
+      { name: 'Status', value: statusText(vs), inline: false },
+    )
+    .setTimestamp(new Date());
 
-  const buttons = top.map(({ channel }) =>
+  const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setStyle(ButtonStyle.Link)
       .setLabel(`Join ${channel.name}`.slice(0, 80))
       .setEmoji('🔊')
       .setURL(`https://discord.com/channels/${guild.id}/${channel.id}`),
   );
-  // Satu tombol per voice channel (hindari tombol dobel kalau beberapa hasil di voice yang sama).
-  const seen = new Set();
-  const unique = buttons.filter((b, i) => {
-    const id = top[i].channel.id;
-    if (seen.has(id)) return false;
-    seen.add(id);
-    return true;
+
+  // Voice private (tidak bisa dilihat member biasa) → jangan diumumkan ke publik.
+  const isPublicVoice = channel.permissionsFor(publicRole(guild))?.has(PermissionFlagsBits.ViewChannel);
+  const payload = { embeds: [embed], components: [row], allowedMentions: { parse: [] } };
+  if (!isPublicVoice) payload.flags = MessageFlags.Ephemeral;
+
+  await interaction.reply(payload);
+
+  // Hapus hasil publik otomatis setelah X menit (0 = tidak dihapus).
+  const minutes = Number(cfg.deleteResultAfterMinutes) || 0;
+  if (isPublicVoice && minutes > 0) {
+    setTimeout(() => interaction.deleteReply().catch(() => {}), minutes * 60 * 1000);
+  }
+}
+
+// ---------- Sticky panel ----------
+const timers = new Map();
+const busy = new Set();
+
+async function repostPanel(channel) {
+  if (busy.has(channel.id)) return;
+  busy.add(channel.id);
+  try {
+    const oldId = panels[channel.id];
+    const sent = await channel.send(buildPanel(channel.guild, loadConfig()));
+    panels[channel.id] = sent.id;
+    savePanels();
+    if (oldId) await channel.messages.delete(oldId).catch(() => {});
+  } catch (err) {
+    console.error(`[voice-finder] gagal memindahkan panel di #${channel.name}:`, err.message);
+  } finally {
+    busy.delete(channel.id);
+  }
+}
+
+/** Setiap ada pesan baru di channel panel → panel dipindah ke paling bawah (jeda singkat supaya tidak spam). */
+function registerStickyPanel(client) {
+  client.on('messageCreate', (message) => {
+    const panelId = panels[message.channelId];
+    if (!panelId || message.id === panelId) return;
+    // Abaikan panel yang baru dikirim bot sendiri.
+    const isPanel =
+      message.author.id === client.user.id &&
+      message.components?.some((row) => row.components?.some((c) => c.customId === SELECT_ID));
+    if (isPanel) return;
+
+    const delay = Math.max(2, Number(loadConfig().stickyDelaySeconds) || 5) * 1000;
+    clearTimeout(timers.get(message.channelId));
+    timers.set(
+      message.channelId,
+      setTimeout(() => {
+        timers.delete(message.channelId);
+        repostPanel(message.channel);
+      }, delay),
+    );
   });
 
-  const extra = matches.length > MAX_RESULTS ? `Ditemukan ${matches.length} member, menampilkan ${MAX_RESULTS} teratas. Ketik username lebih lengkap untuk hasil lebih tepat.` : null;
-  return interaction.editReply({
-    content: extra,
-    embeds,
-    components: [new ActionRowBuilder().addComponents(unique)],
+  client.on('channelDelete', (ch) => {
+    if (panels[ch.id]) {
+      delete panels[ch.id];
+      savePanels();
+    }
   });
 }
 
-/** /cari-voice [channel] → kirim panel. */
+// ---------- /cari-voice ----------
 const voiceFinderCommand = {
   data: new SlashCommandBuilder()
     .setName('cari-voice')
-    .setDescription('Kirim panel untuk mencari member yang sedang di voice')
+    .setDescription('Kirim panel (sticky) untuk mencari member yang sedang di voice')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .setDMPermission(false)
     .addChannelOption((o) =>
@@ -194,12 +204,20 @@ const voiceFinderCommand = {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const channel = interaction.options.getChannel('channel') || interaction.channel;
     const perms = channel.permissionsFor(interaction.guild.members.me);
-    if (!perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
-      return interaction.editReply(`❌ Bot butuh izin View Channel, Send Messages, dan Embed Links di ${channel}.`);
+    const needed = [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.EmbedLinks,
+      PermissionFlagsBits.ReadMessageHistory,
+    ];
+    if (!perms?.has(needed)) {
+      return interaction.editReply(
+        `❌ Bot butuh izin View Channel, Send Messages, Embed Links, dan Read Message History di ${channel}.`,
+      );
     }
-    await channel.send(buildPanel(interaction.guild, loadConfig()));
-    return interaction.editReply(`✅ Panel cari voice dikirim ke ${channel}.`);
+    await repostPanel(channel); // kirim panel baru + hapus panel lama di channel ini
+    return interaction.editReply(`✅ Panel cari voice dikirim ke ${channel} dan akan selalu berada di paling bawah.`);
   },
 };
 
-module.exports = { voiceFinderCommand, handleOpenButton, handleSearchModal, OPEN_BUTTON, MODAL_ID };
+module.exports = { voiceFinderCommand, handleSelect, registerStickyPanel, SELECT_ID };
