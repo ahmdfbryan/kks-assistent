@@ -1,7 +1,7 @@
 {
-  "name": "kks-map-card-bot",
+  "name": "noname-assistent",
   "version": "1.0.0",
-  "description": "Bot Discord yang menampilkan card map Roblox milik grup KokoKrunch Studios dan memperbarui statistiknya setiap hari.",
+  "description": "Bot Discord Noname Studios Creative: welcome, verifikasi, rules, dan cari teman di voice.",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
