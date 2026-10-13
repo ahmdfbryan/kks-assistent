@@ -4,7 +4,6 @@ ensureSingleInstance(); // tolak jalan kalau bot sudah jalan di proses lain
 const { Client, GatewayIntentBits, Events, MessageFlags } = require('discord.js');
 const config = require('./config');
 const { commands } = require('./commands');
-const { startScheduler } = require('./updater');
 const { registerWelcome } = require('./welcome');
 const { handleVerifyButton, BUTTON_ID: VERIFY_BUTTON } = require('./verify');
 const { handleTranslateButton, TRANSLATE_BUTTON } = require('./rules');
@@ -26,7 +25,6 @@ voiceFinder.registerStickyPanel(client);
 
 client.once(Events.ClientReady, (c) => {
   console.log(`🤖 Login sebagai ${c.user.tag}`);
-  startScheduler(c);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
