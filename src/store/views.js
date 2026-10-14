@@ -16,6 +16,11 @@ const STATUS_LABEL = {
 };
 const STARS = (n) => '⭐'.repeat(n) + '☆'.repeat(5 - n);
 
+/** Nama toko yang tampil di semua keterangan (store.json → storeName). */
+function storeName(cfg, guild) {
+  return cfg?.storeName || guild.name;
+}
+
 function serverFooter(guild, text) {
   return { text: text || guild.name, iconURL: guild.iconURL({ extension: 'png', size: 128 }) || undefined };
 }
@@ -25,35 +30,17 @@ function rateOf(cfg, product) {
 }
 
 // ───────────────────────── Panel utama ─────────────────────────
+/** Panel di channel store: hanya judul, keterangan, logo server, dan tombol produk. */
 function buildPanel(guild, cfg) {
   const p = cfg.panel || {};
   const open = state.open && state.stock > 0;
-  const s = state.stats;
-  const robuxProduct = (cfg.products || []).find((x) => x.type === 'robux');
-  const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
-
-  const steps = (p.howToBuy || []).map((t, i) => `\`${i + 1}\` ${t}`).join('\n');
-  const description = [fill(p.description, guild), steps ? `\n**📋 Tata Cara Pembelian**\n${steps}` : '']
-    .filter(Boolean)
-    .join('\n');
+  const name = { name: storeName(cfg, guild) };
 
   const embed = new EmbedBuilder()
-    .setColor(open ? color(cfg, 'open', 0x2ecc71) : color(cfg, 'closed', 0xe74c3c))
-    .setTitle(fill(p.title, guild))
-    .setDescription(description.slice(0, 4096) || null)
-    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
-    .addFields(
-      {
-        name: `${robuxProduct?.emoji || '💎'} Harga ${robuxProduct?.label || 'Robux'}`,
-        value: robuxProduct ? `\`${rupiah(rateOf(cfg, robuxProduct))} / Robux\`` : '`-`',
-        inline: true,
-      },
-      { name: '📦 Sisa Stock', value: `\`${num(state.stock)} Robux\``, inline: true },
-      { name: '🏪 Status', value: open ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
-      { name: '🧾 Total Transaksi', value: `\`${num(s.transactions)} transaksi\``, inline: true },
-      { name: '💎 Robux Terjual', value: `\`${num(s.robux)} Robux\``, inline: true },
-      { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
-    );
+    .setColor(color(cfg, 'brand', 0x7c5cff))
+    .setTitle(fill(p.title || '🛒 {server}', name))
+    .setDescription(fill(p.description, name).slice(0, 4096) || null)
+    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null);
   if (p.bannerImage) embed.setImage(p.bannerImage);
 
   const buttons = (cfg.products || []).slice(0, 5).map((prod) => {
@@ -66,6 +53,38 @@ function buildPanel(guild, cfg) {
       .setDisabled(soon || !open);
   });
   return { embeds: [embed], components: buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [] };
+}
+
+// ───────────────────────── Info produk (hanya terlihat pembeli) ─────────────────────────
+function buildProductInfo(guild, cfg, product) {
+  const open = state.open && state.stock > 0;
+  const s = state.stats;
+  const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
+  const embed = new EmbedBuilder()
+    .setColor(open ? color(cfg, 'open', 0x2ecc71) : color(cfg, 'closed', 0xe74c3c))
+    .setTitle(`${product.emoji || '💎'} ${product.label}`)
+    .setDescription(fill(product.description || '', { name: storeName(cfg, guild) }) || null)
+    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
+    .addFields(
+      { name: `💎 Harga ${product.label}`, value: `\`${rupiah(rateOf(cfg, product))} / Robux\``, inline: true },
+      { name: '📦 Sisa Stock', value: `\`${num(state.stock)} Robux\``, inline: true },
+      { name: '🏪 Status Toko', value: open ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
+      { name: '🧾 Total Transaksi', value: `\`${num(s.transactions)} transaksi\``, inline: true },
+      { name: `💎 ${product.label} Terjual`, value: `\`${num(s.robux)} Robux\``, inline: true },
+      { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
+    )
+    .setFooter(serverFooter(guild, storeName(cfg, guild)))
+    .setTimestamp(new Date());
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`store:order:${product.id}`)
+      .setLabel(open ? 'Beli Sekarang' : 'Toko Sedang Tutup')
+      .setEmoji('🛒')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(!open),
+  );
+  return { embeds: [embed], components: [row] };
 }
 
 // ───────────────────────── Leaderboard ─────────────────────────
@@ -84,14 +103,14 @@ function buildLeaderboard(guild, cfg) {
 
   const embed = new EmbedBuilder()
     .setColor(color(cfg, 'gold', 0xf1c40f))
-    .setTitle(`🏆 Top 10 Spender Leaderboard | ${guild.name}`)
+    .setTitle(`🏆 Top 10 Spender Leaderboard | ${storeName(cfg, guild)}`)
     .setDescription(lines.join('\n\n'))
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
     .addFields(
       { name: '🧾 Total Transaksi', value: `\`${num(state.stats.transactions)}\``, inline: true },
       { name: '👥 Total Pembeli', value: `\`${num(Object.keys(state.spenders).length)}\``, inline: true },
     )
-    .setFooter(serverFooter(guild, `${guild.name} • Diperbarui otomatis`))
+    .setFooter(serverFooter(guild, `${storeName(cfg, guild)} • Diperbarui otomatis`))
     .setTimestamp(new Date());
   return { embeds: [embed], allowedMentions: { parse: [] } };
 }
@@ -164,7 +183,7 @@ function buildTicketMessage(guild, cfg, t) {
   const info = new EmbedBuilder()
     .setColor(statusColor)
     .setTitle(`🧾 Detail Pesanan • ${t.id}`)
-    .setDescription(`Halo <@${t.userId}>, terima kasih sudah berbelanja di **${guild.name}**! 💜`)
+    .setDescription(`Halo <@${t.userId}>, terima kasih sudah berbelanja di **${storeName(cfg, guild)}**! 💜`)
     .addFields(
       { name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true },
       {
@@ -180,7 +199,7 @@ function buildTicketMessage(guild, cfg, t) {
       { name: '📌 Status', value: `**${STATUS_LABEL[t.status]}**`, inline: true },
       { name: '🕒 Dibuat', value: ts(t.createdAt, 'f'), inline: true },
     )
-    .setFooter(serverFooter(guild, `${guild.name} • Ticket ${t.id}`))
+    .setFooter(serverFooter(guild, `${storeName(cfg, guild)} • Ticket ${t.id}`))
     .setTimestamp(t.closedAt || t.createdAt);
   if (t.roblox.avatar) info.setThumbnail(t.roblox.avatar);
   if (t.closedAt) info.addFields({ name: '🔒 Ditutup', value: `${ts(t.closedAt, 'f')} oleh <@${t.closedBy}>`, inline: true });
@@ -190,7 +209,7 @@ function buildTicketMessage(guild, cfg, t) {
     const pay = new EmbedBuilder()
       .setColor(color(cfg, 'info', 0x3498db))
       .setTitle(cfg.payment?.title || '💳 Cara Pembayaran')
-      .setDescription(fill(cfg.payment?.description || 'Silakan tunggu admin.', guild));
+      .setDescription(fill(cfg.payment?.description || 'Silakan tunggu admin.', { name: storeName(cfg, guild) }));
     if (cfg.payment?.image) pay.setImage(cfg.payment.image);
     embeds.push(pay);
   }
@@ -216,7 +235,7 @@ function buildDmCreated(guild, cfg, t, channelUrl) {
     .setColor(color(cfg, 'open', 0x2ecc71))
     .setTitle('🎫 Ticket Order Berhasil Dibuat')
     .setDescription(
-      `Ticket order kamu di **${guild.name}** sudah berhasil dibuat.\n\n` +
+      `Ticket order kamu di **${storeName(cfg, guild)}** sudah berhasil dibuat.\n\n` +
         `Silakan lanjutkan ke channel ticket kamu untuk menyelesaikan pembayaran:\n${channelUrl}`,
     )
     .addFields(
@@ -225,7 +244,7 @@ function buildDmCreated(guild, cfg, t, channelUrl) {
       { name: '💰 Total Bayar', value: `\`${rupiah(t.price)}\``, inline: true },
     )
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
-    .setFooter(serverFooter(guild))
+    .setFooter(serverFooter(guild, storeName(cfg, guild)))
     .setTimestamp(new Date());
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Buka Ticket').setEmoji('🎫').setURL(channelUrl),
@@ -240,9 +259,9 @@ function buildDmClosed(guild, cfg, t) {
     refund: '💸 Pesanan Kamu Di-refund',
   };
   const desc = {
-    completed: `Robux kamu sudah berhasil dikirim. Terima kasih sudah berbelanja di **${guild.name}**! 💜\nJangan lupa beri testimoni di ticket kamu ya ⭐`,
-    cancelled: `Pesanan kamu di **${guild.name}** telah dibatalkan.`,
-    refund: `Dana pesanan kamu di **${guild.name}** telah dikembalikan.`,
+    completed: `Robux kamu sudah berhasil dikirim. Terima kasih sudah berbelanja di **${storeName(cfg, guild)}**! 💜\nJangan lupa beri testimoni di ticket kamu ya ⭐`,
+    cancelled: `Pesanan kamu di **${storeName(cfg, guild)}** telah dibatalkan.`,
+    refund: `Dana pesanan kamu di **${storeName(cfg, guild)}** telah dikembalikan.`,
   };
   const embed = new EmbedBuilder()
     .setColor(t.status === 'completed' ? color(cfg, 'open', 0x2ecc71) : color(cfg, 'refund', 0xe67e22))
@@ -252,7 +271,7 @@ function buildDmClosed(guild, cfg, t) {
       { name: '🎫 Ticket ID', value: `\`${t.id}\``, inline: true },
       { name: '📦 Produk', value: `\`${t.productLabel} • ${num(t.amount)} Robux\``, inline: true },
     )
-    .setFooter(serverFooter(guild))
+    .setFooter(serverFooter(guild, storeName(cfg, guild)))
     .setTimestamp(new Date());
   if (t.proofUrl && t.status === 'completed') embed.setImage(t.proofUrl);
   return { embeds: [embed] };
@@ -267,7 +286,7 @@ function buildTestimonyPrompt(guild, cfg, t) {
       `<@${t.userId}>, pesananmu sudah selesai! 🎉\n\nBantu kami jadi lebih baik dengan memberikan **rating & testimoni** ` +
         `lewat tombol di bawah. Testimonimu akan ditampilkan di channel testimoni.`,
     )
-    .setFooter(serverFooter(guild));
+    .setFooter(serverFooter(guild, storeName(cfg, guild)));
   if (t.proofUrl) embed.setImage(t.proofUrl);
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`store:testi:${t.id}`).setLabel('Beri Testimoni').setEmoji('⭐').setStyle(ButtonStyle.Primary),
@@ -294,7 +313,7 @@ function buildTestimony(guild, cfg, t, buyer) {
       { name: '🎫 Ticket', value: `\`${t.id}\``, inline: true },
     )
     .setThumbnail(buyer?.displayAvatarURL({ extension: 'png', size: 256 }) || t.roblox.avatar || null)
-    .setFooter(serverFooter(guild, `${guild.name} • Testimoni #${state.stats.testimonies}`))
+    .setFooter(serverFooter(guild, `${storeName(cfg, guild)} • Testimoni #${state.stats.testimonies}`))
     .setTimestamp(new Date());
   if (t.proofUrl) embed.setImage(t.proofUrl);
   return { embeds: [embed], allowedMentions: { parse: [] } };
@@ -305,12 +324,12 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
   const panelLink = state.panel ? `https://discord.com/channels/${guild.id}/${state.panel.channelId}` : null;
   const product = (cfg.products || []).find((x) => x.type === 'robux');
   const rate = product ? rateOf(cfg, product) : 0;
-  const e = new EmbedBuilder().setFooter(serverFooter(guild)).setTimestamp(new Date());
+  const e = new EmbedBuilder().setFooter(serverFooter(guild, storeName(cfg, guild))).setTimestamp(new Date());
 
   if (kind === 'open') {
     e.setColor(color(cfg, 'open', 0x2ecc71))
       .setTitle('🟢 Toko Sudah Dibuka!')
-      .setDescription(`**${guild.name} Store** sekarang **BUKA** dan siap menerima pesanan! 🎉${panelLink ? `\n\n🛒 Order sekarang: ${panelLink}` : ''}`)
+      .setDescription(`**${storeName(cfg, guild)}** sekarang **BUKA** dan siap menerima pesanan! 🎉${panelLink ? `\n\n🛒 Order sekarang: ${panelLink}` : ''}`)
       .addFields(
         { name: '📦 Stock Tersedia', value: `\`${num(state.stock)} Robux\``, inline: true },
         { name: '💱 Rate', value: `\`${rupiah(rate)} / Robux\``, inline: true },
@@ -319,7 +338,7 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
     e.setColor(color(cfg, 'closed', 0xe74c3c))
       .setTitle('🔴 Toko Ditutup')
       .setDescription(
-        `${extra.reason || `**${guild.name} Store** saat ini **TUTUP** dan tidak menerima pesanan baru.`}\n\n` +
+        `${extra.reason || `**${storeName(cfg, guild)}** saat ini **TUTUP** dan tidak menerima pesanan baru.`}\n\n` +
           'Pantau terus channel ini untuk info buka berikutnya. Terima kasih! 💜',
       )
       .addFields({ name: '📦 Sisa Stock', value: `\`${num(state.stock)} Robux\``, inline: true });
@@ -349,6 +368,8 @@ module.exports = {
   STATUS_LABEL,
   rateOf,
   buildPanel,
+  buildProductInfo,
+  storeName,
   buildLeaderboard,
   buildConfirmAccount,
   buildAmountPicker,
