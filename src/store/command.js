@@ -11,6 +11,13 @@ function productChoices() {
   const products = (loadConfig()?.products || []).filter((p) => p.type !== 'soon').slice(0, 24);
   return [{ name: '🏪 Semua Produk', value: 'all' }, ...products.map((p) => ({ name: `${p.emoji || '•'} ${p.label}`.slice(0, 100), value: p.id }))];
 }
+/** Pilihan produk yang punya harga per Robux (Robux Visend, Robux Gamepass, ...). */
+function rateChoices() {
+  return (loadConfig()?.products || [])
+    .filter((p) => p.type === 'robux' || p.type === 'gamepass')
+    .slice(0, 25)
+    .map((p) => ({ name: `${p.emoji || '•'} ${p.label}`.slice(0, 100), value: p.id }));
+}
 const productOption = (o) =>
   o.setName('produk').setDescription('Produk yang dibuka / ditutup').setRequired(true).addChoices(...productChoices());
 
@@ -77,7 +84,12 @@ const storeCommand = {
       s
         .setName('harga')
         .setDescription('Atur harga (rate) per 1 Robux')
-        .addIntegerOption((o) => o.setName('rate').setDescription('Contoh: 145 (= Rp 145 / Robux)').setRequired(true).setMinValue(1).setMaxValue(100000)),
+        .addIntegerOption((o) => o.setName('rate').setDescription('Contoh: 145 (= Rp 145 / Robux)').setRequired(true).setMinValue(1).setMaxValue(100000))
+        .addStringOption((o) => {
+          o.setName('produk').setDescription('Produk yang diubah harganya (default: Robux Visend)');
+          const choices = rateChoices();
+          return choices.length ? o.addChoices(...choices) : o;
+        }),
     )
     .addSubcommand((s) => s.setName('status').setDescription('Lihat ringkasan toko')),
 
@@ -141,23 +153,29 @@ const storeCommand = {
     }
 
     if (sub === 'harga') {
-      if (!product) return interaction.editReply('❌ Produk Robux tidak ada di store.json.');
+      const pick = interaction.options.getString('produk');
+      const target = pick ? (cfg.products || []).find((p) => p.id === pick) : product;
+      if (!target) return interaction.editReply('❌ Produk tidak ada di store.json.');
       const rate = interaction.options.getInteger('rate');
-      state.rates[product.id] = rate;
+      state.rates[target.id] = rate;
       save();
       refreshPanel();
+      const example =
+        target.type === 'gamepass'
+          ? `1.000 Robux diterima = gamepass ${num(V.gpBeforeTax(target, 1000))} Robux = ${rupiah(V.gpBeforeTax(target, 1000) * rate)}`
+          : `100 Robux = ${rupiah(rate * 100)}`;
       return interaction.editReply(
-        `💱 Harga **${product.label}** sekarang **${rupiah(rate)} / Robux** (100 Robux = ${rupiah(rate * 100)}).\nTicket yang sudah berjalan tetap memakai harga lama.`,
+        `💱 Harga **${target.label}** sekarang **${rupiah(rate)} / Robux** (${example}).\nTicket yang sudah berjalan tetap memakai harga lama.`,
       );
     }
 
     if (sub === 'status') {
       const active = Object.values(state.tickets).filter((t) => t.status === 'open');
-      const reserved = active.filter((t) => t.kind !== 'rekber').reduce((a, t) => a + t.amount, 0);
+      const reserved = active.filter((t) => !t.kind || t.kind === 'robux').reduce((a, t) => a + t.amount, 0);
       const s = state.stats;
       const productLines = (cfg.products || [])
         .filter((p) => p.type !== 'soon')
-        .map((p) => `${isProductOpen(p) ? '🟢' : '🔴'} ${p.label}`)
+        .map((p) => `${isProductOpen(p) ? '🟢' : '🔴'} ${p.label}${p.type === 'robux' || p.type === 'gamepass' ? ` • ${rupiah(V.rateOf(cfg, p))}` : ''}`)
         .join('\n');
       const embed = new EmbedBuilder()
         .setColor(color(cfg, 'brand', 0x3498db))
@@ -181,7 +199,9 @@ const storeCommand = {
           value: active
             .slice(0, 15)
             .map((t) =>
-              t.kind === 'rekber'
+              t.kind === 'gamepass'
+                ? `\`${t.id}\` <#${t.channelId}> • 🎟️ ${num(t.amount)} Robux (gamepass ${num(t.before)}) • <@${t.userId}>`
+                : t.kind === 'rekber'
                 ? `\`${t.id}\` <#${t.channelId}> • 🤝 ${rupiah(t.nominal)} • <@${t.buyerId}> ↔ <@${t.sellerId}>`
                 : `\`${t.id}\` <#${t.channelId}> • ${num(t.amount)} Robux • <@${t.userId}>`,
             )
