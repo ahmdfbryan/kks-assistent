@@ -56,9 +56,7 @@ function buildCatalogHeader(guild, cfg) {
       { name: '🛒 Produk Buka', value: `\`${open} / ${sellable.length} produk\``, inline: true },
       { name: '🧾 Total Transaksi', value: `\`${num((s.transactions || 0) + (s.rekber || 0))} transaksi\``, inline: true },
       { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
-    )
-    .setFooter(footer(guild, cfg))
-    .setTimestamp(new Date());
+    );
   if (c.bannerImage) embed.setImage(c.bannerImage);
   return { embeds: [embed], components: [] };
 }
@@ -78,9 +76,9 @@ function buildCatalogCard(guild, cfg, p) {
     .setDescription(
       fill(cc.tagline || (soon ? 'Produk baru sedang kami siapkan. **Nantikan kejutannya!** 👀' : ''), name).slice(0, 4096) || null,
     )
-    .setThumbnail(cc.thumbnail || guild.iconURL({ extension: 'png', size: 256 }) || null)
-    .setFooter(footer(guild, cfg))
-    .setTimestamp(new Date());
+    .setThumbnail(cc.thumbnail || guild.iconURL({ extension: 'png', size: 256 }) || null);
+  // Footer (Noname Store + waktu) hanya di kartu paling bawah.
+  if (catalogProducts(cfg).at(-1)?.id === p.id) embed.setFooter(footer(guild, cfg)).setTimestamp(new Date());
 
   if (p.type === 'robux') {
     const rate = V.rateOf(cfg, p);
