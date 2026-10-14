@@ -22,12 +22,18 @@ const isId = (v) => /^\d{17,20}$/.test(String(v || ''));
 const num = (n) => Math.round(Number(n) || 0).toLocaleString('id-ID');
 const ts = (ms, s = 'R') => `<t:${Math.floor(ms / 1000)}:${s}>`;
 
+// Pengaturan bawaan kalau invites.json belum ada / rusak (supaya bot tetap jalan).
+const DEFAULT_CONFIG = { channelId: '1559920442318258359', fakeDays: 7, stickyDelaySeconds: 4, colors: {}, leaderboard: {} };
+let warned = false;
 function loadConfig() {
   try {
-    return JSON.parse(fs.readFileSync(FILE, 'utf8'));
+    const cfg = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+    warned = false;
+    return { ...DEFAULT_CONFIG, ...cfg };
   } catch (err) {
-    console.error('[invites] invites.json tidak bisa dibaca:', err.message);
-    return {};
+    if (!warned) console.error('[invites] invites.json tidak bisa dibaca (pakai pengaturan bawaan):', err.message);
+    warned = true; // cukup 1x, tidak spam log
+    return DEFAULT_CONFIG;
   }
 }
 function loadData() {
@@ -205,6 +211,7 @@ function buildLeaderboard(guild, cfg) {
 // ───────────────────────── Sticky leaderboard ─────────────────────────
 let stickyTimer = null;
 let posting = false;
+const ownLeaderboards = new Set(); // ID pesan leaderboard yang dikirim bot sendiri
 async function repostLeaderboard(client) {
   const loc = data.leaderboard;
   if (!loc || posting) return;
@@ -213,6 +220,8 @@ async function repostLeaderboard(client) {
     const channel = await client.channels.fetch(loc.channelId).catch(() => null);
     if (!channel) return;
     const sent = await channel.send(buildLeaderboard(channel.guild, loadConfig()));
+    ownLeaderboards.add(sent.id);
+    if (ownLeaderboards.size > 20) ownLeaderboards.delete(ownLeaderboards.values().next().value);
     const oldId = loc.messageId;
     data.leaderboard = { channelId: channel.id, messageId: sent.id };
     save();
@@ -296,6 +305,9 @@ function registerInviteTracker(client) {
   client.on(Events.MessageCreate, (message) => {
     const loc = data.leaderboard;
     if (!loc || message.channelId !== loc.channelId || message.id === loc.messageId) return;
+    // Jangan bereaksi pada leaderboard yang dikirim bot sendiri (mencegah kirim ulang tanpa henti).
+    if (ownLeaderboards.has(message.id)) return;
+    if (message.author?.id === client.user?.id && (posting || message.embeds?.[0]?.title?.includes('Inviter'))) return;
     scheduleSticky(client);
   });
 }
@@ -359,7 +371,11 @@ const inviteLogCommand = {
       interaction.channel;
     if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
     const old = data.leaderboard;
-    const sent = await channel.send(buildLeaderboard(interaction.guild, cfg));
+    posting = true;
+    const sent = await channel.send(buildLeaderboard(interaction.guild, cfg)).finally(() => {
+      posting = false;
+    });
+    ownLeaderboards.add(sent.id);
     data.leaderboard = { channelId: channel.id, messageId: sent.id };
     save();
     if (old && old.messageId !== sent.id) {
