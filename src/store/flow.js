@@ -767,6 +767,7 @@ async function onRekberFund(interaction, ticketId) {
   if (!t.stage.agreed) return interaction.reply({ content: 'Tunggu pihak lawan menyetujui transaksi dulu.', flags: EPH });
   t.stage.funded = true;
   t.stage.fundedBy = interaction.user.id;
+  t.payment = { ...(t.payment || {}), status: 'paid', paidAt: Date.now(), paidBy: interaction.user.id, amount: t.buyerPays };
   return advanceRekber(interaction, t, 'funded');
 }
 
@@ -1313,6 +1314,209 @@ async function onCanvaJoined(interaction, ticketId) {
   return advanceCanva(interaction, t, 'joined', '🎉 Pembeli bergabung ke team Canva Pro');
 }
 
+// ══════════════════════ PEMBAYARAN (semua produk) ══════════════════════
+const buyerOf = (t) => (kindOf(t) === 'rekber' ? t.buyerId : t.userId);
+
+/** Perbarui pesan detail ticket (status, tombol, info pembayaran). */
+async function refreshTicketMessage(guild, t) {
+  if (!t.channelId || !t.messageId) return;
+  const ch = await guild.channels.fetch(t.channelId).catch(() => null);
+  await ch?.messages.edit(t.messageId, V.buildTicketMessage(guild, loadConfig(), t)).catch(() => {});
+}
+
+function openTicketFor(interaction, ticketId) {
+  const t = state.tickets[ticketId];
+  if (!t || t.status !== 'open') {
+    interaction.reply({ content: 'Ticket ini sudah ditutup.', flags: EPH }).catch(() => {});
+    return null;
+  }
+  return t;
+}
+
+/** Tombol "Konfirmasi Pembayaran" → form bukti transfer. */
+async function onPayButton(interaction, ticketId) {
+  const t = openTicketFor(interaction, ticketId);
+  if (!t) return;
+  if (interaction.user.id !== buyerOf(t)) {
+    return interaction.reply({ content: `⛔ Hanya <@${buyerOf(t)}> (pembeli) yang bisa mengirim bukti pembayaran.`, flags: EPH });
+  }
+  if (V.isPaid(t)) return interaction.reply({ content: '✅ Pembayaran ticket ini sudah **lunas**.', flags: EPH });
+  if (kindOf(t) === 'rekber' && !t.stage?.agreed) {
+    return interaction.reply({ content: 'Tunggu pihak lawan **menyetujui transaksi** sebelum melakukan pembayaran.', flags: EPH });
+  }
+  const cfg = loadConfig();
+  const methods = V.payMethods(cfg).slice(0, 25);
+  const modal = new ModalBuilder().setCustomId(`store:paymodal:${t.id}`).setTitle('Konfirmasi Pembayaran');
+  const labels = [];
+  if (methods.length) {
+    labels.push(
+      new LabelBuilder()
+        .setLabel('Transfer ke Rekening')
+        .setStringSelectMenuComponent(
+          new StringSelectMenuBuilder()
+            .setCustomId('bank')
+            .setPlaceholder('Pilih rekening tujuan...')
+            .setRequired(true)
+            .addOptions(methods.map((m) => ({ label: m.bank.slice(0, 100), description: m.number.slice(0, 100), value: m.bank.slice(0, 100), emoji: m.emoji || '🏦' }))),
+        ),
+    );
+  }
+  labels.push(
+    new LabelBuilder()
+      .setLabel('Nama Pemilik Rekening Pengirim')
+      .setDescription('Nama yang tertera di bukti transfer.')
+      .setTextInputComponent(new TextInputBuilder().setCustomId('sender').setStyle(TextInputStyle.Short).setPlaceholder('contoh: Ahmad Febryan').setMinLength(2).setMaxLength(60).setRequired(true)),
+    new LabelBuilder()
+      .setLabel('Bukti Transfer')
+      .setDescription(`Screenshot bukti transfer sebesar ${rupiah(V.payAmount(t))}.`)
+      .setFileUploadComponent(new FileUploadBuilder().setCustomId('proof').setMinValues(1).setMaxValues(1).setRequired(true)),
+    new LabelBuilder()
+      .setLabel('Catatan (opsional)')
+      .setTextInputComponent(new TextInputBuilder().setCustomId('note').setStyle(TextInputStyle.Paragraph).setMaxLength(300).setRequired(false)),
+  );
+  modal.addLabelComponents(...labels);
+  return interaction.showModal(modal);
+}
+
+async function onPayModal(interaction, ticketId) {
+  const t = state.tickets[ticketId];
+  if (!t || t.status !== 'open') return interaction.reply({ content: 'Ticket ini sudah ditutup.', flags: EPH });
+  await interaction.deferReply({ flags: EPH });
+  const cfg = loadConfig();
+  const guild = interaction.guild;
+  const upload = interaction.fields.getUploadedFiles('proof')?.first?.() || null;
+  if (!upload) return interaction.editReply('📸 Wajib upload **screenshot bukti transfer**.');
+  if (upload.contentType && !upload.contentType.startsWith('image/')) return interaction.editReply('❌ Bukti transfer harus berupa **gambar** (PNG / JPG).');
+  const methods = V.payMethods(cfg);
+  const bank = (methods.length ? interaction.fields.getStringSelectValues('bank')?.[0] : null) || '-';
+  const sender = interaction.fields.getTextInputValue('sender').trim();
+  const note = (interaction.fields.getTextInputValue('note') || '').trim();
+
+  t.payment = { status: 'pending', bank, sender, note: note || null, at: Date.now(), userId: interaction.user.id };
+  save();
+
+  const staff = isId(cfg.ticket?.staffRoleId) ? cfg.ticket.staffRoleId : null;
+  const ext = (path.extname((upload.name || '').split('?')[0]) || '.png').toLowerCase();
+  const fileName = `bukti-bayar-${t.id}${ext}`;
+  const base = V.buildPaymentProof(guild, cfg, t, t.payment, `attachment://${fileName}`);
+  const extra = { content: staff ? `<@&${staff}>` : undefined, allowedMentions: { roles: staff ? [staff] : [] } };
+  // Gambar diunggah ulang supaya tidak kedaluwarsa; kalau gagal (DNS VPS), pakai link aslinya.
+  await interaction.channel.send({ ...base, ...extra, files: [{ attachment: upload.url, name: fileName }] }).catch(async () => {
+    await interaction.channel.send({ ...V.buildPaymentProof(guild, cfg, t, t.payment, upload.url), ...extra }).catch(() => {});
+  });
+  logOrder(guild, t, '💳 Pembeli mengirim bukti pembayaran');
+  await refreshTicketMessage(guild, t);
+  return interaction.editReply('✅ Bukti pembayaran terkirim! Admin akan segera memverifikasi pembayaranmu. ⏳');
+}
+
+async function onCopyAccounts(interaction, ticketId) {
+  const t = state.tickets[ticketId];
+  if (!t) return interaction.reply({ content: 'Ticket tidak ditemukan.', flags: EPH });
+  return interaction.reply({ ...V.buildCopyAccounts(loadConfig(), t), flags: EPH });
+}
+
+/**
+ * Tandai dana masuk (dipakai tombol "Dana Masuk" & /danamasuk).
+ * Return teks error kalau tidak bisa, atau null kalau berhasil.
+ */
+async function markPaid(guild, channel, t, { by, amount, note }) {
+  const cfg = loadConfig();
+  if (t.status !== 'open') return 'Ticket ini sudah ditutup.';
+  if (V.isPaid(t)) return '✅ Pembayaran ticket ini sudah ditandai **lunas** sebelumnya.';
+  const nominal = Number(amount) || V.payAmount(t);
+  if (kindOf(t) === 'rekber') {
+    if (!t.stage?.agreed) return 'Pihak lawan belum **menyetujui transaksi**.';
+    t.stage.funded = true;
+    t.stage.fundedBy = by;
+  }
+  t.payment = { ...(t.payment || {}), status: 'paid', paidAt: Date.now(), paidBy: by, amount: nominal, adminNote: note || null };
+  save();
+  await refreshTicketMessage(guild, t);
+  if (kindOf(t) === 'rekber') {
+    logOrder(guild, t, STEP_LOG.funded(t));
+    await channel.send(V.buildRekberStep(guild, cfg, t, 'funded')).catch(() => {});
+    if (note || nominal !== V.payAmount(t)) await channel.send(V.buildDanaMasuk(guild, cfg, t, { amount: nominal, note, by })).catch(() => {});
+  } else {
+    logOrder(guild, t, '💰 Dana masuk — pesanan diproses');
+    await channel.send(V.buildDanaMasuk(guild, cfg, t, { amount: nominal, note, by })).catch(() => {});
+  }
+  // DM pembeli
+  const buyer = await client.users.fetch(buyerOf(t)).catch(() => null);
+  const dm = V.buildDanaMasuk(guild, cfg, t, { amount: nominal, note, by });
+  await buyer
+    ?.send({
+      embeds: dm.embeds,
+      components: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Buka Ticket').setEmoji('🎫').setURL(channelUrl(guild.id, t.channelId)),
+        ),
+      ],
+    })
+    .catch(() => {});
+  return null;
+}
+
+/** Tombol "Dana Masuk (Admin)" di bukti pembayaran. */
+async function onPaidButton(interaction, ticketId) {
+  if (!isAdmin(interaction.member)) return interaction.reply({ content: '⛔ Hanya **Administrator** yang bisa memverifikasi pembayaran.', flags: EPH });
+  const t = state.tickets[ticketId];
+  if (!t) return interaction.reply({ content: 'Ticket tidak ditemukan.', flags: EPH });
+  await interaction.deferUpdate();
+  const err = await markPaid(interaction.guild, interaction.channel, t, { by: interaction.user.id });
+  if (err) return interaction.followUp({ content: err, flags: EPH });
+  await interaction.message.edit({ components: [] }).catch(() => {});
+}
+
+/** Tombol "Tolak (Admin)" → form alasan. */
+async function onPayRejectButton(interaction, ticketId) {
+  if (!isAdmin(interaction.member)) return interaction.reply({ content: '⛔ Hanya **Administrator** yang bisa menolak pembayaran.', flags: EPH });
+  const t = openTicketFor(interaction, ticketId);
+  if (!t) return;
+  const modal = new ModalBuilder()
+    .setCustomId(`store:payrejmodal:${t.id}`)
+    .setTitle('Tolak Bukti Pembayaran')
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Alasan Penolakan')
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId('reason')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('contoh: Nominal kurang Rp 1.000 / dana belum masuk ke rekening')
+            .setMaxLength(300)
+            .setRequired(true),
+        ),
+    );
+  return interaction.showModal(modal);
+}
+
+async function onPayRejectModal(interaction, ticketId) {
+  if (!isAdmin(interaction.member)) return interaction.reply({ content: '⛔ Hanya **Administrator**.', flags: EPH });
+  const t = state.tickets[ticketId];
+  if (!t || t.status !== 'open') return interaction.reply({ content: 'Ticket ini sudah ditutup.', flags: EPH });
+  await interaction.deferUpdate();
+  const reason = interaction.fields.getTextInputValue('reason').trim();
+  t.payment = { ...(t.payment || {}), status: 'rejected', rejectedAt: Date.now(), rejectReason: reason };
+  save();
+  await interaction.message?.edit({ components: [] }).catch(() => {});
+  await interaction.channel.send(V.buildPayRejected(interaction.guild, loadConfig(), t, reason, interaction.user.id)).catch(() => {});
+  await refreshTicketMessage(interaction.guild, t);
+}
+
+/** /danamasuk [nominal] [catatan] — dijalankan di channel ticket. */
+async function onDanaMasukCommand(interaction) {
+  await interaction.deferReply({ flags: EPH });
+  const t = Object.values(state.tickets).find((x) => x.channelId === interaction.channelId && x.status === 'open');
+  if (!t) return interaction.editReply('❌ Jalankan `/danamasuk` di dalam **channel ticket** yang masih berjalan.');
+  const err = await markPaid(interaction.guild, interaction.channel, t, {
+    by: interaction.user.id,
+    amount: interaction.options.getInteger('nominal'),
+    note: interaction.options.getString('catatan'),
+  });
+  if (err) return interaction.editReply(err);
+  return interaction.editReply(`✅ Dana masuk untuk **${t.id}** sudah diumumkan di ticket & pembeli mendapat DM.`);
+}
+
 // ══════════════════════ Tutup ticket (khusus Administrator) ══════════════════════
 async function onCloseButton(interaction, ticketId) {
   if (!isAdmin(interaction.member)) {
@@ -1693,6 +1897,10 @@ async function handleInteraction(interaction) {
       else if (action === 'gptutor') await onGamepassTutorial(interaction, arg);
       else if (action === 'gpconfirm') await onGamepassConfirm(interaction, arg === 'yes');
       else if (action === 'gpcheck') await onGamepassCheck(interaction, arg);
+      else if (action === 'paybtn') await onPayButton(interaction, arg);
+      else if (action === 'copyacc') await onCopyAccounts(interaction, arg);
+      else if (action === 'paid') await onPaidButton(interaction, arg);
+      else if (action === 'payreject') await onPayRejectButton(interaction, arg);
       else if (action === 'cvconfirm') await onCanvaConfirm(interaction, arg === 'yes');
       else if (action === 'cvinvite') await onCanvaInvite(interaction, arg);
       else if (action === 'cvjoined') await onCanvaJoined(interaction, arg);
@@ -1711,6 +1919,8 @@ async function handleInteraction(interaction) {
       else if (action === 'rbmodal') await onRekberModal(interaction, arg);
       else if (action === 'gpmodal') await onGamepassModal(interaction, arg);
       else if (action === 'cvmodal') await onCanvaModal(interaction, arg);
+      else if (action === 'paymodal') await onPayModal(interaction, arg);
+      else if (action === 'payrejmodal') await onPayRejectModal(interaction, arg);
       else if (action === 'gpcalcprice' || action === 'gpcalctax') await onGamepassCalcModal(interaction, arg, action === 'gpcalctax' ? 'tax' : 'price');
     }
   } catch (err) {
@@ -1743,4 +1953,5 @@ module.exports = {
   refreshPanel,
   refreshLeaderboard,
   refreshCatalog,
+  onDanaMasukCommand,
 };
