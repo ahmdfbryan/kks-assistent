@@ -36,7 +36,7 @@
   },
   "panel": {
     "title": "🛒 Noname Store",
-    "description": "Ingin melakukan pembelian produk dari **NonameStore**?\n\nPilih tombol di bawah sesuai kebutuhanmu untuk membuka tiket pemesanan. Tim admin akan membantu proses selanjutnya. Pastikan kamu memilih kategori yang tepat agar pesanan dapat ditangani dengan lancar!",
+    "description": "Ingin melakukan pembelian produk dari **{server}**?\n\nPilih tombol di bawah sesuai kebutuhanmu untuk membuka tiket pemesanan. Tim admin akan membantu proses selanjutnya. Pastikan kamu memilih kategori yang tepat agar pesanan dapat ditangani dengan lancar!",
     "bannerImage": ""
   },
   "products": [
@@ -49,7 +49,7 @@
       "terms": {
         "button": "Syarat Pembelian",
         "title": "📌 PERSYARATAN PENGIRIMAN ROBUX VISEND",
-        "description": "Untuk memastikan proses pengiriman Robux berjalan lancar, pastikan akun Roblox Anda memenuhi persyaratan berikut:\n\n✅ Akun Roblox telah memenuhi verifikasi usia **18+**.\n✅ Fitur **Authenticator (V2L)** wajib dalam keadaan aktif.\n✅ Pastikan akun Roblox Anda **tidak sedang mengalami limitasi Robux** sebelum melakukan pemesanan.\n\n⚠️ Mohon periksa seluruh persyaratan di atas sebelum melakukan pembelian untuk menghindari kendala selama proses pengiriman Robux."
+        "description": "Demi kelancaran dan keamanan setiap transaksi, mohon pastikan akun Roblox Anda telah memenuhi seluruh ketentuan berikut **sebelum melakukan pemesanan**:\n\n✅ **Verifikasi Usia 18+**\n┗ Akun Roblox Anda telah terverifikasi berusia 18 tahun ke atas.\n\n✅ **Authenticator (V2L) Aktif**\n┗ Fitur Authenticator wajib dalam kondisi aktif pada akun Anda.\n\n✅ **Bebas Limitasi Robux**\n┗ Akun Anda tidak sedang dalam masa pembatasan penerimaan Robux.\n\n⚠️ **Penting:** Pesanan dari akun yang belum memenuhi persyaratan di atas berpotensi mengalami kendala atau penundaan pengiriman. Dengan melanjutkan pembelian, Anda dianggap telah membaca dan menyetujui seluruh ketentuan ini."
       },
       "rate": 145,
       "presets": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
