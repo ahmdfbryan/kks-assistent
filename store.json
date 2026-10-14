@@ -14,7 +14,8 @@
     "channels.log = channel LOG ORDER PUBLIK. Setiap ticket punya 1 pesan log yang ter-update otomatis (status, waktu proses, rating, progress). Catatan admin, nama admin, dan link ticket tidak ditampilkan.",
     "publicLog: showBuyer = tampilkan mention pembeli/penjual, maskRoblox = samarkan username Roblox (Bu******an), showPrice = tampilkan harga/nominal, showRekberItem = tampilkan objek transaksi rekber.",
     "Robux Gamepass (type gamepass): rate = harga per 1 Robux Before Tax (harga gamepass), taxPercent = pajak Roblox (30), pendingDays = estimasi Robux masuk, minAmount / maxAmount = batas Robux DITERIMA (After Tax), examples = contoh harga di info produk, tutorial = isi tombol Tutorial, ticketNote = catatan penting di ticket, ticket.idPrefix / ticket.categoryName = ID & kategori ticket gamepass. Gamepass tidak memakai stock Robux.",
-    "How to Order: channels.howToOrder = channel panduan. Teks panel di howToOrder (title, description, flow, whyUs, pickText, paymentIntro, paymentMethods, faq, bannerImage). Panduan per produk di products[].howTo (intro, requirements, steps, tips, image). Kirim panel dengan /store how-to-order. Produk tanpa howTo tidak muncul di dropdown."
+    "How to Order: channels.howToOrder = channel panduan. Teks panel di howToOrder (title, description, flow, whyUs, pickText, paymentIntro, paymentMethods, faq, bannerImage). Panduan per produk di products[].howTo (intro, requirements, steps, tips, image). Kirim panel dengan /store how-to-order. Produk tanpa howTo tidak muncul di dropdown.",
+    "Catalog: channels.catalog = channel katalog. Teks header di catalog (title, description, bannerImage). Kartu tiap produk di products[].catalog (tagline, highlights, priceList = daftar jumlah Robux di tabel harga, thumbnail, image = banner kartu). Kirim dengan /store catalog — kirim ulang setelah menambah / menghapus produk."
   ],
   "storeName": "Noname Store",
   "channels": {
@@ -23,7 +24,8 @@
     "leaderboard": "1559751984012329080",
     "stock": "1553666054499344434",
     "log": "1553667797383520347",
-    "howToOrder": "1553666097620848700"
+    "howToOrder": "1553666097620848700",
+    "catalog": "1553666501662351391"
   },
   "publicLog": {
     "showBuyer": true,
@@ -106,6 +108,11 @@
     ],
     "bannerImage": ""
   },
+  "catalog": {
+    "title": "🛍️ Katalog Produk | {server}",
+    "description": "Temukan semua layanan **{server}** di sini! ✨\nSetiap kartu menampilkan **harga, status, dan stock terkini** — semuanya ter-update otomatis.\n\nKlik **🛒 Order Sekarang** di kartu produk untuk mulai belanja, atau **📖 Cara Order** untuk melihat panduannya.",
+    "bannerImage": ""
+  },
   "products": [
     {
       "id": "robux-visend",
@@ -143,6 +150,17 @@
           "Pastikan semua syarat terpenuhi **sebelum** order agar tidak tertunda.",
           "Jumlah melebihi stock tidak bisa dipesan — cek sisa stock dulu."
         ]
+      },
+      "catalog": {
+        "tagline": "Robux dikirim **langsung ke akun Roblox kamu** via Visend — tanpa perlu membuat gamepass. ⚡",
+        "highlights": [
+          "Proses **cepat** setelah pembayaran dikonfirmasi",
+          "Cukup **username Roblox**, tanpa password",
+          "Pilih jumlah bebas hingga **5.000 Robux**"
+        ],
+        "priceList": [100, 500, 1000, 2000, 5000],
+        "thumbnail": "",
+        "image": ""
       }
     },
     {
@@ -208,6 +226,17 @@
           "**Jangan ubah harga / Off Sale / hapus** gamepass sebelum admin selesai membeli.",
           "Contoh: ingin terima **1.000 Robux** ➜ set gamepass **1.429 Robux**."
         ]
+      },
+      "catalog": {
+        "tagline": "Buat **gamepass**, kami yang membelinya — harga **lebih hemat** dengan masa pending ± 5 hari. 💰",
+        "highlights": [
+          "Harga **paling hemat** per Robux",
+          "Gamepass **dicek otomatis** sebelum ticket dibuat",
+          "Tersedia **🧮 Tax Calculator** untuk hitung harga"
+        ],
+        "priceList": [500, 1000, 2000, 3000, 5000],
+        "thumbnail": "",
+        "image": ""
       }
     },
     {
@@ -264,13 +293,28 @@
           "**Jangan pernah** transfer langsung ke penjual — semua dana wajib lewat admin.",
           "Simpan semua bukti chat & pengiriman di dalam ticket."
         ]
+      },
+      "catalog": {
+        "tagline": "Transaksi aman dengan **Rekening Bersama** — dana ditahan admin sampai barang **benar-benar diterima**. 🛡️",
+        "highlights": [
+          "Dana pembeli **diamankan** oleh admin",
+          "Progress transaksi **transparan** di ticket",
+          "Cocok untuk jual-beli akun, item, & jasa"
+        ],
+        "thumbnail": "",
+        "image": ""
       }
     },
     {
       "id": "coming-soon",
       "type": "soon",
       "label": "Coming Soon",
-      "emoji": "🔒"
+      "emoji": "🔒",
+      "catalog": {
+        "tagline": "Produk baru sedang kami siapkan. **Nantikan kejutannya!** 👀",
+        "thumbnail": "",
+        "image": ""
+      }
     }
   ],
   "payment": {
