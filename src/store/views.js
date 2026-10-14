@@ -834,9 +834,9 @@ const PUBLIC_STATUS = {
  * Tidak menampilkan catatan admin, nama admin, maupun link ticket. Detail sensitif bisa diatur
  * lewat store.json → publicLog.
  */
-function buildOrderLog(guild, cfg, t, proofUrl) {
+function buildOrderLog(guild, cfg, t) {
   const rekber = kindOf(t) === 'rekber';
-  const pl = { showBuyer: true, maskRoblox: true, showPrice: true, showProof: true, showRekberItem: false, ...(cfg.publicLog || {}) };
+  const pl = { showBuyer: true, maskRoblox: true, showPrice: true, showRekberItem: false, ...(cfg.publicLog || {}) };
   const statusColor = {
     open: color(cfg, 'brand', 0x3498db),
     completed: color(cfg, 'open', 0x2ecc71),
@@ -869,6 +869,7 @@ function buildOrderLog(guild, cfg, t, proofUrl) {
     e.addFields(
       { name: '📦 Produk', value: `\`${t.productLabel}\``, inline: true },
       { name: '💎 Jumlah', value: `\`${num(t.amount)} Robux\``, inline: true },
+      { name: '💱 Rate', value: `\`${rupiah(t.rate)} / Robux\``, inline: true },
     );
     if (pl.showPrice) e.addFields({ name: '💰 Total', value: `\`${rupiah(t.price)}\``, inline: true });
     e.addFields({ name: '🎮 Akun Roblox', value: `\`@${pl.maskRoblox ? maskName(t.roblox.name) : t.roblox.name}\``, inline: true });
@@ -885,7 +886,6 @@ function buildOrderLog(guild, cfg, t, proofUrl) {
 
   const timeline = (t.log || []).slice(-10).map((x) => `${ts(x.at, 't')} ┃ ${x.text}`).join('\n');
   if (timeline) e.addFields({ name: '🗂️ Progress', value: timeline.slice(0, 1024) });
-  if (proofUrl && pl.showProof && t.status === 'completed') e.setImage(proofUrl);
 
   return { embeds: [e], components: [], allowedMentions: { parse: [] } };
 }
