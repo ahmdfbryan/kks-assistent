@@ -18,8 +18,8 @@ const {
   Events,
 } = require('discord.js');
 const { loadConfig, isId, rupiah, num, getProduct } = require('./config');
-const { state, save, productState, isProductOpen, kindOf, activeTicketOf, nextTicketId } = require('./state');
-const { lookupRobloxUser } = require('./roblox');
+const { state, save, productState, productStatsOf, isProductOpen, kindOf, activeTicketOf, nextTicketId } = require('./state');
+const { lookupRobloxUser, lookupGamepass, parseGamepassId } = require('./roblox');
 const V = require('./views');
 
 const PROOF_DIR = path.join(__dirname, '..', '..', 'data', 'proofs');
@@ -190,6 +190,7 @@ async function onProductInfo(interaction, productId) {
   const cfg = loadConfig();
   const product = getProduct(cfg, productId);
   if (product?.type === 'rekber') return interaction.reply({ ...V.buildRekberInfo(interaction.guild, cfg, product), flags: EPH });
+  if (product?.type === 'gamepass') return interaction.reply({ ...V.buildGamepassInfo(interaction.guild, cfg, product), flags: EPH });
   if (!product || product.type !== 'robux') {
     return interaction.reply({ content: '🔒 Produk ini **Coming Soon** — nantikan ya!', flags: EPH });
   }
@@ -209,6 +210,7 @@ async function onBuy(interaction, productId) {
   const cfg = loadConfig();
   const product = getProduct(cfg, productId);
   if (product?.type === 'rekber') return onRekberStart(interaction, product);
+  if (product?.type === 'gamepass') return onGamepassStart(interaction, product);
   if (!product || product.type !== 'robux') {
     return interaction.reply({ content: '🔒 Produk ini **Coming Soon** — nantikan ya!', flags: EPH });
   }
@@ -695,6 +697,7 @@ const STEP_LOG = {
 };
 const CLOSE_LOG = {
   robux: { completed: '✅ Robux berhasil dikirim', cancelled: '❌ Order dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
+  gamepass: { completed: '✅ Gamepass dibeli — Robux masuk setelah masa pending', cancelled: '❌ Order dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
   rekber: { completed: '✅ Dana dicairkan ke penjual', cancelled: '❌ Transaksi dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
 };
 
@@ -747,6 +750,312 @@ async function onRekberReceived(interaction, ticketId) {
   if (!t.stage.funded) return interaction.reply({ content: 'Tunggu admin mengonfirmasi dana terlebih dahulu.', flags: EPH });
   t.stage.received = true;
   return advanceRekber(interaction, t, 'received');
+}
+
+// ══════════════════════ ROBUX GAMEPASS ══════════════════════
+const gpSessions = new Map(); // userId → { draft, expires }
+
+const textInput = (id, { placeholder, min, max = 20, required = true, style = TextInputStyle.Short, value } = {}) => {
+  const ti = new TextInputBuilder().setCustomId(id).setStyle(style).setMaxLength(max).setRequired(required);
+  if (placeholder) ti.setPlaceholder(placeholder);
+  if (min) ti.setMinLength(min);
+  if (value) ti.setValue(value);
+  return ti;
+};
+const parseAmount = (raw) => Number(String(raw || '').replace(/[.,\s]/g, '').replace(/robux|rbx/gi, ''));
+
+/** Tombol "Cek Harga" / "Tax Calculator" → form jumlah Robux. */
+async function onGamepassCalcButton(interaction, productId, mode) {
+  const product = getProduct(loadConfig(), productId);
+  if (!product || product.type !== 'gamepass') return interaction.reply({ content: 'Produk tidak ditemukan.', flags: EPH });
+  const tax = mode === 'tax';
+  const modal = new ModalBuilder()
+    .setCustomId(`store:${tax ? 'gpcalctax' : 'gpcalcprice'}:${product.id}`)
+    .setTitle(tax ? 'Tax Calculator Roblox' : `Cek Harga ${product.label}`.slice(0, 45))
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel(tax ? 'Robux yang ingin diterima' : 'Jumlah Robux (Before Tax)')
+        .setDescription(
+          tax
+            ? 'Jumlah Robux bersih yang ingin kamu terima (After Tax). Bot akan menghitung harga gamepass.'
+            : 'Harga gamepass kamu (Before Tax). Bot akan menghitung total harga dalam Rupiah.',
+        )
+        .setTextInputComponent(textInput('amount', { placeholder: tax ? 'contoh: 1000' : 'contoh: 1429', min: 1, max: 9 })),
+    );
+  return interaction.showModal(modal);
+}
+
+async function onGamepassCalcModal(interaction, productId, mode) {
+  const cfg = loadConfig();
+  const product = getProduct(cfg, productId);
+  if (!product) return interaction.reply({ content: 'Produk tidak ditemukan.', flags: EPH });
+  const n = parseAmount(interaction.fields.getTextInputValue('amount'));
+  if (!Number.isInteger(n) || n < 1 || n > 10_000_000) {
+    return interaction.reply({ content: '❌ Masukkan jumlah Robux berupa angka, contoh **1000**.', flags: EPH });
+  }
+  return interaction.reply({ ...V.buildGamepassCalc(interaction.guild, cfg, product, mode, n), flags: EPH });
+}
+
+async function onGamepassTutorial(interaction, productId) {
+  const cfg = loadConfig();
+  const product = getProduct(cfg, productId);
+  if (!product) return interaction.reply({ content: 'Produk tidak ditemukan.', flags: EPH });
+  return interaction.reply({ ...V.buildGamepassTutorial(interaction.guild, cfg, product), flags: EPH });
+}
+
+/** "Order Sekarang" → form order gamepass. */
+async function onGamepassStart(interaction, product) {
+  if (!isProductOpen(product)) {
+    refreshPanel();
+    return interaction.reply({ content: `🔴 **${product.label}** sedang **TUTUP**. Pantau channel stock untuk info buka berikutnya.`, flags: EPH });
+  }
+  const active = activeTicketOf({ userId: interaction.user.id, kind: 'gamepass' });
+  if (active) {
+    return interaction.reply({
+      content: `⚠️ Kamu masih punya ticket ${product.label} yang sedang berjalan: <#${active.channelId}> (\`${active.id}\`).\nTunggu ticket itu ditutup admin sebelum membuat pesanan baru.`,
+      flags: EPH,
+    });
+  }
+  const min = Number(product.minAmount) || 1;
+  const modal = new ModalBuilder()
+    .setCustomId(`store:gpmodal:${product.id}`)
+    .setTitle(`Order ${product.label}`.slice(0, 45))
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Username Roblox')
+        .setDescription('Username (bukan display name) akun pemilik gamepass.')
+        .setTextInputComponent(textInput('username', { placeholder: 'contoh: Builderman', min: 3, max: 20 })),
+      new LabelBuilder()
+        .setLabel('Link Gamepass')
+        .setDescription('Salin link gamepass dari Roblox / Creator Hub (atau ID gamepass saja).')
+        .setTextInputComponent(textInput('link', { placeholder: 'https://www.roblox.com/game-pass/123456789/...', min: 3, max: 300 })),
+      new LabelBuilder()
+        .setLabel('Harga Gamepass (Before Tax)')
+        .setDescription(`Harga yang kamu pasang di gamepass. Minimal ${num(V.gpBeforeTax(product, min))} Robux. Cek pakai Tax Calculator.`)
+        .setTextInputComponent(textInput('price', { placeholder: 'contoh: 1429', min: 1, max: 9 })),
+    );
+  return interaction.showModal(modal);
+}
+
+/** Cek gamepass ke Roblox: kembalikan { live, problems, warnings, verified }. */
+async function verifyGamepass(product, gamepassId, before, roblox) {
+  const problems = [];
+  const warnings = [];
+  let live = null;
+  let verified = false;
+  try {
+    live = await lookupGamepass(gamepassId);
+    if (!live) problems.push(`Gamepass dengan ID \`${gamepassId}\` **tidak ditemukan**. Periksa kembali link gamepass kamu.`);
+  } catch (err) {
+    console.warn('[store] cek gamepass gagal:', err.message);
+    warnings.push('Gamepass belum bisa dicek otomatis (server Roblox sibuk) — admin akan mengeceknya secara manual.');
+  }
+  if (live) {
+    verified = true;
+    if (!live.forSale) problems.push('Gamepass masih **Off Sale**. Aktifkan **Item for Sale** di pengaturan gamepass terlebih dahulu.');
+    else if (live.price !== before) {
+      problems.push(
+        `Harga gamepass di Roblox **${num(live.price)} Robux**, sedangkan yang kamu isi **${num(before)} Robux**. Samakan harganya terlebih dahulu.`,
+      );
+    }
+    const isUser = live.creatorType === 'User' || live.creatorType === 1;
+    if (roblox && isUser && live.creatorId && ![live.creatorId, live.creatorAltId].includes(String(roblox.id))) {
+      problems.push(`Gamepass ini milik **@${live.creatorName || live.creatorId}**, bukan milik **@${roblox.name}**.`);
+    } else if (roblox && live.creatorType && !isUser) {
+      warnings.push(`Gamepass dibuat oleh grup **${live.creatorName || '-'}** — Robux akan masuk ke dana grup tersebut.`);
+    }
+  }
+  return { live, problems, warnings, verified };
+}
+
+/** Form order dikirim → cek akun Roblox & gamepass → tampilkan ringkasan. */
+async function onGamepassModal(interaction, productId) {
+  await interaction.deferReply({ flags: EPH });
+  const cfg = loadConfig();
+  const product = getProduct(cfg, productId);
+  if (!product || product.type !== 'gamepass') return interaction.editReply('❌ Produk tidak ditemukan.');
+  if (!isProductOpen(product)) return interaction.editReply(`🔴 **${product.label}** sedang **TUTUP**.`);
+
+  const username = interaction.fields.getTextInputValue('username').trim();
+  const link = interaction.fields.getTextInputValue('link').trim();
+  const before = parseAmount(interaction.fields.getTextInputValue('price'));
+  const gamepassId = parseGamepassId(link);
+  const min = Number(product.minAmount) || 1;
+  const max = Number(product.maxAmount) || 10000;
+
+  if (!gamepassId) {
+    return interaction.editReply('❌ Link gamepass tidak valid. Contoh: `https://www.roblox.com/game-pass/123456789/Nama-Gamepass`');
+  }
+  if (!Number.isInteger(before) || before < 1) return interaction.editReply('❌ Harga gamepass harus berupa angka, contoh **1429**.');
+  const q = V.gpQuote(cfg, product, before);
+  if (q.after < min || q.after > max) {
+    return interaction.editReply(
+      `❌ Gamepass seharga **${num(before)} Robux** hanya menghasilkan **${num(q.after)} Robux** (After Tax).\n` +
+        `Order ${product.label} hanya untuk **${num(min)} – ${num(max)} Robux diterima** → harga gamepass ` +
+        `**${num(V.gpBeforeTax(product, min))} – ${num(V.gpBeforeTax(product, max))} Robux**.`,
+    );
+  }
+  if (activeTicketOf({ userId: interaction.user.id, kind: 'gamepass' })) {
+    return interaction.editReply('⚠️ Kamu masih punya ticket gamepass yang sedang berjalan. Tunggu ticket itu ditutup dulu.');
+  }
+
+  let roblox;
+  try {
+    roblox = await lookupRobloxUser(username);
+  } catch (err) {
+    console.error('[store] cek Roblox gagal:', err.message);
+    return interaction.editReply('⚠️ Gagal menghubungi server Roblox. Coba lagi beberapa saat lagi.');
+  }
+  if (!roblox) {
+    return interaction.editReply(`❌ Username Roblox \`${username}\` tidak ditemukan. Pastikan ejaannya benar (pakai **username**, bukan display name).`);
+  }
+  const busy = activeTicketOf({ robloxId: roblox.id, gamepassId, kind: 'gamepass' });
+  if (busy) {
+    return interaction.editReply(`⚠️ Akun Roblox / gamepass ini masih dipakai di ticket yang sedang berjalan (\`${busy.id}\`).`);
+  }
+
+  const check = await verifyGamepass(product, gamepassId, before, roblox);
+  if (check.problems.length) {
+    return interaction.editReply({
+      embeds: [
+        V.buildGamepassCheck(cfg, { gamepass: { id: gamepassId, name: check.live?.name || `Gamepass ${gamepassId}` }, before }, check.live, check.problems)
+          .embeds[0].setTitle('⚠️ Gamepass Belum Sesuai')
+          .setFooter({ text: 'Perbaiki gamepass kamu, lalu klik Order Sekarang lagi.' }),
+      ],
+    });
+  }
+
+  const draft = {
+    productId: product.id,
+    roblox,
+    gamepass: {
+      id: gamepassId,
+      name: check.live?.name || `Gamepass ${gamepassId}`,
+      icon: check.live?.icon || null,
+      creatorName: check.live?.creatorName || null,
+      verified: check.verified,
+    },
+    ...q,
+    warnings: check.warnings,
+  };
+  gpSessions.set(interaction.user.id, { draft, expires: Date.now() + SESSION_MS });
+  return interaction.editReply(V.buildGamepassConfirm(interaction.guild, cfg, product, draft));
+}
+
+/** Konfirmasi ringkasan → buat ticket order gamepass. */
+async function onGamepassConfirm(interaction, yes) {
+  const sess = gpSessions.get(interaction.user.id);
+  gpSessions.delete(interaction.user.id);
+  if (!yes) return interaction.update({ content: '✖️ Pesanan dibatalkan.', embeds: [], components: [] });
+  if (!sess || sess.expires < Date.now()) {
+    return interaction.update({ content: '⌛ Sesi sudah berakhir. Silakan klik Order Sekarang lagi.', embeds: [], components: [] });
+  }
+  const cfg = loadConfig();
+  const guild = interaction.guild;
+  const d = sess.draft;
+  const product = getProduct(cfg, d.productId);
+  if (!isProductOpen(product)) return interaction.update({ content: `🔴 Maaf, **${product?.label || 'produk ini'}** baru saja **TUTUP**.`, embeds: [], components: [] });
+  if (
+    activeTicketOf({ userId: interaction.user.id, kind: 'gamepass' }) ||
+    activeTicketOf({ robloxId: d.roblox.id, gamepassId: d.gamepass.id, kind: 'gamepass' })
+  ) {
+    return interaction.update({ content: '⚠️ Kamu / akun Roblox / gamepass ini masih punya ticket yang sedang berjalan.', embeds: [], components: [] });
+  }
+
+  const tc = product.ticket || {};
+  const id = nextTicketId(tc.idPrefix || 'GP', 'gamepassSeq');
+  const ticket = {
+    id,
+    kind: 'gamepass',
+    guildId: guild.id,
+    userId: interaction.user.id,
+    channelId: null,
+    messageId: null,
+    roblox: d.roblox,
+    gamepass: d.gamepass,
+    productId: product.id,
+    productLabel: product.label,
+    amount: d.after, // Robux yang diterima pembeli
+    before: d.before, // harga gamepass
+    rate: d.rate,
+    price: d.price,
+    pendingDays: Number(product.pendingDays) || 5,
+    status: 'open',
+    createdAt: Date.now(),
+  };
+  state.tickets[id] = ticket;
+  save();
+  await interaction.update({ content: '⏳ Sedang membuat ticket kamu...', embeds: [], components: [] });
+
+  try {
+    const category = await getTicketCategory(guild, cfg, tc.categoryName || '🎟️ TICKET GAMEPASS');
+    const member = [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ReadMessageHistory,
+      PermissionFlagsBits.AttachFiles,
+      PermissionFlagsBits.EmbedLinks,
+    ];
+    const overwrites = [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: interaction.user.id, allow: member },
+      { id: guild.members.me.id, allow: [...member, PermissionFlagsBits.ManageChannels] },
+    ];
+    const staff = isId(cfg.ticket?.staffRoleId) ? cfg.ticket.staffRoleId : null;
+    if (staff) overwrites.push({ id: staff, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
+    const slug = d.roblox.name.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+    const channel = await guild.channels.create({
+      name: `🎟️・${id.toLowerCase()}-${slug}`,
+      type: ChannelType.GuildText,
+      parent: category.id,
+      topic: `${id} • ${product.label} ${num(d.after)} Robux (gamepass ${num(d.before)}) • ${interaction.user.tag} • Roblox @${d.roblox.name}`,
+      permissionOverwrites: overwrites,
+    });
+    ticket.channelId = channel.id;
+
+    const msg = await channel.send({
+      content: `<@${interaction.user.id}>${staff ? ` <@&${staff}>` : ''}`,
+      ...V.buildTicketMessage(guild, cfg, ticket),
+      allowedMentions: { users: [interaction.user.id], roles: staff ? [staff] : [] },
+    });
+    await msg.pin().catch(() => {});
+    ticket.messageId = msg.id;
+    save();
+    logOrder(guild, ticket, '🆕 Order masuk & menunggu pembayaran');
+
+    const url = channelUrl(guild.id, channel.id);
+    const dmOk = await interaction.user
+      .send(V.buildDmCreated(guild, cfg, ticket, url))
+      .then(() => true)
+      .catch(() => false);
+    if (!dmOk) channel.send('ℹ️ Bot tidak bisa mengirim DM ke kamu (DM tertutup). Semua info pesanan ada di ticket ini.').catch(() => {});
+
+    await interaction.editReply({
+      content: `✅ **Ticket berhasil dibuat!** Lanjutkan pembayaran di ${channel}.`,
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Buka Ticket').setEmoji('🎫').setURL(url))],
+    });
+  } catch (err) {
+    console.error('[store] gagal membuat ticket gamepass:', err);
+    delete state.tickets[id];
+    save();
+    await interaction
+      .editReply('❌ Gagal membuat ticket. Pastikan bot punya izin **Manage Channels** & **Manage Roles**, lalu coba lagi.')
+      .catch(() => {});
+  }
+}
+
+/** Tombol "Cek Gamepass" di ticket (admin) → cek ulang harga & status sebelum membeli. */
+async function onGamepassCheck(interaction, ticketId) {
+  if (!isAdmin(interaction.member)) return interaction.reply({ content: '⛔ Hanya **Administrator** yang bisa mengecek gamepass.', flags: EPH });
+  const t = state.tickets[ticketId];
+  if (!t || kindOf(t) !== 'gamepass') return interaction.reply({ content: 'Ticket tidak ditemukan.', flags: EPH });
+  await interaction.deferReply({ flags: EPH });
+  const cfg = loadConfig();
+  const check = await verifyGamepass(getProduct(cfg, t.productId), t.gamepass.id, t.before, t.roblox);
+  if (!check.live && !check.problems.length) {
+    return interaction.editReply('⚠️ Server Roblox tidak bisa dihubungi. Cek gamepass secara manual lewat tombol **Buka Gamepass**.');
+  }
+  return interaction.editReply(V.buildGamepassCheck(cfg, t, check.live, [...check.problems, ...check.warnings]));
 }
 
 // ══════════════════════ Tutup ticket (khusus Administrator) ══════════════════════
@@ -888,9 +1197,13 @@ async function onCloseModal(interaction, ticketId) {
     sp.revenue += t.price;
     sp.orders += 1;
     state.spenders[t.userId] = sp;
+    const ps = productStatsOf(t.productId);
+    ps.orders += 1;
+    ps.robux += t.amount;
+    ps.revenue += t.price;
     t.testimonyDeadline = Date.now() + (Number(cfg.ticket?.testimonyTimeoutHours) || 24) * 3600 * 1000;
   } else {
-    state.stock += t.amount; // stock Robux dikembalikan
+    if (kindOf(t) === 'robux') state.stock += t.amount; // stock Robux dikembalikan (gamepass tidak memakai stock)
     t.deleteAt = Date.now() + (Number(cfg.ticket?.deleteAfterSeconds) || 15) * 1000;
   }
   save();
@@ -913,7 +1226,7 @@ async function onCloseModal(interaction, ticketId) {
       files: proof.files,
       allowedMentions: { users: mentionIds },
     });
-    if (!rekber) {
+    if (kindOf(t) === 'robux') {
       await announce(guild, 'returned', { ticket: t });
       await reopenIfAutoClosed(guild);
     }
@@ -1062,7 +1375,7 @@ async function onChannelDelete(channel) {
     t.closedBy = client.user.id;
     t.note = 'Channel ticket dihapus manual';
     logOrder(channel.guild, t, kindOf(t) === 'rekber' ? '❌ Transaksi dibatalkan' : '❌ Order dibatalkan');
-    if (kindOf(t) === 'rekber') {
+    if (kindOf(t) !== 'robux') {
       save();
     } else {
       state.stock += t.amount;
@@ -1092,6 +1405,10 @@ async function handleInteraction(interaction) {
       else if (action === 'rbagree') await onRekberAgree(interaction, arg);
       else if (action === 'rbfund') await onRekberFund(interaction, arg);
       else if (action === 'rbrecv') await onRekberReceived(interaction, arg);
+      else if (action === 'gpprice' || action === 'gptax') await onGamepassCalcButton(interaction, arg, action === 'gptax' ? 'tax' : 'price');
+      else if (action === 'gptutor') await onGamepassTutorial(interaction, arg);
+      else if (action === 'gpconfirm') await onGamepassConfirm(interaction, arg === 'yes');
+      else if (action === 'gpcheck') await onGamepassCheck(interaction, arg);
     } else if (interaction.isStringSelectMenu()) {
       if (action === 'amount') await onAmountSelect(interaction, arg);
     } else if (interaction.isModalSubmit()) {
@@ -1100,6 +1417,8 @@ async function handleInteraction(interaction) {
       else if (action === 'closemodal') await onCloseModal(interaction, arg);
       else if (action === 'testimodal') await onTestimonyModal(interaction, arg);
       else if (action === 'rbmodal') await onRekberModal(interaction, arg);
+      else if (action === 'gpmodal') await onGamepassModal(interaction, arg);
+      else if (action === 'gpcalcprice' || action === 'gpcalctax') await onGamepassCalcModal(interaction, arg, action === 'gpcalctax' ? 'tax' : 'price');
     }
   } catch (err) {
     console.error(`[store] error (${id}):`, err);
