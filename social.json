@@ -1,0 +1,40 @@
+{
+  "_petunjuk": [
+    "File ini dibaca ulang setiap dipakai. Setelah mengubah teks, jalankan /social refresh (atau tunggu update otomatis tiap 1 jam).",
+    "channelId = channel default untuk /social kirim (kosongkan = channel tempat command dijalankan).",
+    "Roblox: userId = ID akun Roblox (data username, avatar, followers diambil otomatis dari Roblox).",
+    "TikTok: url = link profil TikTok, username = nama akun (tanpa @ juga boleh).",
+    "Discord: id = ID server ATAU ID akun Discord. Kalau ID server ini → bot membuat link undangan permanen otomatis (butuh izin Create Invite). inviteUrl = isi kalau ingin pakai link undangan sendiri.",
+    "Warna (color) tiap kartu bisa diganti. Hapus satu blok platform kalau tidak ingin ditampilkan."
+  ],
+  "channelId": "",
+  "title": "🌐 Social Media | {server}",
+  "description": "Jangan sampai ketinggalan info terbaru dari **{server}**! 🚀\nIkuti semua sosial media resmi kami untuk mendapatkan **update game, event seru, giveaway**, dan konten menarik lainnya.\n\n> 💙 Satu follow darimu sangat berarti untuk perkembangan komunitas kami!",
+  "bannerImage": "",
+  "color": "#3498DB",
+  "roblox": {
+    "userId": "8824871038",
+    "title": "🎮 Roblox",
+    "description": "Add friend & follow akun **Roblox resmi** kami untuk main bareng, info update game, dan event in-game! 🕹️",
+    "color": "#00A2FF",
+    "button": "Roblox"
+  },
+  "tiktok": {
+    "url": "https://www.tiktok.com/@noname.ac.id",
+    "username": "noname.ac.id",
+    "title": "🎵 TikTok",
+    "description": "Tonton **konten terbaru**, behind the scene, cuplikan game, dan info event seru kami di TikTok! 🎬",
+    "color": "#FE2C55",
+    "button": "TikTok"
+  },
+  "discord": {
+    "id": "1141222257604182020",
+    "inviteUrl": "",
+    "inviteChannelId": "",
+    "title": "💬 Discord",
+    "description": "Ajak teman-temanmu bergabung ke **komunitas Discord** kami — tempat ngobrol, mabar, dan dapat info paling cepat! 🤝",
+    "color": "#5865F2",
+    "button": "Discord"
+  },
+  "footer": "{server} • Follow us!"
+}
