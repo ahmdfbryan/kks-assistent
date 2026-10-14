@@ -8,7 +8,9 @@
     "storeName = nama toko yang tampil di semua keterangan (panel, DM, ticket, testimoni, leaderboard, pengumuman).",
     "products[].description = keterangan produk yang muncul saat pembeli klik tombol produk (hanya pembeli yang lihat).",
     "products[].terms = syarat pembelian yang muncul saat tombol 'Syarat Pembelian' diklik (hanya pembeli yang lihat). Hapus bagian terms kalau tidak perlu.",
-    "colors.brand = warna tema toko (biru) untuk semua embed. open = hijau (toko buka / pesanan selesai), closed = merah (toko tutup / dibatalkan), refund = oranye."
+    "colors.brand = warna tema toko (biru) untuk semua embed. open = hijau (toko buka / pesanan selesai), closed = merah (toko tutup / dibatalkan), refund = oranye.",
+    "Rekber: minNominal / maxNominal = batas nominal, feePaidBy = 'pembeli' atau 'penjual', feeTiers = tabel fee (upTo = batas nominal, fee = Rp tetap, percent = persen; upTo null = di atas tier terakhir). guide = alur yang tampil di ticket rekber.",
+    "Buka / tutup tiap produk terpisah: /store buka produk:<produk> dan /store tutup produk:<produk>. Setelah menambah produk baru di file ini, jalankan npm run deploy supaya muncul di pilihan."
   ],
   "storeName": "Noname Store",
   "channels": {
@@ -25,6 +27,10 @@
     "deleteAfterSeconds": 15,
     "testimonyTimeoutHours": 24,
     "postWithoutReview": true
+  },
+  "rekberTicket": {
+    "categoryName": "🤝 TICKET REKBER",
+    "idPrefix": "RB"
   },
   "pingEveryone": { "open": true, "close": true },
   "colors": {
@@ -54,6 +60,29 @@
       "presets": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
       "minAmount": 100,
       "maxAmount": 5000
+    },
+    {
+      "id": "rekber",
+      "type": "rekber",
+      "label": "Rekber",
+      "emoji": "🤝",
+      "description": "**Rekber (Rekening Bersama)** adalah layanan perantara transaksi yang aman antara **pembeli** dan **penjual**.\n\nDana pembeli **ditahan oleh admin {server}** dan baru diteruskan ke penjual setelah barang / jasa **benar-benar diterima**. Tidak ada lagi drama penipuan — transaksi kamu kami amankan dari awal sampai selesai. 🛡️",
+      "terms": {
+        "button": "Syarat & Ketentuan",
+        "title": "📌 SYARAT & KETENTUAN REKBER",
+        "description": "Demi keamanan dan kenyamanan kedua belah pihak, mohon perhatikan ketentuan berikut **sebelum membuat transaksi rekber**:\n\n✅ **Kesepakatan Jelas**\n┗ Harga, objek transaksi, dan detail barang / jasa sudah disepakati kedua pihak sebelum ticket dibuat.\n\n✅ **Transfer Hanya ke Admin**\n┗ Pembeli **wajib** mentransfer dana ke rekening admin yang tertera di ticket — **bukan** langsung ke penjual.\n\n✅ **Bukti Lengkap**\n┗ Setiap pembayaran dan pengiriman barang wajib disertai bukti (screenshot) di dalam ticket.\n\n✅ **Konfirmasi Penerimaan**\n┗ Dana baru dicairkan ke penjual setelah pembeli mengonfirmasi barang / jasa **sudah diterima** sesuai kesepakatan.\n\n✅ **Fee Layanan**\n┗ Fee rekber dibayarkan sesuai tabel fee dan **tidak dapat dikembalikan** apabila transaksi dibatalkan setelah dana diterima admin.\n\n⚠️ **Penting:** Segala bentuk transaksi di luar ticket rekber **bukan tanggung jawab {server}**. Dengan membuat ticket rekber, kedua pihak dianggap telah membaca dan menyetujui seluruh ketentuan ini."
+      },
+      "guideTitle": "🛡️ Alur Transaksi Rekber",
+      "guide": "`1` **Pihak lawan** klik **🤝 Setujui Transaksi** setelah memeriksa detail.\n`2` **Pembeli** transfer sesuai **Transfer Pembeli ke Admin**, lalu kirim bukti di ticket ini.\n`3` **Admin** mengecek & klik **💰 Konfirmasi Dana**.\n`4` **Penjual** mengirim barang / jasa ke pembeli.\n`5` **Pembeli** klik **📦 Barang Sudah Diterima** setelah barang sesuai.\n`6` **Admin** mencairkan dana ke penjual & menutup ticket.\n\n⚠️ Jangan pernah transfer langsung ke penjual. Semua dana **wajib** melalui admin.",
+      "minNominal": 10000,
+      "maxNominal": 10000000,
+      "feePaidBy": "pembeli",
+      "feeTiers": [
+        { "upTo": 100000, "fee": 2000 },
+        { "upTo": 500000, "fee": 5000 },
+        { "upTo": 1000000, "fee": 10000 },
+        { "upTo": null, "percent": 1 }
+      ]
     },
     {
       "id": "coming-soon",
