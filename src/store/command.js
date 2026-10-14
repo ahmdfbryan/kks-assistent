@@ -4,7 +4,7 @@ const { state, save, productState, isProductOpen, hasStock, stockOf, setStock, s
 const V = require('./views');
 const H = require('./howto');
 const C = require('./catalog');
-const { setProductsOpen, reopenIfAutoClosed, closeIfSoldOut, announce, refreshPanel } = require('./flow');
+const { setProductsOpen, reopenIfAutoClosed, closeIfSoldOut, announce, refreshPanel, onDanaMasukCommand } = require('./flow');
 
 const TEXT = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -274,4 +274,16 @@ const storeCommand = {
   },
 };
 
-module.exports = { storeCommand };
+/** /danamasuk → umumkan dana pembeli sudah masuk (dijalankan di channel ticket). */
+const danaMasukCommand = {
+  data: new SlashCommandBuilder()
+    .setName('danamasuk')
+    .setDescription('Umumkan dana pembeli sudah masuk (jalankan di channel ticket)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .setDMPermission(false)
+    .addIntegerOption((o) => o.setName('nominal').setDescription('Nominal yang diterima (default = total tagihan ticket)').setMinValue(1).setMaxValue(1_000_000_000))
+    .addStringOption((o) => o.setName('catatan').setDescription('Catatan untuk pembeli (opsional)').setMaxLength(300)),
+  execute: (interaction) => onDanaMasukCommand(interaction),
+};
+
+module.exports = { storeCommand, danaMasukCommand };
