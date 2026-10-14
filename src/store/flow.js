@@ -21,6 +21,7 @@ const { loadConfig, isId, rupiah, num, getProduct } = require('./config');
 const { state, save, productState, productStatsOf, isProductOpen, kindOf, activeTicketOf, nextTicketId } = require('./state');
 const { lookupRobloxUser, lookupGamepass, parseGamepassId } = require('./roblox');
 const V = require('./views');
+const H = require('./howto');
 
 const PROOF_DIR = path.join(__dirname, '..', '..', 'data', 'proofs');
 const SESSION_MS = 10 * 60 * 1000;
@@ -64,7 +65,11 @@ async function editTracked(key, build) {
   }
 }
 
-const refreshPanel = () => debounce('panel', () => editTracked('panel', V.buildPanel));
+// Panel How to Order ikut di-update (status buka/tutup, rate, stock).
+const refreshPanel = () => {
+  debounce('panel', () => editTracked('panel', V.buildPanel));
+  debounce('howto', () => editTracked('howto', H.buildHowToPanel), 2500);
+};
 const refreshLeaderboard = () => debounce('leaderboard', () => editTracked('leaderboard', V.buildLeaderboard));
 
 // ══════════════════════ Pengumuman di channel stock ══════════════════════
@@ -1387,6 +1392,15 @@ async function onChannelDelete(channel) {
   } else save();
 }
 
+// ══════════════════════ How to Order ══════════════════════
+async function onHowTo(interaction) {
+  const cfg = loadConfig();
+  if (!cfg) return interaction.reply({ content: '❌ store.json tidak bisa dibaca.', flags: EPH });
+  await interaction.reply({ ...H.buildHowToGuide(interaction.guild, cfg, interaction.values[0]), flags: EPH });
+  // Reset pilihan dropdown supaya produk yang sama bisa dipilih lagi.
+  interaction.message?.edit(H.buildHowToPanel(interaction.guild, cfg)).catch(() => {});
+}
+
 // ══════════════════════ Router interaksi ══════════════════════
 async function handleInteraction(interaction) {
   const id = interaction.customId;
@@ -1411,6 +1425,7 @@ async function handleInteraction(interaction) {
       else if (action === 'gpcheck') await onGamepassCheck(interaction, arg);
     } else if (interaction.isStringSelectMenu()) {
       if (action === 'amount') await onAmountSelect(interaction, arg);
+      else if (action === 'howto') await onHowTo(interaction);
     } else if (interaction.isModalSubmit()) {
       if (action === 'rbxmodal') await onRobloxModal(interaction, arg);
       else if (action === 'amountmodal') await onAmountModal(interaction, arg);
