@@ -1,7 +1,7 @@
 {
   "name": "noname-assistent",
   "version": "1.0.0",
-  "description": "Bot Discord Noname Studios Creative: welcome, verifikasi, rules, dan cari teman di voice.",
+  "description": "Bot Discord Noname Studios Creative: welcome, verifikasi, rules, cari teman di voice, dan store + ticket order.",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -11,7 +11,7 @@
     "node": ">=18.17"
   },
   "dependencies": {
-    "discord.js": "^14.19.3",
+    "discord.js": "^14.25.1",
     "dotenv": "^16.4.5"
   }
 }
