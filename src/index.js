@@ -10,6 +10,7 @@ const { handleTranslateButton, TRANSLATE_BUTTON } = require('./rules');
 const voiceFinder = require('./voice-finder');
 const store = require('./store');
 const { registerSocial } = require('./social');
+const { registerInviteTracker } = require('./invite-tracker');
 
 const byName = new Map(commands.map((c) => [c.data.name, c]));
 // GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
@@ -19,13 +20,15 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMessages, // untuk panel cari voice yang sticky (tidak membaca isi pesan)
+    GatewayIntentBits.GuildMessages, // untuk panel sticky (tidak membaca isi pesan)
+    GatewayIntentBits.GuildInvites, // invite log: mendeteksi link undangan yang dipakai member baru
   ],
 });
 registerWelcome(client);
 voiceFinder.registerStickyPanel(client);
 store.registerStore(client);
 registerSocial(client);
+registerInviteTracker(client);
 
 client.once(Events.ClientReady, (c) => {
   console.log(`🤖 Login sebagai ${c.user.tag}`);
