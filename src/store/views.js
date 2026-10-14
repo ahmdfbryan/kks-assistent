@@ -37,7 +37,7 @@ function buildPanel(guild, cfg) {
   const name = { name: storeName(cfg, guild) };
 
   const embed = new EmbedBuilder()
-    .setColor(color(cfg, 'brand', 0x7c5cff))
+    .setColor(color(cfg, 'brand', 0x3498db))
     .setTitle(fill(p.title || '🛒 {server}', name))
     .setDescription(fill(p.description, name).slice(0, 4096) || null)
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null);
@@ -69,7 +69,7 @@ function buildProductInfo(guild, cfg, product) {
   const s = state.stats;
   const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
   const embed = new EmbedBuilder()
-    .setColor(open ? color(cfg, 'open', 0x2ecc71) : color(cfg, 'closed', 0xe74c3c))
+    .setColor(color(cfg, 'brand', 0x3498db))
     .setTitle(`${product.emoji || '💎'} ${product.label}`)
     .setDescription(fill(product.description || '', { name: storeName(cfg, guild) }) || null)
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
@@ -108,7 +108,7 @@ function buildProductTerms(guild, cfg, product) {
   return {
     embeds: [
       new EmbedBuilder()
-        .setColor(color(cfg, 'gold', 0xf1c40f))
+        .setColor(color(cfg, 'brand', 0x3498db))
         .setTitle(t.title || `📌 Persyaratan ${product.label}`)
         .setDescription(fill(t.description || '-', { name: storeName(cfg, guild) }).slice(0, 4096)),
     ],
@@ -130,7 +130,7 @@ function buildLeaderboard(guild, cfg) {
     : ['_Belum ada transaksi. Jadilah spender pertama!_ 🚀'];
 
   const embed = new EmbedBuilder()
-    .setColor(color(cfg, 'gold', 0xf1c40f))
+    .setColor(color(cfg, 'brand', 0x3498db))
     .setTitle(`🏆 Top 10 Spender Leaderboard | ${storeName(cfg, guild)}`)
     .setDescription(lines.join('\n\n'))
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
@@ -146,7 +146,7 @@ function buildLeaderboard(guild, cfg) {
 // ───────────────────────── Konfirmasi akun Roblox ─────────────────────────
 function buildConfirmAccount(cfg, roblox) {
   const embed = new EmbedBuilder()
-    .setColor(color(cfg, 'brand', 0x7c5cff))
+    .setColor(color(cfg, 'brand', 0x3498db))
     .setTitle('🔍 Confirm Your Roblox Account')
     .setDescription('Is this really your Roblox account?')
     .addFields(
@@ -170,7 +170,7 @@ function buildAmountPicker(cfg, product, roblox) {
   const rate = rateOf(cfg, product);
   const max = Math.min(Number(product.maxAmount) || 5000, state.stock);
   const embed = new EmbedBuilder()
-    .setColor(color(cfg, 'brand', 0x7c5cff))
+    .setColor(color(cfg, 'brand', 0x3498db))
     .setTitle(`${product.emoji || '💎'} Pilih Jumlah ${product.label}`)
     .setDescription(
       `Akun Roblox: **${roblox.displayName}** (\`@${roblox.name}\`)\n\n` +
@@ -202,7 +202,7 @@ function buildAmountPicker(cfg, product, roblox) {
 // ───────────────────────── Isi ticket ─────────────────────────
 function buildTicketMessage(guild, cfg, t) {
   const statusColor = {
-    open: color(cfg, 'brand', 0x7c5cff),
+    open: color(cfg, 'brand', 0x3498db),
     completed: color(cfg, 'open', 0x2ecc71),
     cancelled: color(cfg, 'closed', 0xe74c3c),
     refund: color(cfg, 'refund', 0xe67e22),
@@ -235,7 +235,7 @@ function buildTicketMessage(guild, cfg, t) {
   const embeds = [info];
   if (t.status === 'open') {
     const pay = new EmbedBuilder()
-      .setColor(color(cfg, 'info', 0x3498db))
+      .setColor(color(cfg, 'brand', 0x3498db))
       .setTitle(cfg.payment?.title || '💳 Cara Pembayaran')
       .setDescription(fill(cfg.payment?.description || 'Silakan tunggu admin.', { name: storeName(cfg, guild) }));
     if (cfg.payment?.image) pay.setImage(cfg.payment.image);
@@ -260,7 +260,7 @@ function buildTicketMessage(guild, cfg, t) {
 // ───────────────────────── DM ke pembeli ─────────────────────────
 function buildDmCreated(guild, cfg, t, channelUrl) {
   const embed = new EmbedBuilder()
-    .setColor(color(cfg, 'open', 0x2ecc71))
+    .setColor(color(cfg, 'brand', 0x3498db))
     .setTitle('🎫 Ticket Order Berhasil Dibuat')
     .setDescription(
       `Ticket order kamu di **${storeName(cfg, guild)}** sudah berhasil dibuat.\n\n` +
@@ -308,7 +308,7 @@ function buildDmClosed(guild, cfg, t) {
 // ───────────────────────── Testimoni ─────────────────────────
 function buildTestimonyPrompt(guild, cfg, t) {
   const embed = new EmbedBuilder()
-    .setColor(color(cfg, 'gold', 0xf1c40f))
+    .setColor(color(cfg, 'brand', 0x3498db))
     .setTitle('⭐ Bagaimana Pengalaman Belanjamu?')
     .setDescription(
       `<@${t.userId}>, pesananmu sudah selesai! 🎉\n\nBantu kami jadi lebih baik dengan memberikan **rating & testimoni** ` +
@@ -325,7 +325,7 @@ function buildTestimonyPrompt(guild, cfg, t) {
 function buildTestimony(guild, cfg, t, buyer) {
   const r = t.testimony;
   const embed = new EmbedBuilder()
-    .setColor(color(cfg, 'gold', 0xf1c40f))
+    .setColor(color(cfg, 'brand', 0x3498db))
     .setAuthor({
       name: buyer ? `${buyer.displayName} (@${buyer.user.username})` : 'Pembeli',
       iconURL: buyer?.displayAvatarURL({ size: 128 }) || undefined,
@@ -375,7 +375,7 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
       )
       .addFields({ name: '📦 Sisa Stock', value: `\`${num(state.stock)} Robux\``, inline: true });
   } else if (kind === 'stock') {
-    e.setColor(color(cfg, 'info', 0x3498db))
+    e.setColor(color(cfg, 'brand', 0x3498db))
       .setTitle('📦 Update Stock Robux')
       .setDescription(extra.text || 'Stock Robux telah diperbarui.')
       .addFields(
