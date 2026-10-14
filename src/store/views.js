@@ -340,10 +340,6 @@ function buildTestimony(guild, cfg, t, buyer) {
   const r = t.testimony;
   const embed = new EmbedBuilder()
     .setColor(color(cfg, 'brand', 0x3498db))
-    .setAuthor({
-      name: buyer ? `${buyer.displayName} (@${buyer.user.username})` : 'Pembeli',
-      iconURL: buyer?.displayAvatarURL({ size: 128 }) || undefined,
-    })
     .setTitle(`🧾 Testimoni #${String(state.stats.testimonies).padStart(4, '0')}`)
     .setDescription(
       r
@@ -678,10 +674,6 @@ function buildRekberTestimony(guild, cfg, t, buyer) {
   const r = t.testimony;
   const embed = new EmbedBuilder()
     .setColor(color(cfg, 'brand', 0x3498db))
-    .setAuthor({
-      name: buyer ? `${buyer.displayName} (@${buyer.user.username})` : 'Pembeli',
-      iconURL: buyer?.displayAvatarURL({ size: 128 }) || undefined,
-    })
     .setTitle(`🧾 Testimoni #${String(state.stats.testimonies).padStart(4, '0')}`)
     .setDescription(
       r
