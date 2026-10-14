@@ -120,6 +120,14 @@ async function onProductInfo(interaction, productId) {
   return interaction.reply({ ...V.buildProductInfo(interaction.guild, cfg, product), flags: EPH });
 }
 
+/** Tombol "Syarat Pembelian" di info produk. */
+async function onTerms(interaction, productId) {
+  const cfg = loadConfig();
+  const product = getProduct(cfg, productId);
+  if (!product?.terms?.description) return interaction.reply({ content: 'Tidak ada syarat khusus untuk produk ini.', flags: EPH });
+  return interaction.reply({ ...V.buildProductTerms(interaction.guild, cfg, product), flags: EPH });
+}
+
 // ══════════════════════ Langkah 1b: klik "Beli Sekarang" → form username ══════════════════════
 async function onBuy(interaction, productId) {
   const cfg = loadConfig();
@@ -674,6 +682,7 @@ async function handleInteraction(interaction) {
     if (interaction.isButton()) {
       if (action === 'buy') await onProductInfo(interaction, arg);
       else if (action === 'order') await onBuy(interaction, arg);
+      else if (action === 'terms') await onTerms(interaction, arg);
       else if (action === 'confirm') await onConfirm(interaction, arg === 'yes');
       else if (action === 'close') await onCloseButton(interaction, arg);
       else if (action === 'testi') await onTestimonyButton(interaction, arg);
