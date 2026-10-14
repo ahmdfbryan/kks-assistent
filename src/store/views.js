@@ -72,19 +72,39 @@ function buildProductInfo(guild, cfg, product) {
       { name: '🧾 Total Transaksi', value: `\`${num(s.transactions)} transaksi\``, inline: true },
       { name: `💎 ${product.label} Terjual`, value: `\`${num(s.robux)} Robux\``, inline: true },
       { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
-    )
-    .setFooter(serverFooter(guild, storeName(cfg, guild)))
-    .setTimestamp(new Date());
+    );
 
-  const row = new ActionRowBuilder().addComponents(
+  const buttons = [
     new ButtonBuilder()
       .setCustomId(`store:order:${product.id}`)
       .setLabel(open ? 'Beli Sekarang' : 'Toko Sedang Tutup')
       .setEmoji('🛒')
       .setStyle(ButtonStyle.Success)
       .setDisabled(!open),
-  );
-  return { embeds: [embed], components: [row] };
+  ];
+  if (product.terms?.description) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`store:terms:${product.id}`)
+        .setLabel(product.terms.button || 'Syarat Pembelian')
+        .setEmoji('📌')
+        .setStyle(ButtonStyle.Secondary),
+    );
+  }
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(buttons)] };
+}
+
+/** Syarat sebelum membeli produk (hanya terlihat pembeli). */
+function buildProductTerms(guild, cfg, product) {
+  const t = product.terms || {};
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(color(cfg, 'gold', 0xf1c40f))
+        .setTitle(t.title || `📌 Persyaratan ${product.label}`)
+        .setDescription(fill(t.description || '-', { name: storeName(cfg, guild) }).slice(0, 4096)),
+    ],
+  };
 }
 
 // ───────────────────────── Leaderboard ─────────────────────────
@@ -369,6 +389,7 @@ module.exports = {
   rateOf,
   buildPanel,
   buildProductInfo,
+  buildProductTerms,
   storeName,
   buildLeaderboard,
   buildConfirmAccount,
