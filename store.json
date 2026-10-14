@@ -15,7 +15,8 @@
     "publicLog: showBuyer = tampilkan mention pembeli/penjual, maskRoblox = samarkan username Roblox (Bu******an), showPrice = tampilkan harga/nominal, showRekberItem = tampilkan objek transaksi rekber.",
     "Robux Gamepass (type gamepass): rate = harga per 1 Robux Before Tax (harga gamepass), taxPercent = pajak Roblox (30), pendingDays = estimasi Robux masuk, minAmount / maxAmount = batas Robux DITERIMA (After Tax), examples = contoh harga di info produk, tutorial = isi tombol Tutorial, ticketNote = catatan penting di ticket, ticket.idPrefix / ticket.categoryName = ID & kategori ticket gamepass. Gamepass tidak memakai stock Robux.",
     "How to Order: channels.howToOrder = channel panduan. Teks panel di howToOrder (title, description, flow, whyUs, pickText, paymentIntro, paymentMethods, faq, bannerImage). Panduan per produk di products[].howTo (intro, requirements, steps, tips, image). Kirim panel dengan /store how-to-order. Produk tanpa howTo tidak muncul di dropdown.",
-    "Catalog: channels.catalog = channel katalog. Teks header di catalog (title, description, bannerImage). Kartu tiap produk di products[].catalog (tagline, highlights, priceList = daftar jumlah Robux di tabel harga, thumbnail, image = banner kartu). Kirim dengan /store catalog — kirim ulang setelah menambah / menghapus produk."
+    "Catalog: channels.catalog = channel katalog. Teks header di catalog (title, description, bannerImage). Kartu tiap produk di products[].catalog (tagline, highlights, priceList = daftar jumlah Robux di tabel harga, thumbnail, image = banner kartu). Kirim dengan /store catalog — kirim ulang setelah menambah / menghapus produk.",
+    "Canva Pro (type canva): plans = paket (id, label, price, days). Stock = jumlah slot email, atur dengan /store stok-set produk:Canva Pro (habis → tutup otomatis, slot kembali → buka otomatis). remindDays = DM pengingat ke pembeli sebelum masa aktif habis; saat habis admin yang menutup ticket mendapat DM untuk mengeluarkan email dari team. ticket.idPrefix / categoryName = ID & kategori ticket Canva."
   ],
   "storeName": "Noname Store",
   "channels": {
@@ -235,6 +236,94 @@
           "Tersedia **🧮 Tax Calculator** untuk hitung harga"
         ],
         "priceList": [500, 1000, 2000, 3000, 5000],
+        "thumbnail": "",
+        "image": ""
+      }
+    },
+    {
+      "id": "canva-pro",
+      "type": "canva",
+      "label": "Canva Pro",
+      "emoji": "🎨",
+      "description": "Nikmati **Canva Pro** dengan harga super hemat! ✨\n\nCukup kirim **alamat email** kamu, lalu admin **{server}** akan mengundangmu ke **Team Canva Pro**. Terima undangan lewat email, dan akunmu langsung bisa memakai semua fitur Pro.\n\n🛡️ Team Canva kami **dirawat langsung oleh admin** dan **dibatasi untuk beberapa email saja** — jadi lebih **awet & stabil**.",
+      "plans": [
+        {
+          "id": "1m",
+          "label": "1 Bulan",
+          "price": 5000,
+          "days": 30,
+          "months": 1,
+          "emoji": "🗓️"
+        },
+        {
+          "id": "1y",
+          "label": "1 Tahun",
+          "price": 30000,
+          "days": 365,
+          "months": 12,
+          "emoji": "💎"
+        }
+      ],
+      "stockUnit": "slot",
+      "remindDays": 3,
+      "features": [
+        "Akses **semua template & elemen Premium**",
+        "**Background Remover**, Magic Studio & fitur AI",
+        "**Brand Kit**, resize desain & ekspor kualitas tinggi",
+        "Penyimpanan cloud **1 TB**",
+        "Bisa pakai **akun Canva lama** atau email baru"
+      ],
+      "howItWorks": [
+        "Pilih paket & masukkan **alamat email**",
+        "Bayar sesuai **Total Bayar** di ticket",
+        "Admin mengirim **undangan team** ke email kamu",
+        "**Terima undangan** lewat email — Canva Pro langsung aktif ✨"
+      ],
+      "terms": {
+        "button": "Syarat & Ketentuan",
+        "title": "📌 SYARAT & KETENTUAN CANVA PRO",
+        "description": "Demi kenyamanan bersama, mohon perhatikan ketentuan berikut **sebelum memesan Canva Pro**:\n\n✅ **Email Aktif**\n┗ Gunakan alamat email yang **aktif** dan bisa kamu akses — undangan dikirim ke email tersebut.\n\n✅ **Sistem Team (Invite)**\n┗ Canva Pro diaktifkan dengan cara **diundang ke Team Canva Pro** milik admin, bukan dengan login ke akun lain.\n\n✅ **Jangan Keluar dari Team**\n┗ Keluar dari team / menghapus undangan akan **menghentikan akses Pro**, dan tidak dapat di-refund.\n\n✅ **Penggunaan Wajar**\n┗ Dilarang mengundang orang lain, mengubah pengaturan team, atau menyalahgunakan akses Pro.\n\n✅ **Masa Aktif**\n┗ Masa aktif dihitung sejak pesanan **selesai (Completed)**. Kamu akan diingatkan lewat DM sebelum masa aktif berakhir.\n\n⚠️ **Penting:** Desain yang memakai elemen Pro tetap tersimpan, namun elemen Pro tidak bisa digunakan lagi setelah masa aktif habis. Dengan melanjutkan pembelian, kamu dianggap telah menyetujui seluruh ketentuan ini."
+      },
+      "ticketNoteTitle": "📌 Penting — Sebelum Menerima Undangan",
+      "ticketNote": "▸ Pastikan email **`sudah benar`** — undangan hanya dikirim ke email yang tercantum.\n▸ Undangan biasanya masuk ke **Inbox**, tapi cek juga folder **Spam / Promosi**.\n▸ **Jangan keluar dari team** selama masa aktif agar akses Pro tidak terputus.",
+      "inviteGuide": [
+        "Buka inbox email kamu (cek juga folder **Spam / Promosi**)",
+        "Cari email dari **Canva** berisi undangan bergabung ke team",
+        "Klik **Join team / Gabung tim**",
+        "Login ke Canva memakai email tersebut — fitur **Pro** langsung aktif ✨",
+        "Klik **✅ Saya Sudah Join Team** di ticket ini"
+      ],
+      "ticket": {
+        "categoryName": "🎨 TICKET CANVA",
+        "idPrefix": "CV"
+      },
+      "howTo": {
+        "intro": "Aktifkan **Canva Pro** cukup dengan **alamat email** — tanpa login ke akun orang lain. Kamu diundang ke **Team Canva Pro** yang dirawat admin. 🎨",
+        "requirements": [
+          "**Alamat email** aktif (boleh akun Canva lama / email baru)",
+          "Pilih paket **1 Bulan** atau **1 Tahun**"
+        ],
+        "steps": [
+          "Buka channel **Store**, klik **🎨 Canva Pro** ➜ **🛒 Order Sekarang**",
+          "Pilih **paket** & masukkan **alamat email** (2x untuk konfirmasi)",
+          "Cek ringkasan, lalu klik **Ya, Buat Ticket**",
+          "Bayar sesuai **Total Bayar** di ticket & kirim bukti",
+          "Admin mengirim **undangan team** ke email kamu 📨",
+          "Buka email ➜ klik **Join team**, lalu klik **✅ Saya Sudah Join Team**",
+          "Admin menutup ticket — **Canva Pro aktif** ✨"
+        ],
+        "tips": [
+          "Cek folder **Spam / Promosi** jika undangan tidak muncul di inbox.",
+          "Paket **1 Tahun** jauh lebih hemat dibanding 1 bulan."
+        ]
+      },
+      "catalog": {
+        "tagline": "Canva Pro **super hemat** via undangan team — cukup kirim **email**, tanpa login akun orang lain. 🎨",
+        "highlights": [
+          "Team **dirawat admin** & dibatasi beberapa email — **awet**",
+          "Aktivasi cukup lewat **undangan email**",
+          "Diingatkan via DM sebelum masa aktif habis"
+        ],
         "thumbnail": "",
         "image": ""
       }
