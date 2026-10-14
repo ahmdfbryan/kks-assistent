@@ -235,7 +235,8 @@ function buildTicketMessage(guild, cfg, t) {
       { name: '💎 Jumlah', value: `\`${num(t.amount)} Robux\``, inline: true },
       { name: '💱 Rate', value: `\`${rupiah(t.rate)} / Robux\``, inline: true },
       { name: '💰 Total Bayar', value: `## ${rupiah(t.price)}`, inline: false },
-      { name: '📌 Status', value: `**${STATUS_LABEL[t.status]}**`, inline: true },
+      { name: '📌 Status', value: `**${ticketStatusText(t)}**`, inline: true },
+      { name: '💳 Pembayaran', value: payStatusText(t), inline: true },
       { name: '🕒 Dibuat', value: ts(t.createdAt, 'f'), inline: true },
     )
     .setFooter(serverFooter(guild, `${storeName(cfg, guild)} • Ticket ${t.id}`))
@@ -243,15 +244,7 @@ function buildTicketMessage(guild, cfg, t) {
   if (t.roblox.avatar) info.setThumbnail(t.roblox.avatar);
   if (t.closedAt) info.addFields({ name: '🔒 Ditutup', value: `${ts(t.closedAt, 'f')} oleh <@${t.closedBy}>`, inline: true });
 
-  const embeds = [info];
-  if (t.status === 'open') {
-    const pay = new EmbedBuilder()
-      .setColor(color(cfg, 'brand', 0x3498db))
-      .setTitle(cfg.payment?.title || '💳 Cara Pembayaran')
-      .setDescription(fill(cfg.payment?.description || 'Silakan tunggu admin.', { name: storeName(cfg, guild) }));
-    if (cfg.payment?.image) pay.setImage(cfg.payment.image);
-    embeds.push(pay);
-  }
+  const embeds = [info, ...paymentEmbeds(guild, cfg, t)];
 
   const components =
     t.status === 'open'
@@ -263,6 +256,7 @@ function buildTicketMessage(guild, cfg, t) {
               .setEmoji('🔒')
               .setStyle(ButtonStyle.Danger),
           ),
+          ...paymentRows(t),
         ]
       : [];
   return { embeds, components };
@@ -598,6 +592,7 @@ function buildRekberTicket(guild, cfg, t) {
   if (t.closedAt) main.addFields({ name: '🔒 Ditutup', value: `${ts(t.closedAt, 'f')} oleh <@${t.closedBy}>`, inline: true });
 
   const embeds = [main];
+  if (st.agreed) embeds.push(...paymentEmbeds(guild, cfg, t)); // rekening admin muncul setelah transaksi disetujui
   if (t.status === 'open' && product.guide) {
     embeds.push(
       new EmbedBuilder()
@@ -631,6 +626,7 @@ function buildRekberTicket(guild, cfg, t) {
               .setDisabled(!st.funded || Boolean(st.received)),
             new ButtonBuilder().setCustomId(`store:close:${t.id}`).setLabel('Tutup Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
           ),
+          ...(st.agreed ? paymentRows(t) : []),
         ]
       : [];
   return { embeds, components };
@@ -1069,7 +1065,8 @@ function buildGamepassTicket(guild, cfg, t) {
       { name: '💎 Robux Diterima', value: `\`${num(t.amount)} Robux\`\n┗ After Tax`, inline: true },
       { name: '💱 Rate', value: `\`${rupiah(t.rate)} / Robux\``, inline: true },
       { name: '💰 Total Bayar', value: `## ${rupiah(t.price)}`, inline: false },
-      { name: '📌 Status', value: `**${STATUS_LABEL[t.status]}**`, inline: true },
+      { name: '📌 Status', value: `**${ticketStatusText(t)}**`, inline: true },
+      { name: '💳 Pembayaran', value: payStatusText(t), inline: true },
       { name: '🕒 Dibuat', value: ts(t.createdAt, 'f'), inline: true },
     )
     .setFooter(serverFooter(guild, `${name} • Ticket ${t.id}`))
@@ -1089,12 +1086,7 @@ function buildGamepassTicket(guild, cfg, t) {
   const embeds = [info];
   if (t.status === 'open') {
     const product = (cfg.products || []).find((p) => p.id === t.productId) || {};
-    const pay = new EmbedBuilder()
-      .setColor(color(cfg, 'brand', 0x3498db))
-      .setTitle(cfg.payment?.title || '💳 Cara Pembayaran')
-      .setDescription(fill(cfg.payment?.description || 'Silakan tunggu admin.', { name }));
-    if (cfg.payment?.image) pay.setImage(cfg.payment.image);
-    embeds.push(pay);
+    embeds.push(...paymentEmbeds(guild, cfg, t));
     if (product.ticketNote) {
       embeds.push(
         new EmbedBuilder()
@@ -1113,6 +1105,7 @@ function buildGamepassTicket(guild, cfg, t) {
             new ButtonBuilder().setCustomId(`store:gpcheck:${t.id}`).setLabel('Cek Gamepass').setEmoji('🔍').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId(`store:close:${t.id}`).setLabel('Tutup Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
           ),
+          ...paymentRows(t),
         ]
       : [];
   return { embeds, components };
@@ -1293,7 +1286,8 @@ function buildCanvaTicket(guild, cfg, t) {
       { name: '📧 Email Canva', value: `\`${t.email}\`` },
       { name: '💰 Total Bayar', value: `## ${rupiah(t.price)}` },
       { name: '📍 Progress Aktivasi', value: canvaSteps(t) },
-      { name: '📌 Status', value: `**${STATUS_LABEL[t.status]}**`, inline: true },
+      { name: '📌 Status', value: `**${ticketStatusText(t)}**`, inline: true },
+      { name: '💳 Pembayaran', value: payStatusText(t), inline: true },
       { name: '🕒 Dibuat', value: ts(t.createdAt, 'f'), inline: true },
     )
     .setThumbnail(product.thumbnail || guild.iconURL({ extension: 'png', size: 256 }) || null)
@@ -1304,12 +1298,7 @@ function buildCanvaTicket(guild, cfg, t) {
 
   const embeds = [info];
   if (t.status === 'open') {
-    const pay = new EmbedBuilder()
-      .setColor(color(cfg, 'brand', 0x3498db))
-      .setTitle(cfg.payment?.title || '💳 Cara Pembayaran')
-      .setDescription(fill(cfg.payment?.description || 'Silakan tunggu admin.', { name }));
-    if (cfg.payment?.image) pay.setImage(cfg.payment.image);
-    embeds.push(pay);
+    embeds.push(...paymentEmbeds(guild, cfg, t));
     if (product.ticketNote) {
       embeds.push(
         new EmbedBuilder()
@@ -1338,6 +1327,7 @@ function buildCanvaTicket(guild, cfg, t) {
               .setDisabled(!st.invited || Boolean(st.joined)),
             new ButtonBuilder().setCustomId(`store:close:${t.id}`).setLabel('Tutup Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
           ),
+          ...paymentRows(t),
         ]
       : [];
   return { embeds, components };
@@ -1421,6 +1411,158 @@ function buildCanvaExpiry(guild, cfg, t, who) {
       );
   }
   return { embeds: [e] };
+}
+
+// ═════════════════════════════════════ PEMBAYARAN ═════════════════════════════════════
+/** Nominal yang harus ditransfer pembeli. */
+const payAmount = (t) => (kindOf(t) === 'rekber' ? t.buyerPays : t.price);
+/** Sudah lunas? (rekber: dana sudah dikonfirmasi admin) */
+const isPaid = (t) => (kindOf(t) === 'rekber' ? Boolean(t.stage?.funded) : t.payment?.status === 'paid');
+const payMethods = (cfg) => (cfg.payment?.methods || []).filter((m) => m && m.bank && m.number);
+
+function payStatusText(t) {
+  if (isPaid(t)) return '`✅ Lunas`';
+  const st = t.payment?.status;
+  if (st === 'pending') return '`🧾 Menunggu Verifikasi`';
+  if (st === 'rejected') return '`❌ Bukti Ditolak`';
+  return '`⏳ Belum Dibayar`';
+}
+function ticketStatusText(t) {
+  if (t.status === 'open' && isPaid(t)) return '🔄 Dana Diterima — Sedang Diproses';
+  return STATUS_LABEL[t.status];
+}
+
+/** Embed rekening pembayaran (hanya tampil selama belum lunas). */
+function paymentEmbeds(guild, cfg, t) {
+  if (t.status !== 'open' || isPaid(t)) return [];
+  const pay = cfg.payment || {};
+  const name = { name: storeName(cfg, guild) };
+  const methods = payMethods(cfg);
+  const e = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setTitle(pay.title || '💳 Cara Pembayaran')
+    .setDescription(
+      `Transfer **tepat** sebesar:\n## ${rupiah(payAmount(t))}\n` +
+        (pay.accountName ? `ke salah satu rekening di bawah — semua **a.n. ${pay.accountName}**` : 'ke salah satu rekening di bawah:'),
+    );
+  for (const m of methods.slice(0, 18)) {
+    e.addFields({ name: `${m.emoji || '🏦'} ${m.bank}`, value: `\`${m.number}\`${m.holder ? `\n┗ a.n. ${m.holder}` : ''}`, inline: true });
+  }
+  const rest = methods.length % 3;
+  for (let i = 0; rest && i < 3 - rest; i++) e.addFields({ name: '​', value: '​', inline: true }); // rapikan grid
+  if (pay.description) e.addFields({ name: '🧾 Langkah Pembayaran', value: fill(pay.description, name).slice(0, 1024) });
+  if (pay.image) e.setImage(pay.image);
+  return [e];
+}
+
+/** Tombol pembayaran pembeli (selama belum lunas). */
+function paymentRows(t) {
+  if (t.status !== 'open' || isPaid(t)) return [];
+  const st = t.payment?.status;
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`store:paybtn:${t.id}`)
+        .setLabel(st === 'pending' || st === 'rejected' ? 'Kirim Ulang Bukti Pembayaran' : 'Konfirmasi Pembayaran')
+        .setEmoji('💳')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`store:copyacc:${t.id}`).setLabel('Salin No. Rekening').setEmoji('📋').setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+}
+
+/** Daftar nomor rekening polos (mudah disalin di HP). */
+function buildCopyAccounts(cfg, t) {
+  const methods = payMethods(cfg);
+  const lines = methods.map((m) => `**${m.bank}**\n${m.number}`);
+  return {
+    content:
+      `💰 **Total transfer: ${rupiah(payAmount(t))}**${cfg.payment?.accountName ? `\n👤 a.n. **${cfg.payment.accountName}**` : ''}\n\n` +
+      `${lines.join('\n\n')}\n\n_Tekan lama nomor rekening untuk menyalin._`,
+  };
+}
+
+/** Bukti pembayaran dari pembeli (dikirim ke ticket, admin verifikasi). */
+function buildPaymentProof(guild, cfg, t, p, imageUrl) {
+  const e = new EmbedBuilder()
+    .setColor(color(cfg, 'refund', 0xe67e22))
+    .setAuthor({ name: `${storeName(cfg, guild)} • Konfirmasi Pembayaran`, iconURL: guild.iconURL({ size: 128 }) || undefined })
+    .setTitle('🧾 Bukti Pembayaran Diterima')
+    .setDescription(`<@${p.userId}> telah mengirim bukti pembayaran untuk **${t.id}**.\nAdmin akan segera **memverifikasi** pembayaranmu. ⏳`)
+    .addFields(
+      { name: '💰 Nominal Tagihan', value: `\`${rupiah(payAmount(t))}\``, inline: true },
+      { name: '🏦 Transfer ke', value: `\`${p.bank}\``, inline: true },
+      { name: '👤 Nama Pengirim', value: `\`${p.sender}\``, inline: true },
+    )
+    .setFooter(serverFooter(guild, `${storeName(cfg, guild)} • Ticket ${t.id}`))
+    .setTimestamp(new Date());
+  if (p.note) e.addFields({ name: '📝 Catatan', value: p.note.slice(0, 1024) });
+  if (imageUrl) e.setImage(imageUrl);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`store:paid:${t.id}`).setLabel('Dana Masuk (Admin)').setEmoji('✅').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`store:payreject:${t.id}`).setLabel('Tolak (Admin)').setEmoji('❌').setStyle(ButtonStyle.Danger),
+  );
+  return { embeds: [e], components: [row] };
+}
+
+/** Langkah berikutnya setelah dana masuk, sesuai produk. */
+function nextStepText(t) {
+  const k = kindOf(t);
+  if (k === 'gamepass') {
+    return `Admin akan segera **membeli gamepass** [${t.gamepass?.name || t.gamepass?.id}](${gpUrl(t.gamepass?.id)}). Robux masuk ke akunmu setelah masa pending Roblox (± **${num(t.pendingDays || 5)} hari**).`;
+  }
+  if (k === 'canva') return `Admin akan segera mengirim **undangan Team Canva Pro** ke \`${t.email}\`. Pantau inbox email kamu ya! 📨`;
+  if (k === 'rekber') return `<@${t.sellerId}>, silakan kirim barang / jasa ke pembeli. Pembeli klik **📦 Barang Sudah Diterima** setelah barang sesuai.`;
+  return `Admin sedang memproses pengiriman **${num(t.amount)} Robux** ke akun Roblox \`@${t.roblox?.name}\`. 🚀`;
+}
+
+/** Pemberitahuan dana masuk (dari /danamasuk atau tombol Dana Masuk). */
+function buildDanaMasuk(guild, cfg, t, { amount, note, by }) {
+  const rekber = kindOf(t) === 'rekber';
+  const buyer = rekber ? t.buyerId : t.userId;
+  const e = new EmbedBuilder()
+    .setColor(color(cfg, 'open', 0x2ecc71))
+    .setAuthor({ name: `${storeName(cfg, guild)} • Pembayaran Terverifikasi`, iconURL: guild.iconURL({ size: 128 }) || undefined })
+    .setTitle('💰 Dana Masuk!')
+    .setDescription(
+      `Pembayaran <@${buyer}> untuk **${t.id}** telah **diterima & diverifikasi** oleh admin. Terima kasih! 🙏\n` +
+        (rekber ? 'Dana kini **ditahan dengan aman** oleh admin sampai barang diterima pembeli. 🛡️' : 'Pesananmu kini **sedang diproses**. ✨'),
+    )
+    .addFields(
+      { name: '💰 Nominal Diterima', value: `\`${rupiah(amount)}\``, inline: true },
+      { name: '📦 Produk', value: `\`${t.productLabel}${rekber ? '' : ` • ${itemText(t)}`}\``, inline: true },
+      { name: '🛡️ Diverifikasi', value: `<@${by}>`, inline: true },
+      { name: '⏭️ Langkah Selanjutnya', value: nextStepText(t).slice(0, 1024) },
+    )
+    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
+    .setFooter(serverFooter(guild, `${storeName(cfg, guild)} • Ticket ${t.id}`))
+    .setTimestamp(new Date());
+  if (amount !== payAmount(t)) {
+    e.addFields({ name: '⚠️ Selisih Nominal', value: `Tagihan \`${rupiah(payAmount(t))}\` • diterima \`${rupiah(amount)}\`` });
+  }
+  if (note) e.addFields({ name: '📝 Catatan Admin', value: note.slice(0, 1024) });
+  const ping = rekber ? [t.buyerId, t.sellerId] : [buyer];
+  return { content: ping.map((id) => `<@${id}>`).join(' '), embeds: [e], allowedMentions: { users: ping } };
+}
+
+/** Bukti pembayaran ditolak admin. */
+function buildPayRejected(guild, cfg, t, reason, by) {
+  const buyer = kindOf(t) === 'rekber' ? t.buyerId : t.userId;
+  return {
+    content: `<@${buyer}>`,
+    embeds: [
+      new EmbedBuilder()
+        .setColor(color(cfg, 'closed', 0xe74c3c))
+        .setTitle('❌ Bukti Pembayaran Ditolak')
+        .setDescription(
+          `Maaf <@${buyer}>, bukti pembayaranmu untuk **${t.id}** **belum bisa diverifikasi** oleh <@${by}>.\n\n` +
+            `📝 **Alasan:** ${reason || 'Bukti tidak sesuai / dana belum masuk.'}\n\nSilakan periksa kembali lalu klik **💳 Kirim Ulang Bukti Pembayaran**.`,
+        )
+        .setFooter(serverFooter(guild, `${storeName(cfg, guild)} • Ticket ${t.id}`))
+        .setTimestamp(new Date()),
+    ],
+    allowedMentions: { users: [buyer] },
+  };
 }
 
 // ───────────────────────── Log order (channel log admin) ─────────────────────────
@@ -1515,6 +1657,13 @@ function buildOrderLog(guild, cfg, t) {
 }
 
 module.exports = {
+  payAmount,
+  isPaid,
+  payMethods,
+  buildCopyAccounts,
+  buildPaymentProof,
+  buildDanaMasuk,
+  buildPayRejected,
   itemText,
   maskEmail,
   canvaPlans,
