@@ -817,9 +817,26 @@ function duration(ms) {
   return `${Math.floor(h / 24)} hari ${h % 24} jam`;
 }
 
-/** Satu pesan log per ticket — di-edit otomatis setiap ada perubahan. */
+/** Samarkan username Roblox untuk log publik: Builderman → Bu******an */
+function maskName(n) {
+  const str = String(n || '');
+  if (str.length <= 4) return `${str[0] || ''}${'*'.repeat(Math.max(str.length - 1, 0))}`;
+  return `${str.slice(0, 2)}${'*'.repeat(str.length - 4)}${str.slice(-2)}`;
+}
+
+const PUBLIC_STATUS = {
+  robux: { open: '⏳ Sedang Diproses', completed: '✅ Selesai', cancelled: '❌ Dibatalkan', refund: '💸 Refund' },
+  rekber: { open: '🔄 Sedang Berjalan', completed: '✅ Selesai', cancelled: '❌ Dibatalkan', refund: '💸 Refund' },
+};
+
+/**
+ * Log order PUBLIK — 1 pesan per ticket, di-edit otomatis setiap ada perubahan.
+ * Tidak menampilkan catatan admin, nama admin, maupun link ticket. Detail sensitif bisa diatur
+ * lewat store.json → publicLog.
+ */
 function buildOrderLog(guild, cfg, t, proofUrl) {
   const rekber = kindOf(t) === 'rekber';
+  const pl = { showBuyer: true, maskRoblox: true, showPrice: true, showProof: true, showRekberItem: false, ...(cfg.publicLog || {}) };
   const statusColor = {
     open: color(cfg, 'brand', 0x3498db),
     completed: color(cfg, 'open', 0x2ecc71),
@@ -827,67 +844,50 @@ function buildOrderLog(guild, cfg, t, proofUrl) {
     refund: color(cfg, 'refund', 0xe67e22),
   }[t.status];
   const name = storeName(cfg, guild);
+  const pub = PUBLIC_STATUS[rekber ? 'rekber' : 'robux'][t.status];
 
   const e = new EmbedBuilder()
     .setColor(statusColor)
-    .setAuthor({ name: `${name} • Log ${rekber ? 'Rekber' : 'Order'}`, iconURL: guild.iconURL({ size: 128 }) || undefined })
-    .setTitle(`${rekber ? '🤝 Rekber' : '🧾 Order'} • ${t.id}`)
-    .setFooter(serverFooter(guild, `${name} • Diperbarui otomatis`))
-    .setTimestamp(new Date());
+    .setAuthor({ name: `${name} • ${rekber ? 'Rekber Log' : 'Order Log'}`, iconURL: guild.iconURL({ size: 128 }) || undefined })
+    .setTitle(`${rekber ? '🤝' : '🧾'} ${t.id}  •  ${pub}`)
+    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
+    .setFooter(serverFooter(guild, `${name} • Terima kasih atas kepercayaanmu 💙`))
+    .setTimestamp(t.closedAt || t.createdAt);
 
   if (rekber) {
-    e.addFields(
-      { name: '🛒 Pembeli', value: `<@${t.buyerId}>`, inline: true },
-      { name: '🏷️ Penjual', value: `<@${t.sellerId}>`, inline: true },
-      { name: '🙋 Dibuat oleh', value: `<@${t.userId}>`, inline: true },
-      { name: '📦 Objek Transaksi', value: t.item.slice(0, 1024), inline: false },
-      { name: '💵 Nominal', value: `\`${rupiah(t.nominal)}\``, inline: true },
-      { name: '🧾 Fee', value: `\`${rupiah(t.fee)}\``, inline: true },
-      { name: '💳 Transfer Pembeli', value: `\`${rupiah(t.buyerPays)}\``, inline: true },
-    );
+    if (pl.showBuyer) {
+      e.addFields(
+        { name: '🛒 Pembeli', value: `<@${t.buyerId}>`, inline: true },
+        { name: '🏷️ Penjual', value: `<@${t.sellerId}>`, inline: true },
+      );
+    }
+    e.addFields({ name: '🛡️ Layanan', value: '`Rekber`', inline: true });
+    if (pl.showRekberItem) e.addFields({ name: '📦 Objek', value: `\`${t.item.slice(0, 100)}\``, inline: true });
+    if (pl.showPrice) e.addFields({ name: '💵 Nominal', value: `\`${rupiah(t.nominal)}\``, inline: true });
   } else {
+    if (pl.showBuyer) e.addFields({ name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true });
     e.addFields(
-      { name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true },
-      { name: '🎮 Roblox', value: `[@${t.roblox.name}](https://www.roblox.com/users/${t.roblox.id}/profile)`, inline: true },
       { name: '📦 Produk', value: `\`${t.productLabel}\``, inline: true },
       { name: '💎 Jumlah', value: `\`${num(t.amount)} Robux\``, inline: true },
-      { name: '💱 Rate', value: `\`${rupiah(t.rate)} / Robux\``, inline: true },
-      { name: '💰 Total', value: `\`${rupiah(t.price)}\``, inline: true },
     );
-    if (t.roblox.avatar) e.setThumbnail(t.roblox.avatar);
+    if (pl.showPrice) e.addFields({ name: '💰 Total', value: `\`${rupiah(t.price)}\``, inline: true });
+    e.addFields({ name: '🎮 Akun Roblox', value: `\`@${pl.maskRoblox ? maskName(t.roblox.name) : t.roblox.name}\``, inline: true });
   }
 
-  e.addFields(
-    { name: '📌 Status', value: `**${statusLabel(t)}**`, inline: false },
-    { name: '🕒 Dibuat', value: ts(t.createdAt, 'f'), inline: true },
-    { name: '📍 Channel', value: t.channelId && !t.deleted ? `<#${t.channelId}>` : '`dihapus`', inline: true },
-  );
+  e.addFields({ name: '📌 Status', value: `**${pub}**`, inline: false }, { name: '🕒 Order Masuk', value: ts(t.createdAt, 'f'), inline: true });
   if (t.closedAt) {
     e.addFields(
-      { name: '🔒 Ditutup oleh', value: `<@${t.closedBy}>`, inline: true },
-      { name: '⏱️ Durasi', value: `\`${duration(t.closedAt - t.createdAt)}\``, inline: true },
+      { name: t.status === 'completed' ? '✅ Selesai Pada' : '🔒 Ditutup Pada', value: ts(t.closedAt, 'f'), inline: true },
+      { name: '⚡ Waktu Proses', value: `\`${duration(t.closedAt - t.createdAt)}\``, inline: true },
     );
   }
-  if (t.note) e.addFields({ name: '📝 Catatan Admin', value: t.note.slice(0, 1024) });
-  if (t.testimony) e.addFields({ name: '⭐ Testimoni', value: `${STARS(t.testimony.rating)} — ${t.testimony.comment.slice(0, 200)}` });
+  if (t.testimony) e.addFields({ name: '⭐ Rating Pembeli', value: `${STARS(t.testimony.rating)}  **${t.testimony.rating}/5**` });
 
-  const timeline = (t.log || []).slice(-10).map((x) => `${ts(x.at, 't')} • ${x.text}`).join('\n');
-  if (timeline) e.addFields({ name: '🗂️ Riwayat', value: timeline.slice(0, 1024) });
-  if (proofUrl) e.setImage(proofUrl);
+  const timeline = (t.log || []).slice(-10).map((x) => `${ts(x.at, 't')} ┃ ${x.text}`).join('\n');
+  if (timeline) e.addFields({ name: '🗂️ Progress', value: timeline.slice(0, 1024) });
+  if (proofUrl && pl.showProof && t.status === 'completed') e.setImage(proofUrl);
 
-  const components =
-    t.channelId && !t.deleted
-      ? [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setStyle(ButtonStyle.Link)
-              .setLabel('Buka Ticket')
-              .setEmoji(rekber ? '🤝' : '🎫')
-              .setURL(`https://discord.com/channels/${guild.id}/${t.channelId}`),
-          ),
-        ]
-      : [];
-  return { embeds: [e], components, allowedMentions: { parse: [] } };
+  return { embeds: [e], components: [], allowedMentions: { parse: [] } };
 }
 
 module.exports = {
