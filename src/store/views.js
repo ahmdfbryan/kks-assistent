@@ -139,7 +139,8 @@ function buildLeaderboard(guild, cfg) {
   const embed = new EmbedBuilder()
     .setColor(color(cfg, 'brand', 0x3498db))
     .setTitle(`🏆 Top 10 Spender Leaderboard | ${storeName(cfg, guild)}`)
-    .setDescription(lines.join('\n\n'))
+    // \u200b di awal = 1 baris kosong di bawah judul (Discord membuang baris kosong biasa di awal deskripsi).
+    .setDescription(`\u200b\n${lines.join('\n\n')}`)
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
     .addFields(
       { name: '🧾 Total Transaksi', value: `\`${num(state.stats.transactions)}\``, inline: true },
