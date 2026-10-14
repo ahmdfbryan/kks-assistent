@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require('discord.js');
 const { color, rupiah, num, fill } = require('./config');
-const { state, isProductOpen } = require('./state');
+const { state, isProductOpen, stockOf, stockUnit } = require('./state');
 const V = require('./views');
 
 /**
@@ -31,6 +31,7 @@ function productSummary(cfg, p) {
   if (p.type === 'robux') return `${rupiah(V.rateOf(cfg, p))}/Robux • Stock ${num(state.stock)}`;
   if (p.type === 'gamepass') return `${rupiah(V.rateOf(cfg, p))}/Robux • ± ${num(p.pendingDays || 5)} hari`;
   if (p.type === 'rekber') return `Mulai ${rupiah(p.minNominal || 0)} • Dana aman`;
+  if (p.type === 'canva') return `Mulai ${rupiah(V.minPlanPrice(p))} • Slot ${num(stockOf(p))}`;
   return p.howTo?.short || '';
 }
 
@@ -124,6 +125,11 @@ function buildHowToGuide(guild, cfg, value) {
     info.push(
       { name: '💱 Rate', value: `\`${rupiah(V.rateOf(cfg, p))} / Robux\``, inline: true },
       { name: '⏱️ Estimasi', value: `\`± ${num(p.pendingDays || 5)} hari\``, inline: true },
+    );
+  } else if (p.type === 'canva') {
+    info.push(
+      { name: '💱 Harga', value: `\`Mulai ${rupiah(V.minPlanPrice(p))}\``, inline: true },
+      { name: '🎟️ Sisa Slot', value: `\`${num(stockOf(p))} ${stockUnit(p)}\``, inline: true },
     );
   } else if (p.type === 'rekber') {
     info.push(
