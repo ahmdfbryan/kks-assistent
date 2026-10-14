@@ -145,7 +145,7 @@ function buildLeaderboard(guild, cfg) {
       { name: '🧾 Total Transaksi', value: `\`${num(state.stats.transactions)}\``, inline: true },
       { name: '👥 Total Pembeli', value: `\`${num(Object.keys(state.spenders).length)}\``, inline: true },
     )
-    .setFooter(serverFooter(guild, `${storeName(cfg, guild)} • Diperbarui otomatis`))
+    .setFooter(serverFooter(guild, storeName(cfg, guild)))
     .setTimestamp(new Date());
   return { embeds: [embed], allowedMentions: { parse: [] } };
 }
