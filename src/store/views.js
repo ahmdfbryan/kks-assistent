@@ -6,7 +6,7 @@ const {
   StringSelectMenuBuilder,
 } = require('discord.js');
 const { color, rupiah, num, fill, ts } = require('./config');
-const { state, productState, productStatsOf, isProductOpen, kindOf } = require('./state');
+const { state, productState, productStatsOf, hasStock, stockOf, stockUnit, isProductOpen, kindOf } = require('./state');
 
 const STATUS_LABEL = {
   open: '⏳ Menunggu Pembayaran / Proses',
@@ -58,7 +58,7 @@ function buildPanel(guild, cfg) {
     { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
   );
 
-  const styles = { robux: ButtonStyle.Success, gamepass: ButtonStyle.Success, rekber: ButtonStyle.Primary };
+  const styles = { robux: ButtonStyle.Success, gamepass: ButtonStyle.Success, canva: ButtonStyle.Primary, rekber: ButtonStyle.Primary };
   const buttons = (cfg.products || []).slice(0, 5).map((prod) =>
     new ButtonBuilder()
       .setCustomId(`store:buy:${prod.id}`)
@@ -211,6 +211,7 @@ function buildAmountPicker(cfg, product, roblox) {
 function buildTicketMessage(guild, cfg, t) {
   if (kindOf(t) === 'rekber') return buildRekberTicket(guild, cfg, t);
   if (kindOf(t) === 'gamepass') return buildGamepassTicket(guild, cfg, t);
+  if (kindOf(t) === 'canva') return buildCanvaTicket(guild, cfg, t);
   const statusColor = {
     open: color(cfg, 'brand', 0x3498db),
     completed: color(cfg, 'open', 0x2ecc71),
@@ -277,7 +278,7 @@ function buildDmCreated(guild, cfg, t, channelUrl) {
         `Silakan lanjutkan ke channel ticket kamu untuk menyelesaikan pembayaran:\n${channelUrl}`,
     )
     .addFields(
-      { name: '📦 Produk', value: `\`${t.productLabel} • ${num(t.amount)} Robux\``, inline: true },
+      { name: '📦 Produk', value: `\`${t.productLabel} • ${itemText(t)}\``, inline: true },
       { name: '🎫 Ticket ID', value: `\`${t.id}\``, inline: true },
       { name: '💰 Total Bayar', value: `\`${rupiah(t.price)}\``, inline: true },
     )
@@ -298,8 +299,13 @@ function buildDmClosed(guild, cfg, t) {
     refund: '💸 Pesanan Kamu Di-refund',
   };
   const gp = kindOf(t) === 'gamepass';
+  const canva = kindOf(t) === 'canva';
   const desc = {
-    completed: gp
+    completed: canva
+      ? `**${t.productLabel} (${t.plan.label})** kamu sudah **AKTIF**! 🎉\n` +
+        `Berlaku hingga **${ts(t.expiresAt || Date.now(), 'D')}** untuk email \`${t.email}\`.\n\n` +
+        `Terima kasih sudah berbelanja di **${storeName(cfg, guild)}**! 💜 Jangan lupa beri testimoni di ticket kamu ya ⭐`
+      : gp
       ? `Gamepass **${t.gamepass?.name || t.gamepass?.id}** sudah kami beli! 🎉\n` +
         `Robux kamu sedang dalam **masa pending Roblox** dan akan masuk otomatis sekitar ` +
         `**${ts((t.closedAt || Date.now()) + (Number(t.pendingDays) || 5) * 86400000, 'D')}**.\n\n` +
@@ -314,7 +320,7 @@ function buildDmClosed(guild, cfg, t) {
     .setDescription(desc[t.status] + (t.note ? `\n\n📝 Catatan admin: ${t.note}` : ''))
     .addFields(
       { name: '🎫 Ticket ID', value: `\`${t.id}\``, inline: true },
-      { name: '📦 Produk', value: `\`${t.productLabel} • ${num(t.amount)} Robux\``, inline: true },
+      { name: '📦 Produk', value: `\`${t.productLabel} • ${itemText(t)}\``, inline: true },
     )
     .setFooter(serverFooter(guild, storeName(cfg, guild)))
     .setTimestamp(new Date());
@@ -345,6 +351,7 @@ function buildTestimonyPrompt(guild, cfg, t) {
 
 function buildTestimony(guild, cfg, t, buyer) {
   if (kindOf(t) === 'rekber') return buildRekberTestimony(guild, cfg, t, buyer);
+  if (kindOf(t) === 'canva') return buildCanvaTestimony(guild, cfg, t, buyer);
   const r = t.testimony;
   const embed = new EmbedBuilder()
     .setColor(color(cfg, 'brand', 0x3498db))
@@ -386,6 +393,7 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
   const listText = products.map((p) => `${p.emoji || '•'} **${p.label}**`).join('\n');
   const robuxIncluded = products.some((p) => p.type === 'robux');
   const gamepassOpened = products.filter((p) => p.type === 'gamepass');
+  const slotProducts = products.filter((p) => hasStock(p) && p.type !== 'robux');
 
   if (kind === 'open') {
     e.setColor(color(cfg, 'open', 0x2ecc71))
@@ -405,6 +413,9 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
     for (const gp of gamepassOpened) {
       e.addFields({ name: `${gp.emoji || '🎟️'} Rate ${gp.label}`, value: `\`${rupiah(rateOf(cfg, gp))} / Robux\``, inline: true });
     }
+    for (const sp of slotProducts) {
+      e.addFields({ name: `${sp.emoji || '📦'} Slot ${sp.label}`, value: `\`${num(stockOf(sp))} ${stockUnit(sp)}\``, inline: true });
+    }
   } else if (kind === 'close') {
     e.setColor(color(cfg, 'closed', 0xe74c3c))
       .setTitle(`🔴 ${label} Ditutup`)
@@ -413,23 +424,32 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
           'Pantau terus channel ini untuk info buka berikutnya. Terima kasih! 💜',
       );
     if (robuxIncluded) e.addFields({ name: '📦 Sisa Stock Robux', value: `\`${num(state.stock)} Robux\``, inline: true });
+    for (const sp of slotProducts) {
+      e.addFields({ name: `📦 Sisa Slot ${sp.label}`, value: `\`${num(stockOf(sp))} ${stockUnit(sp)}\``, inline: true });
+    }
   } else if (kind === 'stock') {
+    // extra.product = produk yang stock-nya berubah (default Robux)
+    const sp = extra.product || robux;
+    const unit = stockUnit(sp);
     e.setColor(color(cfg, 'brand', 0x3498db))
-      .setTitle('📦 Update Stock Robux')
-      .setDescription(extra.text || 'Stock Robux telah diperbarui.')
+      .setTitle(`📦 Update Stock ${sp?.label || 'Robux'}`)
+      .setDescription(extra.text || `Stock ${sp?.label || 'Robux'} telah diperbarui.`)
       .addFields(
-        { name: '📦 Stock Sekarang', value: `\`${num(state.stock)} Robux\``, inline: true },
-        { name: '🏪 Status', value: robux && isProductOpen(robux) ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
+        { name: '📦 Stock Sekarang', value: `\`${num(stockOf(sp))} ${unit}\``, inline: true },
+        { name: '🏪 Status', value: sp && isProductOpen(sp) ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
       );
   } else if (kind === 'returned') {
     const t = extra.ticket;
+    const sp = (cfg.products || []).find((x) => x.id === t.productId) || robux;
+    const unit = stockUnit(sp);
+    const qty = kindOf(t) === 'robux' ? t.amount : 1;
     e.setColor(color(cfg, 'refund', 0xe67e22))
       .setTitle(t.status === 'refund' ? '💸 Pesanan Di-refund — Stock Dikembalikan' : '❌ Pesanan Dibatalkan — Stock Dikembalikan')
-      .setDescription(`Ticket **${t.id}** ditutup dengan status **${STATUS_LABEL[t.status]}**.`)
+      .setDescription(`Ticket **${t.id}** (${sp?.label || t.productLabel}) ditutup dengan status **${STATUS_LABEL[t.status]}**.`)
       .addFields(
-        { name: '♻️ Stock Kembali', value: `\`+${num(t.amount)} Robux\``, inline: true },
-        { name: '📦 Stock Sekarang', value: `\`${num(state.stock)} Robux\``, inline: true },
-        { name: '🏪 Status', value: robux && isProductOpen(robux) ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
+        { name: '♻️ Stock Kembali', value: `\`+${num(qty)} ${unit}\``, inline: true },
+        { name: '📦 Stock Sekarang', value: `\`${num(stockOf(sp))} ${unit}\``, inline: true },
+        { name: '🏪 Status', value: sp && isProductOpen(sp) ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
       );
   }
   return e;
@@ -1116,6 +1136,293 @@ function buildGamepassCheck(cfg, t, live, problems) {
   return { embeds: [e] };
 }
 
+// ═════════════════════════════════════ CANVA PRO ═════════════════════════════════════
+/** Teks item di DM / status: paket Canva atau jumlah Robux. */
+function itemText(t) {
+  if (kindOf(t) === 'canva') return t.plan?.label || '-';
+  return `${num(t.amount)} Robux`;
+}
+
+/** Samarkan email untuk log publik: ahmadfebryan@gmail.com → ah********an@gmail.com */
+function maskEmail(email) {
+  const [user, domain] = String(email || '').split('@');
+  if (!domain) return maskName(user);
+  return `${maskName(user)}@${domain}`;
+}
+
+const canvaPlans = (product) => (product?.plans || []).filter((x) => x && x.id && Number(x.price) > 0);
+
+/** Lama paket dalam bulan (pakai `months` di store.json, kalau tidak ada dihitung dari days). */
+const planMonths = (x) => Number(x.months) || Math.max(1, Math.round((Number(x.days) || 30) / 30));
+
+/** Persen hemat paket dibanding paket termahal per bulan (contoh: 1 Tahun 30k vs 12 × 5k = hemat 50%). */
+function planSaving(product, plan) {
+  const plans = canvaPlans(product);
+  const base = plans.reduce((m, x) => (!m || x.price / planMonths(x) > m.price / planMonths(m) ? x : m), null);
+  if (!base || base.id === plan.id) return 0;
+  const normal = (base.price / planMonths(base)) * planMonths(plan);
+  return Math.max(0, Math.round((1 - plan.price / normal) * 100));
+}
+
+function planTable(product) {
+  const plans = canvaPlans(product);
+  if (!plans.length) return null;
+  const w = Math.max(...plans.map((x) => x.label.length));
+  const pw = Math.max(...plans.map((x) => rupiah(x.price).length));
+  return (
+    '```\n' +
+    plans
+      .map((x) => {
+        const save = planSaving(product, x);
+        return `${x.label.padEnd(w)}  ➜  ${rupiah(x.price).padStart(pw)}${save ? `  (Hemat ${save}%)` : ''}`;
+      })
+      .join('\n') +
+    '\n```'
+  );
+}
+
+const minPlanPrice = (product) => Math.min(...canvaPlans(product).map((x) => x.price));
+
+/** Member Canva yang masih aktif (order selesai & belum habis masa aktifnya). */
+function canvaActiveCount(productId) {
+  const now = Date.now();
+  return Object.values(state.tickets).filter((t) => t.productId === productId && t.status === 'completed' && t.expiresAt > now).length;
+}
+
+/** Info produk Canva Pro (hanya terlihat pembeli). */
+function buildCanvaInfo(guild, cfg, product) {
+  const open = isProductOpen(product);
+  const name = { name: storeName(cfg, guild) };
+  const s = state.stats;
+  const ps = productStatsOf(product.id);
+  const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
+  const e = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setTitle(`${product.emoji || '🎨'} ${product.label}`)
+    .setDescription(fill(product.description || '', name) || null)
+    .setThumbnail(product.thumbnail || guild.iconURL({ extension: 'png', size: 256 }) || null);
+  const table = planTable(product);
+  if (table) e.addFields({ name: '🗓️ Pilihan Paket', value: table });
+  e.addFields(
+    { name: '🎟️ Sisa Slot', value: `\`${num(stockOf(product))} ${stockUnit(product)}\``, inline: true },
+    { name: '🏪 Status', value: open ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
+    { name: '📧 Aktivasi', value: '`Undangan via email`', inline: true },
+  );
+  if (product.features?.length) e.addFields({ name: '✨ Keuntungan', value: product.features.map((x) => `▸ ${x}`).join('\n').slice(0, 1024) });
+  if (product.howItWorks?.length) {
+    e.addFields({ name: '🔄 Cara Kerja', value: product.howItWorks.map((x, i) => `${KEYCAPS[i] || `\`${i + 1}\``} ${x}`).join('\n').slice(0, 1024) });
+  }
+  e.addFields(
+    { name: '✅ Order Selesai', value: `\`${num(ps.orders)} order\``, inline: true },
+    { name: '👥 Member Aktif', value: `\`${num(canvaActiveCount(product.id))} member\``, inline: true },
+    { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
+  );
+
+  const buttons = [
+    new ButtonBuilder()
+      .setCustomId(`store:order:${product.id}`)
+      .setLabel(open ? 'Order Sekarang' : stockOf(product) <= 0 ? 'Slot Habis' : 'Sedang Tutup')
+      .setEmoji('🛒')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(!open),
+  ];
+  if (product.howTo) buttons.push(new ButtonBuilder().setCustomId(`store:howtobtn:${product.id}`).setLabel('Cara Order').setEmoji('📖').setStyle(ButtonStyle.Primary));
+  if (product.terms?.description) {
+    buttons.push(
+      new ButtonBuilder().setCustomId(`store:terms:${product.id}`).setLabel(product.terms.button || 'Syarat').setEmoji('📌').setStyle(ButtonStyle.Secondary),
+    );
+  }
+  return { embeds: [e], components: [new ActionRowBuilder().addComponents(buttons)] };
+}
+
+/** Ringkasan sebelum ticket Canva dibuat. */
+function buildCanvaConfirm(guild, cfg, product, d) {
+  const save = planSaving(product, d.plan);
+  const e = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setTitle(`🔍 Konfirmasi Order ${product.label}`)
+    .setDescription('Periksa kembali detail di bawah. Pastikan **alamat email** sudah benar — undangan team akan dikirim ke email ini.')
+    .addFields(
+      { name: '🗓️ Paket', value: `\`${d.plan.label}\`${save ? `\n┗ Hemat ${save}%` : ''}`, inline: true },
+      { name: '⏳ Masa Aktif', value: `\`${num(d.plan.days)} hari\``, inline: true },
+      { name: '🎟️ Sisa Slot', value: `\`${num(stockOf(product))} ${stockUnit(product)}\``, inline: true },
+      { name: '📧 Email Canva', value: `\`${d.email}\`` },
+      { name: '💰 Total Bayar', value: `## ${rupiah(d.price)}` },
+    )
+    .setThumbnail(product.thumbnail || guild.iconURL({ extension: 'png', size: 256 }) || null);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('store:cvconfirm:yes').setLabel('Ya, Buat Ticket').setEmoji('✅').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('store:cvconfirm:no').setLabel('Batalkan').setEmoji('✖️').setStyle(ButtonStyle.Danger),
+  );
+  return { embeds: [e], components: [row] };
+}
+
+function canvaSteps(t) {
+  const st = t.stage || {};
+  const done = t.status === 'completed';
+  const rows = [
+    [st.invited, `Admin mengirim **undangan team** ke \`${t.email}\``],
+    [st.joined, 'Pembeli **menerima undangan** lewat email'],
+    [done, `**Canva Pro aktif** selama ${num(t.plan.days)} hari ✨`],
+  ];
+  const cur = rows.findIndex((r) => !r[0]);
+  return rows.map((r, i) => `${r[0] ? '✅' : t.status === 'open' && i === cur ? '⏳' : '▫️'} \`${i + 1}\` ${r[1]}`).join('\n');
+}
+
+/** Isi ticket Canva Pro. */
+function buildCanvaTicket(guild, cfg, t) {
+  const name = storeName(cfg, guild);
+  const product = (cfg.products || []).find((p) => p.id === t.productId) || {};
+  const st = t.stage || {};
+  const statusColor = {
+    open: color(cfg, 'brand', 0x3498db),
+    completed: color(cfg, 'open', 0x2ecc71),
+    cancelled: color(cfg, 'closed', 0xe74c3c),
+    refund: color(cfg, 'refund', 0xe67e22),
+  }[t.status];
+
+  const info = new EmbedBuilder()
+    .setColor(statusColor)
+    .setAuthor({ name: `${name} • ${t.productLabel}`, iconURL: guild.iconURL({ size: 128 }) || undefined })
+    .setTitle(`🧾 Detail Pesanan • ${t.id}`)
+    .setDescription(`Halo <@${t.userId}>, terima kasih sudah berbelanja di **${name}**! 💜`)
+    .addFields(
+      { name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true },
+      { name: '🗓️ Paket', value: `\`${t.plan.label}\``, inline: true },
+      { name: '⏳ Masa Aktif', value: `\`${num(t.plan.days)} hari\``, inline: true },
+      { name: '📧 Email Canva', value: `\`${t.email}\`` },
+      { name: '💰 Total Bayar', value: `## ${rupiah(t.price)}` },
+      { name: '📍 Progress Aktivasi', value: canvaSteps(t) },
+      { name: '📌 Status', value: `**${STATUS_LABEL[t.status]}**`, inline: true },
+      { name: '🕒 Dibuat', value: ts(t.createdAt, 'f'), inline: true },
+    )
+    .setThumbnail(product.thumbnail || guild.iconURL({ extension: 'png', size: 256 }) || null)
+    .setFooter(serverFooter(guild, `${name} • Ticket ${t.id}`))
+    .setTimestamp(t.closedAt || t.createdAt);
+  if (t.closedAt) info.addFields({ name: '🔒 Ditutup', value: `${ts(t.closedAt, 'f')} oleh <@${t.closedBy}>`, inline: true });
+  if (t.status === 'completed' && t.expiresAt) info.addFields({ name: '📅 Aktif Hingga', value: ts(t.expiresAt, 'D'), inline: true });
+
+  const embeds = [info];
+  if (t.status === 'open') {
+    const pay = new EmbedBuilder()
+      .setColor(color(cfg, 'brand', 0x3498db))
+      .setTitle(cfg.payment?.title || '💳 Cara Pembayaran')
+      .setDescription(fill(cfg.payment?.description || 'Silakan tunggu admin.', { name }));
+    if (cfg.payment?.image) pay.setImage(cfg.payment.image);
+    embeds.push(pay);
+    if (product.ticketNote) {
+      embeds.push(
+        new EmbedBuilder()
+          .setColor(color(cfg, 'refund', 0xe67e22))
+          .setTitle(product.ticketNoteTitle || '📌 Penting')
+          .setDescription(fill(product.ticketNote, { name }).slice(0, 4096)),
+      );
+    }
+  }
+
+  const components =
+    t.status === 'open'
+      ? [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`store:cvinvite:${t.id}`)
+              .setLabel(st.invited ? 'Undangan Terkirim' : 'Undangan Terkirim (Admin)')
+              .setEmoji('📨')
+              .setStyle(ButtonStyle.Primary)
+              .setDisabled(Boolean(st.invited)),
+            new ButtonBuilder()
+              .setCustomId(`store:cvjoined:${t.id}`)
+              .setLabel(st.joined ? 'Sudah Join Team' : 'Saya Sudah Join Team')
+              .setEmoji('✅')
+              .setStyle(ButtonStyle.Success)
+              .setDisabled(!st.invited || Boolean(st.joined)),
+            new ButtonBuilder().setCustomId(`store:close:${t.id}`).setLabel('Tutup Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+          ),
+        ]
+      : [];
+  return { embeds, components };
+}
+
+/** Pemberitahuan langkah aktivasi Canva di dalam ticket. step: 'invited' | 'joined' */
+function buildCanvaStep(guild, cfg, t, step) {
+  const name = storeName(cfg, guild);
+  const product = (cfg.products || []).find((p) => p.id === t.productId) || {};
+  const e = new EmbedBuilder()
+    .setColor(color(cfg, step === 'joined' ? 'open' : 'brand', step === 'joined' ? 0x2ecc71 : 0x3498db))
+    .setFooter(serverFooter(guild, `${name} • Ticket ${t.id}`))
+    .setTimestamp(new Date());
+  let ping = [];
+  if (step === 'invited') {
+    ping = [t.userId];
+    const guide = product.inviteGuide?.length
+      ? product.inviteGuide
+      : ['Buka inbox email kamu (cek juga folder **Spam / Promosi**)', 'Cari email dari **Canva** berisi undangan bergabung ke team', 'Klik **Join team / Gabung tim**', 'Login ke Canva memakai email tersebut', 'Klik **✅ Saya Sudah Join Team** di ticket ini'];
+    e.setTitle('📨 Undangan Team Canva Pro Terkirim!')
+      .setDescription(`<@${t.userId}>, admin telah mengirim **undangan team Canva Pro** ke email kamu. 🎉`)
+      .addFields(
+        { name: '📧 Dikirim ke', value: `\`${t.email}\`` },
+        { name: '📍 Progress', value: '`✅ Undangan Dikirim` ➜ `⏳ Terima Undangan` ➜ `▫️ Pro Aktif`' },
+        { name: '🪄 Cara Menerima Undangan', value: guide.map((x, i) => `${KEYCAPS[i] || `\`${i + 1}\``} ${x}`).join('\n').slice(0, 1024) },
+      );
+  } else if (step === 'joined') {
+    e.setTitle('🎉 Pembeli Sudah Bergabung ke Team')
+      .setDescription(`<@${t.userId}> telah **menerima undangan** dan bergabung ke team Canva Pro. ✨`)
+      .addFields(
+        { name: '📍 Progress', value: '`✅ Undangan Dikirim` ➜ `✅ Terima Undangan` ➜ `⏳ Pro Aktif`' },
+        { name: '🔒 Langkah Terakhir — Admin', value: 'Admin akan mengecek status Pro kamu lalu menutup ticket ini. Setelah itu kamu bisa memberi **testimoni** ⭐' },
+      );
+  }
+  return { content: ping.map((id) => `<@${id}>`).join(' ') || undefined, embeds: [e], allowedMentions: { users: ping } };
+}
+
+function buildCanvaTestimony(guild, cfg, t, buyer) {
+  const r = t.testimony;
+  const embed = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setTitle(`🧾 Testimoni #${String(state.stats.testimonies).padStart(4, '0')}`)
+    .setDescription(
+      r ? `**Rating:** ${STARS(r.rating)}  **${r.rating}/5**\n\n>>> ${r.comment}` : '✅ **Transaksi Berhasil**\n\n_Pembeli tidak memberikan ulasan._',
+    )
+    .addFields(
+      { name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true },
+      { name: '📦 Produk', value: `\`${t.productLabel}\``, inline: true },
+      { name: '🗓️ Paket', value: `\`${t.plan.label}\``, inline: true },
+      { name: '💰 Total', value: `\`${rupiah(t.price)}\``, inline: true },
+      { name: '🎫 Ticket', value: `\`${t.id}\``, inline: true },
+    )
+    .setThumbnail(buyer?.displayAvatarURL({ extension: 'png', size: 256 }) || null)
+    .setFooter(serverFooter(guild, storeName(cfg, guild)))
+    .setTimestamp(new Date());
+  if (t.proofUrl) embed.setImage(t.proofUrl);
+  return { embeds: [embed], allowedMentions: { parse: [] } };
+}
+
+/** Pengingat masa aktif Canva hampir habis (DM pembeli) / sudah habis (DM admin). */
+function buildCanvaExpiry(guild, cfg, t, who) {
+  const name = storeName(cfg, guild);
+  const e = new EmbedBuilder().setFooter(serverFooter(guild, name)).setTimestamp(new Date());
+  if (who === 'buyer') {
+    const url = state.panel ? `https://discord.com/channels/${guild.id}/${state.panel.channelId}` : null;
+    e.setColor(color(cfg, 'refund', 0xe67e22))
+      .setTitle(`⏰ ${t.productLabel} Kamu Segera Berakhir`)
+      .setDescription(
+        `Masa aktif **${t.productLabel} (${t.plan.label})** untuk \`${t.email}\` akan berakhir **${ts(t.expiresAt, 'R')}** (${ts(t.expiresAt, 'D')}).\n\n` +
+          `Perpanjang sekarang di **${name}** supaya tetap bisa pakai fitur Pro tanpa terputus! ✨` +
+          (url ? `\n\n🛒 ${url}` : ''),
+      );
+  } else {
+    e.setColor(color(cfg, 'closed', 0xe74c3c))
+      .setTitle(`⌛ Masa Aktif ${t.productLabel} Habis`)
+      .setDescription(`Masa aktif ticket **${t.id}** sudah berakhir. Keluarkan email berikut dari team Canva bila tidak diperpanjang.`)
+      .addFields(
+        { name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true },
+        { name: '🗓️ Paket', value: `\`${t.plan.label}\``, inline: true },
+        { name: '📧 Email', value: `\`${t.email}\`` },
+      );
+  }
+  return { embeds: [e] };
+}
+
 // ───────────────────────── Log order (channel log admin) ─────────────────────────
 function duration(ms) {
   const m = Math.max(1, Math.round(ms / 60000));
@@ -1172,6 +1479,14 @@ function buildOrderLog(guild, cfg, t) {
     e.addFields({ name: '🛡️ Layanan', value: '`Rekber`', inline: true });
     if (pl.showRekberItem) e.addFields({ name: '📦 Objek', value: `\`${t.item.slice(0, 100)}\``, inline: true });
     if (pl.showPrice) e.addFields({ name: '💵 Nominal', value: `\`${rupiah(t.nominal)}\``, inline: true });
+  } else if (kindOf(t) === 'canva') {
+    if (pl.showBuyer) e.addFields({ name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true });
+    e.addFields(
+      { name: '📦 Produk', value: `\`${t.productLabel}\``, inline: true },
+      { name: '🗓️ Paket', value: `\`${t.plan.label}\``, inline: true },
+    );
+    if (pl.showPrice) e.addFields({ name: '💰 Total', value: `\`${rupiah(t.price)}\``, inline: true });
+    e.addFields({ name: '📧 Email', value: `\`${maskEmail(t.email)}\``, inline: true });
   } else {
     if (pl.showBuyer) e.addFields({ name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true });
     e.addFields(
@@ -1200,6 +1515,17 @@ function buildOrderLog(guild, cfg, t) {
 }
 
 module.exports = {
+  itemText,
+  maskEmail,
+  canvaPlans,
+  planSaving,
+  planTable,
+  minPlanPrice,
+  canvaActiveCount,
+  buildCanvaInfo,
+  buildCanvaConfirm,
+  buildCanvaStep,
+  buildCanvaExpiry,
   gpUrl,
   gpQuote,
   gpAfterTax,
