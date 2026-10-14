@@ -8,6 +8,8 @@ const V = require('./views');
  * Pilih produk → panduan lengkap muncul (hanya terlihat yang memilih).
  * Isi teks diatur di store.json → howToOrder & products[].howTo
  */
+// Garis pemisah: cukup pendek supaya tetap 1 baris di HP maupun laptop (bisa diganti lewat store.json → howToOrder.divider).
+const DIVIDER = '━━━━━━━━━━━━━━━━━━';
 const KEYCAPS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 const steps = (list) => (list || []).map((x, i) => `${KEYCAPS[i] || `\`${i + 1}\``} ${x}`).join('\n');
 const bullets = (list) => (list || []).map((x) => `▸ ${x}`).join('\n');
@@ -40,7 +42,6 @@ function buildHowToPanel(guild, cfg) {
 
   const embed = new EmbedBuilder()
     .setColor(color(cfg, 'brand', 0x3498db))
-    .setAuthor({ name: `${V.storeName(cfg, guild)} • Panduan Belanja`, iconURL: guild.iconURL({ size: 128 }) || undefined })
     .setTitle(fill(h.title || '📖 How to Order', name))
     .setDescription(fill(h.description || '', name).slice(0, 4096) || null)
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null);
@@ -51,7 +52,7 @@ function buildHowToPanel(guild, cfg) {
       name: '🛍️ Produk Tersedia',
       value: products
         .map((p) => `${p.emoji || '•'} **${p.label}** ${isProductOpen(p) ? '`🟢 BUKA`' : '`🔴 TUTUP`'}\n┗ ${productSummary(cfg, p)}`)
-        .join('\n'),
+        .join('\n') + (h.divider === '' ? '' : `\n${h.divider || DIVIDER}`),
     });
   }
   if (h.whyUs?.length) embed.addFields({ name: `🛡️ Kenapa ${V.storeName(cfg, guild)}?`, value: bullets(h.whyUs).slice(0, 1024) });
