@@ -2,6 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, Emb
 const { loadConfig, isId, rupiah, num, color } = require('./config');
 const { state, save, productState, isProductOpen } = require('./state');
 const V = require('./views');
+const H = require('./howto');
 const { setProductsOpen, reopenIfAutoClosed, closeIfSoldOut, announce, refreshPanel } = require('./flow');
 
 const TEXT = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
@@ -60,6 +61,12 @@ const storeCommand = {
         .setDescription('Kirim / pindahkan Top 10 Spender Leaderboard (otomatis ter-update)')
         .addChannelOption((o) => o.setName('channel').setDescription('Default: channel leaderboard di store.json').addChannelTypes(...TEXT)),
     )
+    .addSubcommand((s) =>
+      s
+        .setName('how-to-order')
+        .setDescription('Kirim / pindahkan panel How to Order (panduan cara order + dropdown produk)')
+        .addChannelOption((o) => o.setName('channel').setDescription('Default: channel howToOrder di store.json').addChannelTypes(...TEXT)),
+    )
     .addSubcommand((s) => s.setName('buka').setDescription('Buka produk (pembeli bisa order)').addStringOption(productOption))
     .addSubcommand((s) =>
       s
@@ -106,6 +113,13 @@ const storeCommand = {
       if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
       await placeTracked(interaction, sub, channel, sub === 'panel' ? V.buildPanel : V.buildLeaderboard);
       return interaction.editReply(`✅ ${sub === 'panel' ? 'Panel store' : 'Leaderboard'} dikirim ke ${channel} dan akan ter-update otomatis.`);
+    }
+
+    if (sub === 'how-to-order') {
+      const channel = await resolveChannel(interaction, 'howToOrder');
+      if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
+      await placeTracked(interaction, 'howto', channel, H.buildHowToPanel);
+      return interaction.editReply(`✅ Panel **How to Order** dikirim ke ${channel} dan akan ter-update otomatis.`);
     }
 
     if (sub === 'buka' || sub === 'tutup') {
