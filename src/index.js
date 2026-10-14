@@ -11,6 +11,7 @@ const voiceFinder = require('./voice-finder');
 const store = require('./store');
 const { registerSocial } = require('./social');
 const { registerInviteTracker } = require('./invite-tracker');
+const giveaway = require('./giveaway');
 
 const byName = new Map(commands.map((c) => [c.data.name, c]));
 // GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
@@ -29,6 +30,7 @@ voiceFinder.registerStickyPanel(client);
 store.registerStore(client);
 registerSocial(client);
 registerInviteTracker(client);
+giveaway.registerGiveaway(client);
 
 client.once(Events.ClientReady, (c) => {
   console.log(`🤖 Login sebagai ${c.user.tag}`);
@@ -37,6 +39,14 @@ client.once(Events.ClientReady, (c) => {
 client.on(Events.InteractionCreate, async (interaction) => {
   // Store: semua tombol / dropdown / form dengan customId "store:..."
   if (await store.handleInteraction(interaction)) return;
+  // Giveaway: tombol ikut / keluar / daftar peserta ("ga:...")
+  if (await giveaway.handleInteraction(interaction)) return;
+  // Autocomplete ID giveaway
+  if (interaction.isAutocomplete()) {
+    const cmd = byName.get(interaction.commandName);
+    if (cmd?.autocomplete) await cmd.autocomplete(interaction).catch(() => {});
+    return;
+  }
 
   // Tombol "Verify Sekarang"
   if (interaction.isButton() && interaction.customId === VERIFY_BUTTON) {
