@@ -12,7 +12,8 @@
     "Rekber: minNominal / maxNominal = batas nominal, feePaidBy = 'pembeli' atau 'penjual', feeTiers = tabel fee (upTo = batas nominal, fee = Rp tetap, percent = persen; upTo null = di atas tier terakhir). guide = alur yang tampil di ticket rekber.",
     "Buka / tutup tiap produk terpisah: /store buka produk:<produk> dan /store tutup produk:<produk>. Setelah menambah produk baru di file ini, jalankan npm run deploy supaya muncul di pilihan.",
     "channels.log = channel LOG ORDER PUBLIK. Setiap ticket punya 1 pesan log yang ter-update otomatis (status, waktu proses, rating, progress). Catatan admin, nama admin, dan link ticket tidak ditampilkan.",
-    "publicLog: showBuyer = tampilkan mention pembeli/penjual, maskRoblox = samarkan username Roblox (Bu******an), showPrice = tampilkan harga/nominal, showRekberItem = tampilkan objek transaksi rekber."
+    "publicLog: showBuyer = tampilkan mention pembeli/penjual, maskRoblox = samarkan username Roblox (Bu******an), showPrice = tampilkan harga/nominal, showRekberItem = tampilkan objek transaksi rekber.",
+    "Robux Gamepass (type gamepass): rate = harga per 1 Robux Before Tax (harga gamepass), taxPercent = pajak Roblox (30), pendingDays = estimasi Robux masuk, minAmount / maxAmount = batas Robux DITERIMA (After Tax), examples = contoh harga di info produk, tutorial = isi tombol Tutorial, ticketNote = catatan penting di ticket, ticket.idPrefix / ticket.categoryName = ID & kategori ticket gamepass. Gamepass tidak memakai stock Robux."
   ],
   "storeName": "Noname Store",
   "channels": {
@@ -41,7 +42,10 @@
     "categoryName": "🤝 TICKET REKBER",
     "idPrefix": "RB"
   },
-  "pingEveryone": { "open": true, "close": true },
+  "pingEveryone": {
+    "open": true,
+    "close": true
+  },
   "colors": {
     "brand": "#3498DB",
     "open": "#2ECC71",
@@ -71,6 +75,50 @@
       "maxAmount": 5000
     },
     {
+      "id": "robux-gamepass",
+      "type": "gamepass",
+      "label": "Robux Gamepass",
+      "emoji": "🎟️",
+      "description": "Top up Robux via **Gamepass** — kamu cukup membuat gamepass dengan harga sesuai kebutuhan, lalu **{server}** yang akan membelinya. Robux masuk ke akunmu setelah masa *pending* Roblox selesai.\n\nGunakan **💰 Cek Harga** dan **🧮 Tax Calculator** untuk menghitung harga sebelum order.",
+      "notes": [
+        "Gamepass **harus sudah kamu buat** terlebih dahulu.",
+        "Jika belum paham, tekan **📖 Tutorial**.",
+        "Saat ticket order dibuat, isi formnya **sesuai instruksi**."
+      ],
+      "rate": 84,
+      "taxPercent": 30,
+      "pendingDays": 5,
+      "minAmount": 100,
+      "maxAmount": 10000,
+      "examples": [500, 1000, 1500, 2000, 2500, 3000],
+      "tutorial": {
+        "title": "📖 Tutorial Order Robux Gamepass",
+        "intro": "Ikuti langkah berikut agar order **Robux Gamepass** kamu di **{server}** berjalan lancar:",
+        "steps": [
+          "**Buat Gamepass** di Roblox Studio / Creator Hub",
+          "**Set harga** gamepass sesuai jumlah **Before Tax**",
+          "Gunakan **🧮 Tax Calculator** untuk menghitung Before / After Tax",
+          "Gunakan **💰 Cek Harga** untuk melihat total dalam Rupiah",
+          "Tekan **🛒 Order Sekarang**, lalu isi form",
+          "Lakukan **pembayaran** sesuai instruksi di ticket",
+          "Tunggu **5 hari**, Robux masuk otomatis ✨"
+        ],
+        "tips": [
+          "Pastikan gamepass dalam status **On Sale** (Item for Sale aktif).",
+          "Gamepass harus dibuat oleh **akun Roblox yang sama** dengan yang kamu isi di form.",
+          "**Jangan ubah harga / Off Sale / hapus** gamepass sebelum admin selesai membelinya."
+        ],
+        "creatorHubUrl": "https://create.roblox.com/dashboard/creations",
+        "videoUrl": ""
+      },
+      "ticketNoteTitle": "📌 Penting — Jaga Gamepass Kamu",
+      "ticketNote": "▸ **Jangan ubah harga**, jangan **Off Sale**, dan jangan **hapus** gamepass sampai admin selesai membelinya.\n▸ Setelah dibeli, Robux masuk ke status **Pending** di akunmu dan cair otomatis dalam **± 5 hari**.\n▸ Cek Robux pending di **roblox.com → Robux → My Transactions**.",
+      "ticket": {
+        "categoryName": "🎟️ TICKET GAMEPASS",
+        "idPrefix": "GP"
+      }
+    },
+    {
       "id": "rekber",
       "type": "rekber",
       "label": "Rekber",
@@ -87,10 +135,22 @@
       "maxNominal": 10000000,
       "feePaidBy": "pembeli",
       "feeTiers": [
-        { "upTo": 100000, "fee": 2000 },
-        { "upTo": 500000, "fee": 5000 },
-        { "upTo": 1000000, "fee": 10000 },
-        { "upTo": null, "percent": 1 }
+        {
+          "upTo": 100000,
+          "fee": 2000
+        },
+        {
+          "upTo": 500000,
+          "fee": 5000
+        },
+        {
+          "upTo": 1000000,
+          "fee": 10000
+        },
+        {
+          "upTo": null,
+          "percent": 1
+        }
       ]
     },
     {
