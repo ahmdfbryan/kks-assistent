@@ -22,6 +22,7 @@ const { state, save, productState, productStatsOf, isProductOpen, kindOf, active
 const { lookupRobloxUser, lookupGamepass, parseGamepassId } = require('./roblox');
 const V = require('./views');
 const H = require('./howto');
+const C = require('./catalog');
 
 const PROOF_DIR = path.join(__dirname, '..', '..', 'data', 'proofs');
 const SESSION_MS = 10 * 60 * 1000;
@@ -69,7 +70,27 @@ async function editTracked(key, build) {
 const refreshPanel = () => {
   debounce('panel', () => editTracked('panel', V.buildPanel));
   debounce('howto', () => editTracked('howto', H.buildHowToPanel), 2500);
+  debounce('catalog', refreshCatalog, 3500);
 };
+
+/** Update semua kartu di channel catalog (header + kartu tiap produk). */
+async function refreshCatalog() {
+  const loc = state.catalog;
+  if (!client || !loc) return;
+  const channel = await client.channels.fetch(loc.channelId).catch(() => null);
+  const cfg = loadConfig();
+  if (!channel || !cfg) return;
+  const jobs = [[loc.headerId, () => C.buildCatalogHeader(channel.guild, cfg)]];
+  for (const p of C.catalogProducts(cfg)) {
+    if (loc.cards?.[p.id]) jobs.push([loc.cards[p.id], () => C.buildCatalogCard(channel.guild, cfg, p)]);
+  }
+  for (const [messageId, build] of jobs) {
+    if (!messageId) continue;
+    await channel.messages.edit(messageId, build()).catch((err) => {
+      if (err.code !== RESTJSONErrorCodes.UnknownMessage) console.error('[store] refresh catalog:', err.message);
+    });
+  }
+}
 const refreshLeaderboard = () => debounce('leaderboard', () => editTracked('leaderboard', V.buildLeaderboard));
 
 // ══════════════════════ Pengumuman di channel stock ══════════════════════
@@ -1423,6 +1444,10 @@ async function handleInteraction(interaction) {
       else if (action === 'gptutor') await onGamepassTutorial(interaction, arg);
       else if (action === 'gpconfirm') await onGamepassConfirm(interaction, arg === 'yes');
       else if (action === 'gpcheck') await onGamepassCheck(interaction, arg);
+      else if (action === 'howtobtn') {
+        const cfg = loadConfig();
+        await interaction.reply({ ...H.buildHowToGuide(interaction.guild, cfg, arg), flags: EPH });
+      }
     } else if (interaction.isStringSelectMenu()) {
       if (action === 'amount') await onAmountSelect(interaction, arg);
       else if (action === 'howto') await onHowTo(interaction);
@@ -1464,4 +1489,5 @@ module.exports = {
   announce,
   refreshPanel,
   refreshLeaderboard,
+  refreshCatalog,
 };
