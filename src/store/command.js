@@ -2,7 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, Emb
 const { loadConfig, isId, rupiah, num, color } = require('./config');
 const { state, save } = require('./state');
 const V = require('./views');
-const { setStoreOpen, announce, refreshPanel, refreshLeaderboard } = require('./flow');
+const { setStoreOpen, reopenIfAutoClosed, announce, refreshPanel, refreshLeaderboard } = require('./flow');
 
 const TEXT = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -111,10 +111,13 @@ const storeCommand = {
         text: `Stock Robux diperbarui: **${num(before)} → ${num(state.stock)} Robux**.`,
       });
       if (state.stock <= 0 && state.open) {
-        await setStoreOpen(guild, false, '📦 **Stock Robux sudah HABIS!** Toko otomatis ditutup.');
+        await setStoreOpen(guild, false, '📦 **Stock Robux sudah HABIS!** Toko otomatis ditutup.', { auto: true });
       }
+      const reopened = await reopenIfAutoClosed(guild);
       return interaction.editReply(
-        `📦 Stock: **${num(before)} → ${num(state.stock)} Robux**.${!state.open && state.stock > 0 ? '\nToko masih TUTUP — buka dengan `/store buka`.' : ''}`,
+        `📦 Stock: **${num(before)} → ${num(state.stock)} Robux**.` +
+          (reopened ? '\n🟢 Toko otomatis **DIBUKA** lagi (sebelumnya tutup karena stock habis).' : '') +
+          (!state.open && state.stock > 0 ? '\nToko masih TUTUP (ditutup manual) — buka dengan `/store buka`.' : ''),
       );
     }
 
