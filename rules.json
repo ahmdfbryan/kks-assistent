@@ -3,8 +3,10 @@
     "File ini dibaca ulang setiap /rules dijalankan atau tombol Bahasa Inggris diklik — tidak perlu restart bot.",
     "languages.id = versi Indonesia (dikirim ke channel). languages.en = versi Inggris (muncul khusus untuk yang klik tombol).",
     "Setiap section = 1 kotak dengan garis warna 'color'. Setiap isi 'texts' = 1 blok teks. Mendukung markdown Discord: # judul, ### subjudul, - bullet, **tebal**, *miring*, `kode`, >>> kutipan.",
-    "Kalau teks terlalu panjang untuk 1 pesan, bot otomatis memecahnya jadi beberapa pesan. @everyone/@here di teks TIDAK akan mem-ping siapa pun."
+    "Kalau teks terlalu panjang untuk 1 pesan, bot otomatis memecahnya jadi beberapa pesan. @everyone/@here di teks TIDAK akan mem-ping siapa pun.",
+    "banner = GIF / gambar di paling atas rules. Isi path file di folder bot (contoh \"assets/rules-banner.gif\") atau link https. Kosongkan (\"\") untuk tanpa banner."
   ],
+  "banner": "assets/rules-banner.gif",
   "translateButton": {
     "label": "Bahasa Inggris",
     "emoji": "🇬🇧"
