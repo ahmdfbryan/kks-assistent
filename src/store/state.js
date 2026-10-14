@@ -9,6 +9,7 @@ const FILE = path.join(__dirname, '..', '..', 'data', 'store-state.json');
 
 const DEFAULT = {
   open: false,
+  autoClosed: false, // true = tutup otomatis karena stock habis (akan buka lagi saat stock kembali)
   stock: 0,
   rates: {}, // { productId: rate }
   panel: null, // { channelId, messageId }
