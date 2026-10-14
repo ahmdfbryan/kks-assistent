@@ -851,7 +851,7 @@ function buildOrderLog(guild, cfg, t) {
     .setAuthor({ name: `${name} • ${rekber ? 'Rekber Log' : 'Order Log'}`, iconURL: guild.iconURL({ size: 128 }) || undefined })
     .setTitle(`${rekber ? '🤝' : '🧾'} ${t.id}  •  ${pub}`)
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
-    .setFooter(serverFooter(guild, `${name} • Terima kasih atas kepercayaanmu 💙`))
+    .setFooter(serverFooter(guild, name))
     .setTimestamp(t.closedAt || t.createdAt);
 
   if (rekber) {
