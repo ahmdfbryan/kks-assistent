@@ -236,15 +236,47 @@ async function endGiveaway(g, { reroll = false, count } = {}) {
   }
   if (cfg.dmHost !== false && !reroll) {
     const host = await client.users.fetch(g.hostId).catch(() => null);
-    await host
-      ?.send(
-        `📋 Giveaway **${g.prize}** (\`${g.id}\`) di **${guild.name}** telah selesai.\n👥 Peserta: **${num(g.entries.length)}**\n🏆 Pemenang: ${
-          g.winners.map((id) => `<@${id}>`).join(', ') || '-'
-        }`,
-      )
-      .catch(() => {});
+    if (host) await host.send(await buildHostSummary(g, guild)).catch(() => {});
   }
   return g;
+}
+
+/** Ringkasan hasil giveaway untuk penyelenggara (DM). */
+async function buildHostSummary(g, guild) {
+  const cfg = loadConfig();
+  const link = `https://discord.com/channels/${guild.id}/${g.channelId}/${g.messageId}`;
+  // Tampilkan mention + username (mention di DM kadang tampil sebagai ID kalau belum ter-cache).
+  const names = [];
+  for (const id of g.winners) {
+    const u = await client.users.fetch(id).catch(() => null);
+    names.push(`\`${names.length + 1}.\` <@${id}>${u ? ` • @${u.username}` : ''}`);
+  }
+  const lasted = (g.endedAt || Date.now()) - (g.createdAt || g.endedAt || Date.now());
+  const e = new EmbedBuilder()
+    .setColor(color(cfg, 'ended', 0x2ecc71))
+    .setAuthor({ name: `${guild.name} • Laporan Giveaway`, iconURL: guild.iconURL({ size: 128 }) || undefined })
+    .setTitle('📋 Giveaway Kamu Telah Selesai!')
+    .setDescription(`## 🎁 ${g.prize}\nBerikut ringkasan hasil giveaway yang kamu selenggarakan. 🎉`)
+    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
+    .addFields(
+      { name: '🆔 ID Giveaway', value: `\`${g.id}\``, inline: true },
+      { name: '👥 Total Peserta', value: `\`${num(g.entries.length)} orang\``, inline: true },
+      { name: '⏱️ Durasi', value: `\`${durationText(lasted)}\``, inline: true },
+      {
+        name: `🏆 Pemenang (${g.winners.length}/${g.winnerCount})`,
+        value: names.length ? names.join('\n').slice(0, 1024) : '_Tidak ada peserta yang memenuhi syarat._',
+      },
+      {
+        name: '📌 Langkah Selanjutnya',
+        value: g.winners.length
+          ? '▸ Hubungi pemenang & serahkan hadiahnya\n▸ Pemenang tidak merespons? Gunakan `/giveaway reroll`'
+          : '▸ Buat giveaway baru dengan `/giveaway mulai`',
+      },
+    )
+    .setFooter({ text: `${g.id} • ${guild.name}`, iconURL: guild.iconURL({ size: 64 }) || undefined })
+    .setTimestamp(g.endedAt || Date.now());
+  const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Lihat Giveaway').setEmoji('🎁').setURL(link));
+  return { embeds: [e], components: [row] };
 }
 
 /** Cek syarat peserta. Return teks alasan kalau tidak memenuhi. */
