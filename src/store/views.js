@@ -52,9 +52,9 @@ function buildPanel(guild, cfg) {
   // Total transaksi & rating (ter-update otomatis setiap ada transaksi / testimoni baru).
   const s = state.stats;
   const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
+  // Total = semua transaksi selesai dari semua produk (Robux Visend, Robux Gamepass, Rekber, dst.).
   embed.addFields(
-    { name: '🧾 Total Transaksi', value: `\`${num(s.transactions)} transaksi\``, inline: true },
-    { name: '🤝 Rekber Sukses', value: `\`${num(s.rekber)} transaksi\``, inline: true },
+    { name: '🧾 Total Transaksi', value: `\`${num((s.transactions || 0) + (s.rekber || 0))} transaksi\``, inline: true },
     { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
   );
 
