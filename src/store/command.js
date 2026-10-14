@@ -1,10 +1,18 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, EmbedBuilder } = require('discord.js');
 const { loadConfig, isId, rupiah, num, color } = require('./config');
-const { state, save } = require('./state');
+const { state, save, productState, isProductOpen } = require('./state');
 const V = require('./views');
-const { setStoreOpen, reopenIfAutoClosed, announce, refreshPanel, refreshLeaderboard } = require('./flow');
+const { setProductsOpen, reopenIfAutoClosed, closeIfSoldOut, announce, refreshPanel } = require('./flow');
 
 const TEXT = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
+
+/** Pilihan produk untuk /store buka & tutup (dibaca dari store.json saat npm run deploy). */
+function productChoices() {
+  const products = (loadConfig()?.products || []).filter((p) => p.type !== 'soon').slice(0, 24);
+  return [{ name: '🏪 Semua Produk', value: 'all' }, ...products.map((p) => ({ name: `${p.emoji || '•'} ${p.label}`.slice(0, 100), value: p.id }))];
+}
+const productOption = (o) =>
+  o.setName('produk').setDescription('Produk yang dibuka / ditutup').setRequired(true).addChoices(...productChoices());
 
 /** Kirim pesan baru ke channel & ganti pesan lama (panel / leaderboard). */
 async function placeTracked(interaction, key, channel, build) {
@@ -45,11 +53,12 @@ const storeCommand = {
         .setDescription('Kirim / pindahkan Top 10 Spender Leaderboard (otomatis ter-update)')
         .addChannelOption((o) => o.setName('channel').setDescription('Default: channel leaderboard di store.json').addChannelTypes(...TEXT)),
     )
-    .addSubcommand((s) => s.setName('buka').setDescription('Buka toko (pembeli bisa order)'))
+    .addSubcommand((s) => s.setName('buka').setDescription('Buka produk (pembeli bisa order)').addStringOption(productOption))
     .addSubcommand((s) =>
       s
         .setName('tutup')
-        .setDescription('Tutup toko (tombol produk dinonaktifkan)')
+        .setDescription('Tutup produk (tombol produk dinonaktifkan)')
+        .addStringOption(productOption)
         .addStringOption((o) => o.setName('alasan').setDescription('Alasan tutup (opsional, ditampilkan di pengumuman)').setMaxLength(200)),
     )
     .addSubcommand((s) =>
@@ -87,18 +96,28 @@ const storeCommand = {
       return interaction.editReply(`✅ ${sub === 'panel' ? 'Panel store' : 'Leaderboard'} dikirim ke ${channel} dan akan ter-update otomatis.`);
     }
 
-    if (sub === 'buka') {
-      if (state.stock <= 0) return interaction.editReply('❌ Stock masih **0**. Atur dulu dengan `/store stok-set`.');
-      if (state.open) return interaction.editReply('ℹ️ Toko sudah **BUKA**.');
-      await setStoreOpen(guild, true);
-      return interaction.editReply(`🟢 Toko **DIBUKA**. Stock: **${num(state.stock)} Robux**.`);
-    }
-
-    if (sub === 'tutup') {
-      if (!state.open) return interaction.editReply('ℹ️ Toko sudah **TUTUP**.');
+    if (sub === 'buka' || sub === 'tutup') {
+      const pick = interaction.options.getString('produk');
+      const all = (cfg.products || []).filter((p) => p.type !== 'soon');
+      const targets = pick === 'all' ? all : all.filter((p) => p.id === pick);
+      if (!targets.length) return interaction.editReply('❌ Produk tidak ditemukan di store.json.');
+      const open = sub === 'buka';
+      const notes = [];
+      const changed = targets.filter((p) => {
+        if (open && p.type === 'robux' && state.stock <= 0) {
+          notes.push(`⚠️ **${p.label}** tidak bisa dibuka — stock masih **0**. Atur dulu dengan \`/store stok-set\`.`);
+          return false;
+        }
+        if (productState(p.id).open === open) {
+          notes.push(`ℹ️ **${p.label}** sudah **${open ? 'BUKA' : 'TUTUP'}**.`);
+          return false;
+        }
+        return true;
+      });
       const alasan = interaction.options.getString('alasan');
-      await setStoreOpen(guild, false, alasan ? `📌 ${alasan}` : undefined);
-      return interaction.editReply('🔴 Toko **DITUTUP**.');
+      await setProductsOpen(guild, changed, open, { reason: alasan ? `📌 ${alasan}` : undefined });
+      const done = changed.map((p) => `${open ? '🟢' : '🔴'} **${p.label}** ${open ? 'DIBUKA' : 'DITUTUP'}`);
+      return interaction.editReply([...done, ...notes].join('\n') || 'Tidak ada perubahan.');
     }
 
     if (sub === 'stok-set' || sub === 'stok-tambah') {
@@ -110,14 +129,14 @@ const storeCommand = {
       await announce(guild, 'stock', {
         text: `Stock Robux diperbarui: **${num(before)} → ${num(state.stock)} Robux**.`,
       });
-      if (state.stock <= 0 && state.open) {
-        await setStoreOpen(guild, false, '📦 **Stock Robux sudah HABIS!** Toko otomatis ditutup.', { auto: true });
-      }
+      await closeIfSoldOut(guild, `📦 **Stock Robux sudah HABIS!** ${product?.label || 'Robux'} otomatis ditutup.`);
       const reopened = await reopenIfAutoClosed(guild);
       return interaction.editReply(
         `📦 Stock: **${num(before)} → ${num(state.stock)} Robux**.` +
-          (reopened ? '\n🟢 Toko otomatis **DIBUKA** lagi (sebelumnya tutup karena stock habis).' : '') +
-          (!state.open && state.stock > 0 ? '\nToko masih TUTUP (ditutup manual) — buka dengan `/store buka`.' : ''),
+          (reopened ? `\n🟢 **${product.label}** otomatis **DIBUKA** lagi (sebelumnya tutup karena stock habis).` : '') +
+          (product && !isProductOpen(product) && state.stock > 0
+            ? `\n**${product.label}** masih TUTUP (ditutup manual) — buka dengan \`/store buka\`.`
+            : ''),
       );
     }
 
@@ -134,18 +153,23 @@ const storeCommand = {
 
     if (sub === 'status') {
       const active = Object.values(state.tickets).filter((t) => t.status === 'open');
-      const reserved = active.reduce((a, t) => a + t.amount, 0);
+      const reserved = active.filter((t) => t.kind !== 'rekber').reduce((a, t) => a + t.amount, 0);
       const s = state.stats;
+      const productLines = (cfg.products || [])
+        .filter((p) => p.type !== 'soon')
+        .map((p) => `${isProductOpen(p) ? '🟢' : '🔴'} ${p.label}`)
+        .join('\n');
       const embed = new EmbedBuilder()
-        .setColor(state.open ? color(cfg, 'open', 0x2ecc71) : color(cfg, 'closed', 0xe74c3c))
+        .setColor(color(cfg, 'brand', 0x3498db))
         .setTitle('📊 Ringkasan Toko')
         .addFields(
-          { name: '🏪 Status', value: state.open ? '🟢 BUKA' : '🔴 TUTUP', inline: true },
+          { name: '🏪 Status Produk', value: productLines || '-', inline: true },
           { name: '📦 Stock', value: `${num(state.stock)} Robux`, inline: true },
           { name: '💱 Rate', value: product ? `${rupiah(V.rateOf(cfg, product))} / Robux` : '-', inline: true },
-          { name: '🎫 Ticket Berjalan', value: `${active.length} ticket (${num(reserved)} Robux)`, inline: true },
+          { name: '🎫 Ticket Berjalan', value: `${active.length} ticket (${num(reserved)} Robux tertahan)`, inline: true },
           { name: '🧾 Transaksi Selesai', value: `${num(s.transactions)}`, inline: true },
           { name: '💰 Omzet', value: rupiah(s.revenue), inline: true },
+          { name: '🤝 Rekber Sukses', value: `${num(s.rekber)} (${rupiah(s.rekberVolume)})`, inline: true },
           {
             name: '📍 Panel / Leaderboard',
             value: `${state.panel ? `<#${state.panel.channelId}>` : '❌ belum dikirim'} / ${state.leaderboard ? `<#${state.leaderboard.channelId}>` : '❌ belum dikirim'}`,
@@ -154,7 +178,14 @@ const storeCommand = {
       if (active.length) {
         embed.addFields({
           name: 'Daftar Ticket Berjalan',
-          value: active.slice(0, 15).map((t) => `\`${t.id}\` <#${t.channelId}> • ${num(t.amount)} Robux • <@${t.userId}>`).join('\n'),
+          value: active
+            .slice(0, 15)
+            .map((t) =>
+              t.kind === 'rekber'
+                ? `\`${t.id}\` <#${t.channelId}> • 🤝 ${rupiah(t.nominal)} • <@${t.buyerId}> ↔ <@${t.sellerId}>`
+                : `\`${t.id}\` <#${t.channelId}> • ${num(t.amount)} Robux • <@${t.userId}>`,
+            )
+            .join('\n'),
         });
       }
       return interaction.editReply({ embeds: [embed] });
