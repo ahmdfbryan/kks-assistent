@@ -6,7 +6,7 @@ const {
   StringSelectMenuBuilder,
 } = require('discord.js');
 const { color, rupiah, num, fill, ts } = require('./config');
-const { state } = require('./state');
+const { state, productState, isProductOpen, kindOf } = require('./state');
 
 const STATUS_LABEL = {
   open: '⏳ Menunggu Pembayaran / Proses',
@@ -14,6 +14,13 @@ const STATUS_LABEL = {
   cancelled: '❌ Cancelled — Dibatalkan',
   refund: '💸 Refund — Dana dikembalikan',
 };
+const REKBER_STATUS = {
+  open: '🔄 Transaksi Sedang Berjalan',
+  completed: '✅ Completed — Dana dicairkan ke penjual',
+  cancelled: '❌ Cancelled — Transaksi dibatalkan',
+  refund: '💸 Refund — Dana dikembalikan ke pembeli',
+};
+const statusLabel = (t) => (kindOf(t) === 'rekber' ? REKBER_STATUS : STATUS_LABEL)[t.status];
 const STARS = (n) => '⭐'.repeat(n) + '☆'.repeat(5 - n);
 
 /** Nama toko yang tampil di semua keterangan (store.json → storeName). */
@@ -33,7 +40,6 @@ function rateOf(cfg, product) {
 /** Panel di channel store: hanya judul, keterangan, logo server, dan tombol produk. */
 function buildPanel(guild, cfg) {
   const p = cfg.panel || {};
-  const open = state.open && state.stock > 0;
   const name = { name: storeName(cfg, guild) };
 
   const embed = new EmbedBuilder()
@@ -48,24 +54,25 @@ function buildPanel(guild, cfg) {
   const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
   embed.addFields(
     { name: '🧾 Total Transaksi', value: `\`${num(s.transactions)} transaksi\``, inline: true },
+    { name: '🤝 Rekber Sukses', value: `\`${num(s.rekber)} transaksi\``, inline: true },
     { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
   );
 
-  const buttons = (cfg.products || []).slice(0, 5).map((prod) => {
-    const soon = prod.type !== 'robux';
-    return new ButtonBuilder()
+  const styles = { robux: ButtonStyle.Success, rekber: ButtonStyle.Primary };
+  const buttons = (cfg.products || []).slice(0, 5).map((prod) =>
+    new ButtonBuilder()
       .setCustomId(`store:buy:${prod.id}`)
       .setLabel(prod.label)
       .setEmoji(prod.emoji || '🛒')
-      .setStyle(soon ? ButtonStyle.Secondary : ButtonStyle.Success)
-      .setDisabled(soon || !open);
-  });
+      .setStyle(styles[prod.type] || ButtonStyle.Secondary)
+      .setDisabled(!isProductOpen(prod)),
+  );
   return { embeds: [embed], components: buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [] };
 }
 
 // ───────────────────────── Info produk (hanya terlihat pembeli) ─────────────────────────
 function buildProductInfo(guild, cfg, product) {
-  const open = state.open && state.stock > 0;
+  const open = isProductOpen(product);
   const s = state.stats;
   const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
   const embed = new EmbedBuilder()
@@ -76,7 +83,7 @@ function buildProductInfo(guild, cfg, product) {
     .addFields(
       { name: `💎 Harga ${product.label}`, value: `\`${rupiah(rateOf(cfg, product))} / Robux\``, inline: true },
       { name: '📦 Sisa Stock', value: `\`${num(state.stock)} Robux\``, inline: true },
-      { name: '🏪 Status Toko', value: open ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
+      { name: '🏪 Status', value: open ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
       { name: '🧾 Total Transaksi', value: `\`${num(s.transactions)} transaksi\``, inline: true },
       { name: `💎 ${product.label} Terjual`, value: `\`${num(s.robux)} Robux\``, inline: true },
       { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
@@ -201,6 +208,7 @@ function buildAmountPicker(cfg, product, roblox) {
 
 // ───────────────────────── Isi ticket ─────────────────────────
 function buildTicketMessage(guild, cfg, t) {
+  if (kindOf(t) === 'rekber') return buildRekberTicket(guild, cfg, t);
   const statusColor = {
     open: color(cfg, 'brand', 0x3498db),
     completed: color(cfg, 'open', 0x2ecc71),
@@ -281,6 +289,7 @@ function buildDmCreated(guild, cfg, t, channelUrl) {
 }
 
 function buildDmClosed(guild, cfg, t) {
+  if (kindOf(t) === 'rekber') return buildRekberDmClosed(guild, cfg, t);
   const titles = {
     completed: '✅ Pesanan Kamu Sudah Selesai',
     cancelled: '❌ Pesanan Kamu Dibatalkan',
@@ -306,7 +315,11 @@ function buildDmClosed(guild, cfg, t) {
 }
 
 // ───────────────────────── Testimoni ─────────────────────────
+/** Siapa yang diminta memberi testimoni: pembeli Robux / pihak pembeli di rekber. */
+const testimonyUserId = (t) => (kindOf(t) === 'rekber' ? t.buyerId : t.userId);
+
 function buildTestimonyPrompt(guild, cfg, t) {
+  if (kindOf(t) === 'rekber') return buildRekberTestimonyPrompt(guild, cfg, t);
   const embed = new EmbedBuilder()
     .setColor(color(cfg, 'brand', 0x3498db))
     .setTitle('⭐ Bagaimana Pengalaman Belanjamu?')
@@ -323,6 +336,7 @@ function buildTestimonyPrompt(guild, cfg, t) {
 }
 
 function buildTestimony(guild, cfg, t, buyer) {
+  if (kindOf(t) === 'rekber') return buildRekberTestimony(guild, cfg, t, buyer);
   const r = t.testimony;
   const embed = new EmbedBuilder()
     .setColor(color(cfg, 'brand', 0x3498db))
@@ -352,35 +366,52 @@ function buildTestimony(guild, cfg, t, buyer) {
 }
 
 // ───────────────────────── Pengumuman di channel stock ─────────────────────────
+/**
+ * kind: 'open' | 'close' → extra.products = daftar produk yang dibuka / ditutup.
+ *       'stock' | 'returned' → khusus Robux.
+ */
 function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
   const panelLink = state.panel ? `https://discord.com/channels/${guild.id}/${state.panel.channelId}` : null;
-  const product = (cfg.products || []).find((x) => x.type === 'robux');
-  const rate = product ? rateOf(cfg, product) : 0;
-  const e = new EmbedBuilder().setFooter(serverFooter(guild, storeName(cfg, guild))).setTimestamp(new Date());
+  const robux = (cfg.products || []).find((x) => x.type === 'robux');
+  const rate = robux ? rateOf(cfg, robux) : 0;
+  const name = storeName(cfg, guild);
+  const e = new EmbedBuilder().setFooter(serverFooter(guild, name)).setTimestamp(new Date());
+  const products = extra.products || [];
+  const single = products.length === 1 ? products[0] : null;
+  const label = single ? single.label : name;
+  const listText = products.map((p) => `${p.emoji || '•'} **${p.label}**`).join('\n');
+  const robuxIncluded = products.some((p) => p.type === 'robux');
 
   if (kind === 'open') {
     e.setColor(color(cfg, 'open', 0x2ecc71))
-      .setTitle('🟢 Toko Sudah Dibuka!')
-      .setDescription(`**${storeName(cfg, guild)}** sekarang **BUKA** dan siap menerima pesanan! 🎉${panelLink ? `\n\n🛒 Order sekarang: ${panelLink}` : ''}`)
-      .addFields(
-        { name: '📦 Stock Tersedia', value: `\`${num(state.stock)} Robux\``, inline: true },
+      .setTitle(`🟢 ${label} Sudah Dibuka!`)
+      .setDescription(
+        (single
+          ? `**${single.label}** di **${name}** sekarang **BUKA** dan siap menerima pesanan! 🎉`
+          : `**${name}** sekarang **BUKA** dan siap menerima pesanan! 🎉\n\n${listText}`) +
+          (panelLink ? `\n\n🛒 Order sekarang: ${panelLink}` : ''),
+      );
+    if (robuxIncluded) {
+      e.addFields(
+        { name: '📦 Stock Robux', value: `\`${num(state.stock)} Robux\``, inline: true },
         { name: '💱 Rate', value: `\`${rupiah(rate)} / Robux\``, inline: true },
       );
+    }
   } else if (kind === 'close') {
     e.setColor(color(cfg, 'closed', 0xe74c3c))
-      .setTitle('🔴 Toko Ditutup')
+      .setTitle(`🔴 ${label} Ditutup`)
       .setDescription(
-        `${extra.reason || `**${storeName(cfg, guild)}** saat ini **TUTUP** dan tidak menerima pesanan baru.`}\n\n` +
+        `${extra.reason || (single ? `**${single.label}** di **${name}** saat ini **TUTUP** dan tidak menerima pesanan baru.` : `**${name}** saat ini **TUTUP** dan tidak menerima pesanan baru.\n\n${listText}`)}\n\n` +
           'Pantau terus channel ini untuk info buka berikutnya. Terima kasih! 💜',
-      )
-      .addFields({ name: '📦 Sisa Stock', value: `\`${num(state.stock)} Robux\``, inline: true });
+      );
+    if (robuxIncluded) e.addFields({ name: '📦 Sisa Stock Robux', value: `\`${num(state.stock)} Robux\``, inline: true });
   } else if (kind === 'stock') {
     e.setColor(color(cfg, 'brand', 0x3498db))
       .setTitle('📦 Update Stock Robux')
       .setDescription(extra.text || 'Stock Robux telah diperbarui.')
       .addFields(
         { name: '📦 Stock Sekarang', value: `\`${num(state.stock)} Robux\``, inline: true },
-        { name: '🏪 Status Toko', value: state.open ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
+        { name: '🏪 Status', value: robux && isProductOpen(robux) ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
       );
   } else if (kind === 'returned') {
     const t = extra.ticket;
@@ -390,14 +421,297 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
       .addFields(
         { name: '♻️ Stock Kembali', value: `\`+${num(t.amount)} Robux\``, inline: true },
         { name: '📦 Stock Sekarang', value: `\`${num(state.stock)} Robux\``, inline: true },
-        { name: '🏪 Status Toko', value: state.open ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
+        { name: '🏪 Status', value: robux && isProductOpen(robux) ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
       );
   }
   return e;
 }
 
+// ═════════════════════════════════════ REKBER ═════════════════════════════════════
+/** Hitung fee rekber dari tabel fee di store.json. */
+function rekberFee(product, nominal) {
+  const tiers = product.feeTiers || [];
+  const tier = tiers.find((x) => x.upTo == null || nominal <= x.upTo) || tiers.at(-1) || { fee: 0 };
+  const fee = tier.percent != null ? Math.ceil((nominal * tier.percent) / 100) : Number(tier.fee) || 0;
+  const byBuyer = (product.feePaidBy || 'pembeli') !== 'penjual';
+  return { fee, buyerPays: byBuyer ? nominal + fee : nominal, sellerGets: byBuyer ? nominal : nominal - fee, byBuyer };
+}
+
+function feeTable(product) {
+  return (product.feeTiers || [])
+    .map((x) => {
+      const range = x.upTo == null ? 'Di atas itu' : `≤ ${rupiah(x.upTo)}`;
+      const fee = x.percent != null ? `${x.percent}% dari nominal` : rupiah(x.fee);
+      return `▸ ${range} — **${fee}**`;
+    })
+    .join('\n');
+}
+
+function buildRekberInfo(guild, cfg, product) {
+  const open = isProductOpen(product);
+  const s = state.stats;
+  const embed = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setTitle(`${product.emoji || '🤝'} ${product.label} — Rekening Bersama`)
+    .setDescription(fill(product.description || '', { name: storeName(cfg, guild) }) || null)
+    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
+    .addFields(
+      { name: '🧾 Fee Rekber', value: feeTable(product) || '-', inline: false },
+      {
+        name: '💵 Nominal Transaksi',
+        value: `\`${rupiah(product.minNominal || 0)} – ${rupiah(product.maxNominal || 0)}\``,
+        inline: true,
+      },
+      { name: '💳 Fee Ditanggung', value: `\`${(product.feePaidBy || 'pembeli') === 'penjual' ? 'Penjual' : 'Pembeli'}\``, inline: true },
+      { name: '🏪 Status', value: open ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
+      { name: '🤝 Rekber Sukses', value: `\`${num(s.rekber)} transaksi\``, inline: true },
+      { name: '🛡️ Dana Diamankan', value: `\`${rupiah(s.rekberVolume)}\``, inline: true },
+    );
+
+  const buttons = [
+    new ButtonBuilder()
+      .setCustomId(`store:order:${product.id}`)
+      .setLabel(open ? 'Buat Ticket Rekber' : 'Rekber Sedang Tutup')
+      .setEmoji('🤝')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(!open),
+  ];
+  if (product.terms?.description) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`store:terms:${product.id}`)
+        .setLabel(product.terms.button || 'Syarat & Ketentuan')
+        .setEmoji('📌')
+        .setStyle(ButtonStyle.Secondary),
+    );
+  }
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(buttons)] };
+}
+
+function rekberMoneyFields(t) {
+  return [
+    { name: '💵 Nominal Transaksi', value: `\`${rupiah(t.nominal)}\``, inline: true },
+    { name: '🧾 Fee Rekber', value: `\`${rupiah(t.fee)}\`\n┗ ditanggung ${t.feeByBuyer ? 'pembeli' : 'penjual'}`, inline: true },
+    { name: '\u200b', value: '\u200b', inline: true },
+    { name: '💳 Transfer Pembeli ke Admin', value: `## ${rupiah(t.buyerPays)}`, inline: true },
+    { name: '💰 Dana Diterima Penjual', value: `## ${rupiah(t.sellerGets)}`, inline: true },
+  ];
+}
+
+/** Ringkasan sebelum ticket rekber dibuat (hanya terlihat pembuat). */
+function buildRekberConfirm(guild, cfg, d) {
+  const embed = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setTitle('🤝 Konfirmasi Transaksi Rekber')
+    .setDescription('Periksa kembali detail transaksi di bawah. Pastikan **pihak lawan** dan **nominal** sudah benar sebelum membuat ticket.')
+    .addFields(
+      { name: '🛒 Pembeli', value: `<@${d.buyerId}>`, inline: true },
+      { name: '🏷️ Penjual', value: `<@${d.sellerId}>`, inline: true },
+      { name: '📦 Objek Transaksi', value: d.item.slice(0, 1024), inline: false },
+      ...rekberMoneyFields(d),
+    );
+  if (d.detail) embed.addFields({ name: '📝 Detail', value: d.detail.slice(0, 1024) });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('store:rbconfirm:yes').setLabel('Ya, Buat Ticket Rekber').setEmoji('✅').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('store:rbconfirm:no').setLabel('Batalkan').setEmoji('✖️').setStyle(ButtonStyle.Danger),
+  );
+  return { embeds: [embed], components: [row], allowedMentions: { parse: [] } };
+}
+
+function rekberSteps(t) {
+  const st = t.stage || {};
+  const done = t.status === 'completed';
+  const mark = (ok, current) => (ok ? '✅' : current ? '⏳' : '▫️');
+  const rows = [
+    [st.agreed, `<@${t.partnerId}> menyetujui transaksi`],
+    [st.funded, `Pembeli transfer **${rupiah(t.buyerPays)}** ke admin & admin konfirmasi dana`],
+    [st.received, 'Penjual mengirim barang / jasa & pembeli konfirmasi sudah diterima'],
+    [done, `Admin mencairkan **${rupiah(t.sellerGets)}** ke penjual`],
+  ];
+  const currentIdx = rows.findIndex((r) => !r[0]);
+  return rows.map((r, i) => `${mark(r[0], t.status === 'open' && i === currentIdx)} \`${i + 1}\` ${r[1]}`).join('\n');
+}
+
+function buildRekberTicket(guild, cfg, t) {
+  const product = (cfg.products || []).find((p) => p.id === t.productId) || {};
+  const st = t.stage || {};
+  const statusColor = {
+    open: color(cfg, 'brand', 0x3498db),
+    completed: color(cfg, 'open', 0x2ecc71),
+    cancelled: color(cfg, 'closed', 0xe74c3c),
+    refund: color(cfg, 'refund', 0xe67e22),
+  }[t.status];
+
+  const main = new EmbedBuilder()
+    .setColor(statusColor)
+    .setAuthor({ name: `${storeName(cfg, guild)} • Rekening Bersama`, iconURL: guild.iconURL({ size: 128 }) || undefined })
+    .setTitle(`🤝 Ticket Rekber • ${t.id}`)
+    .setDescription(
+      `Transaksi antara <@${t.buyerId}> dan <@${t.sellerId}> kini **diamankan oleh ${storeName(cfg, guild)}**. 🛡️\n` +
+        'Dana pembeli ditahan admin dan **baru diteruskan ke penjual setelah barang / jasa diterima**.',
+    )
+    .addFields(
+      { name: '🛒 Pembeli', value: `<@${t.buyerId}>`, inline: true },
+      { name: '🏷️ Penjual', value: `<@${t.sellerId}>`, inline: true },
+      { name: '🙋 Dibuat oleh', value: `<@${t.userId}>`, inline: true },
+      { name: '📦 Objek Transaksi', value: t.item.slice(0, 1024), inline: false },
+    );
+  if (t.detail) main.addFields({ name: '📝 Detail', value: t.detail.slice(0, 1024), inline: false });
+  main
+    .addFields(...rekberMoneyFields(t))
+    .addFields(
+      { name: '📍 Progress Transaksi', value: rekberSteps(t), inline: false },
+      { name: '📌 Status', value: `**${REKBER_STATUS[t.status]}**`, inline: true },
+      { name: '🕒 Dibuat', value: ts(t.createdAt, 'f'), inline: true },
+    )
+    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
+    .setFooter(serverFooter(guild, `${storeName(cfg, guild)} • Rekber ${t.id}`))
+    .setTimestamp(t.closedAt || t.createdAt);
+  if (t.closedAt) main.addFields({ name: '🔒 Ditutup', value: `${ts(t.closedAt, 'f')} oleh <@${t.closedBy}>`, inline: true });
+
+  const embeds = [main];
+  if (t.status === 'open' && product.guide) {
+    embeds.push(
+      new EmbedBuilder()
+        .setColor(color(cfg, 'brand', 0x3498db))
+        .setTitle(product.guideTitle || '🛡️ Alur Rekber')
+        .setDescription(fill(product.guide, { name: storeName(cfg, guild) }).slice(0, 4096)),
+    );
+  }
+
+  const components =
+    t.status === 'open'
+      ? [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`store:rbagree:${t.id}`)
+              .setLabel(st.agreed ? 'Disetujui' : 'Setujui Transaksi')
+              .setEmoji('🤝')
+              .setStyle(ButtonStyle.Success)
+              .setDisabled(Boolean(st.agreed)),
+            new ButtonBuilder()
+              .setCustomId(`store:rbfund:${t.id}`)
+              .setLabel(st.funded ? 'Dana Diterima' : 'Konfirmasi Dana (Admin)')
+              .setEmoji('💰')
+              .setStyle(ButtonStyle.Primary)
+              .setDisabled(!st.agreed || Boolean(st.funded)),
+            new ButtonBuilder()
+              .setCustomId(`store:rbrecv:${t.id}`)
+              .setLabel(st.received ? 'Barang Diterima' : 'Barang Sudah Diterima')
+              .setEmoji('📦')
+              .setStyle(ButtonStyle.Primary)
+              .setDisabled(!st.funded || Boolean(st.received)),
+            new ButtonBuilder().setCustomId(`store:close:${t.id}`).setLabel('Tutup Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+          ),
+        ]
+      : [];
+  return { embeds, components };
+}
+
+function buildRekberDmCreated(guild, cfg, t, channelUrl, forUserId) {
+  const role = forUserId === t.buyerId ? 'Pembeli' : 'Penjual';
+  const embed = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setTitle('🤝 Ticket Rekber Berhasil Dibuat')
+    .setDescription(
+      `Kamu terdaftar sebagai **${role}** dalam transaksi rekber di **${storeName(cfg, guild)}**.\n\n` +
+        `Silakan lanjutkan ke channel ticket rekber untuk memproses transaksi:\n${channelUrl}`,
+    )
+    .addFields(
+      { name: '🤝 Ticket ID', value: `\`${t.id}\``, inline: true },
+      { name: '📦 Objek', value: `\`${t.item.slice(0, 80)}\``, inline: true },
+      { name: '💵 Nominal', value: `\`${rupiah(t.nominal)}\``, inline: true },
+    )
+    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
+    .setFooter(serverFooter(guild, storeName(cfg, guild)))
+    .setTimestamp(new Date());
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Buka Ticket Rekber').setEmoji('🤝').setURL(channelUrl),
+  );
+  return { embeds: [embed], components: [row] };
+}
+
+function buildRekberDmClosed(guild, cfg, t) {
+  const name = storeName(cfg, guild);
+  const titles = {
+    completed: '✅ Transaksi Rekber Selesai',
+    cancelled: '❌ Transaksi Rekber Dibatalkan',
+    refund: '💸 Transaksi Rekber Di-refund',
+  };
+  const desc = {
+    completed: `Transaksi rekber **${t.id}** telah selesai dan dana sudah dicairkan ke penjual. Terima kasih telah mempercayakan transaksimu kepada **${name}**! 🛡️`,
+    cancelled: `Transaksi rekber **${t.id}** di **${name}** telah dibatalkan.`,
+    refund: `Transaksi rekber **${t.id}** di-refund — dana telah dikembalikan ke pembeli.`,
+  };
+  const embed = new EmbedBuilder()
+    .setColor(t.status === 'completed' ? color(cfg, 'open', 0x2ecc71) : color(cfg, 'refund', 0xe67e22))
+    .setTitle(titles[t.status])
+    .setDescription(desc[t.status] + (t.note ? `\n\n📝 Catatan admin: ${t.note}` : ''))
+    .addFields(
+      { name: '🤝 Ticket ID', value: `\`${t.id}\``, inline: true },
+      { name: '📦 Objek', value: `\`${t.item.slice(0, 80)}\``, inline: true },
+      { name: '💵 Nominal', value: `\`${rupiah(t.nominal)}\``, inline: true },
+    )
+    .setFooter(serverFooter(guild, name))
+    .setTimestamp(new Date());
+  if (t.proofUrl && t.status === 'completed') embed.setImage(t.proofUrl);
+  return { embeds: [embed] };
+}
+
+function buildRekberTestimonyPrompt(guild, cfg, t) {
+  const embed = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setTitle('⭐ Bagaimana Pengalaman Rekber-mu?')
+    .setDescription(
+      `<@${t.buyerId}>, transaksi rekber **${t.id}** sudah selesai! 🎉\n\n` +
+        'Bantu kami jadi lebih baik dengan memberikan **rating & testimoni** lewat tombol di bawah.',
+    )
+    .setFooter(serverFooter(guild, storeName(cfg, guild)));
+  if (t.proofUrl) embed.setImage(t.proofUrl);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`store:testi:${t.id}`).setLabel('Beri Testimoni').setEmoji('⭐').setStyle(ButtonStyle.Primary),
+  );
+  return { content: `<@${t.buyerId}>`, embeds: [embed], components: [row], allowedMentions: { users: [t.buyerId] } };
+}
+
+function buildRekberTestimony(guild, cfg, t, buyer) {
+  const r = t.testimony;
+  const embed = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setAuthor({
+      name: buyer ? `${buyer.displayName} (@${buyer.user.username})` : 'Pembeli',
+      iconURL: buyer?.displayAvatarURL({ size: 128 }) || undefined,
+    })
+    .setTitle(`🧾 Testimoni #${String(state.stats.testimonies).padStart(4, '0')}`)
+    .setDescription(
+      r
+        ? `**Rating:** ${STARS(r.rating)}  **${r.rating}/5**\n\n>>> ${r.comment}`
+        : '✅ **Rekber Berhasil**\n\n_Pembeli tidak memberikan ulasan._',
+    )
+    .addFields(
+      { name: '🤝 Layanan', value: '`Rekber`', inline: true },
+      { name: '🛒 Pembeli', value: `<@${t.buyerId}>`, inline: true },
+      { name: '🏷️ Penjual', value: `<@${t.sellerId}>`, inline: true },
+      { name: '📦 Objek', value: `\`${t.item.slice(0, 100)}\``, inline: true },
+      { name: '💵 Nominal', value: `\`${rupiah(t.nominal)}\``, inline: true },
+      { name: '🎫 Ticket', value: `\`${t.id}\``, inline: true },
+    )
+    .setThumbnail(buyer?.displayAvatarURL({ extension: 'png', size: 256 }) || null)
+    .setFooter(serverFooter(guild, storeName(cfg, guild)))
+    .setTimestamp(new Date());
+  if (t.proofUrl) embed.setImage(t.proofUrl);
+  return { embeds: [embed], allowedMentions: { parse: [] } };
+}
+
 module.exports = {
   STATUS_LABEL,
+  REKBER_STATUS,
+  statusLabel,
+  testimonyUserId,
+  rekberFee,
+  buildRekberInfo,
+  buildRekberConfirm,
+  buildRekberDmCreated,
   rateOf,
   buildPanel,
   buildProductInfo,
