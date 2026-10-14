@@ -10,14 +10,16 @@
     "products[].terms = syarat pembelian yang muncul saat tombol 'Syarat Pembelian' diklik (hanya pembeli yang lihat). Hapus bagian terms kalau tidak perlu.",
     "colors.brand = warna tema toko (biru) untuk semua embed. open = hijau (toko buka / pesanan selesai), closed = merah (toko tutup / dibatalkan), refund = oranye.",
     "Rekber: minNominal / maxNominal = batas nominal, feePaidBy = 'pembeli' atau 'penjual', feeTiers = tabel fee (upTo = batas nominal, fee = Rp tetap, percent = persen; upTo null = di atas tier terakhir). guide = alur yang tampil di ticket rekber.",
-    "Buka / tutup tiap produk terpisah: /store buka produk:<produk> dan /store tutup produk:<produk>. Setelah menambah produk baru di file ini, jalankan npm run deploy supaya muncul di pilihan."
+    "Buka / tutup tiap produk terpisah: /store buka produk:<produk> dan /store tutup produk:<produk>. Setelah menambah produk baru di file ini, jalankan npm run deploy supaya muncul di pilihan.",
+    "channels.log = channel log order (khusus admin). Setiap ticket punya 1 pesan log yang ter-update otomatis: dibuat, progress rekber, ditutup, testimoni, channel dihapus."
   ],
   "storeName": "Noname Store",
   "channels": {
     "panel": "1553667092711088160",
     "testimoni": "1553667870221934654",
     "leaderboard": "1559751984012329080",
-    "stock": "1553666054499344434"
+    "stock": "1553666054499344434",
+    "log": "1553667797383520347"
   },
   "ticket": {
     "categoryName": "🎫 TICKET ORDER",
