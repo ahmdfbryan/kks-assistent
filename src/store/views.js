@@ -33,16 +33,14 @@ function buildPanel(guild, cfg) {
   const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
 
   const steps = (p.howToBuy || []).map((t, i) => `\`${i + 1}\` ${t}`).join('\n');
-  const description = [
-    fill(p.description, guild),
-    steps ? `\n**📋 Tata Cara Pembelian**\n${steps}` : '',
-    `\n${'━'.repeat(24)}\n${open ? p.statusOpen : p.statusClosed}\n${'━'.repeat(24)}`,
-  ].join('\n');
+  const description = [fill(p.description, guild), steps ? `\n**📋 Tata Cara Pembelian**\n${steps}` : '']
+    .filter(Boolean)
+    .join('\n');
 
   const embed = new EmbedBuilder()
     .setColor(open ? color(cfg, 'open', 0x2ecc71) : color(cfg, 'closed', 0xe74c3c))
     .setTitle(fill(p.title, guild))
-    .setDescription(description.slice(0, 4096))
+    .setDescription(description.slice(0, 4096) || null)
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
     .addFields(
       {
@@ -55,9 +53,7 @@ function buildPanel(guild, cfg) {
       { name: '🧾 Total Transaksi', value: `\`${num(s.transactions)} transaksi\``, inline: true },
       { name: '💎 Robux Terjual', value: `\`${num(s.robux)} Robux\``, inline: true },
       { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
-    )
-    .setFooter(serverFooter(guild, `${guild.name} • Terakhir diperbarui`))
-    .setTimestamp(new Date());
+    );
   if (p.bannerImage) embed.setImage(p.bannerImage);
 
   const buttons = (cfg.products || []).slice(0, 5).map((prod) => {
@@ -76,24 +72,23 @@ function buildPanel(guild, cfg) {
 function buildLeaderboard(guild, cfg) {
   const medals = ['🥇', '🥈', '🥉'];
   const top = Object.entries(state.spenders)
-    .sort((a, b) => b[1].robux - a[1].robux || b[1].revenue - a[1].revenue)
+    .sort((a, b) => b[1].revenue - a[1].revenue || b[1].orders - a[1].orders)
     .slice(0, 10);
 
   const lines = top.length
     ? top.map(([userId, d], i) => {
         const rank = medals[i] || `\`#${i + 1}\``;
-        return `${rank} <@${userId}>\n┗ 💎 **${num(d.robux)} Robux** • ${rupiah(d.revenue)} • ${num(d.orders)} order`;
+        return `${rank} <@${userId}>\n┗ 💰 **${rupiah(d.revenue)}** • ${num(d.orders)} order`;
       })
     : ['_Belum ada transaksi. Jadilah spender pertama!_ 🚀'];
 
   const embed = new EmbedBuilder()
     .setColor(color(cfg, 'gold', 0xf1c40f))
-    .setTitle(`🏆 Top 10 Spender Leaderboard | ${guild.name} Robux`)
+    .setTitle(`🏆 Top 10 Spender Leaderboard | ${guild.name}`)
     .setDescription(lines.join('\n\n'))
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
     .addFields(
       { name: '🧾 Total Transaksi', value: `\`${num(state.stats.transactions)}\``, inline: true },
-      { name: '💎 Total Robux', value: `\`${num(state.stats.robux)}\``, inline: true },
       { name: '👥 Total Pembeli', value: `\`${num(Object.keys(state.spenders).length)}\``, inline: true },
     )
     .setFooter(serverFooter(guild, `${guild.name} • Diperbarui otomatis`))
