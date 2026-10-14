@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, EmbedBuilder } = require('discord.js');
 const { loadConfig, isId, rupiah, num, color } = require('./config');
-const { state, save, productState, isProductOpen } = require('./state');
+const { state, save, productState, isProductOpen, hasStock, stockOf, setStock, stockUnit } = require('./state');
 const V = require('./views');
 const H = require('./howto');
 const C = require('./catalog');
@@ -20,6 +20,18 @@ function rateChoices() {
     .slice(0, 25)
     .map((p) => ({ name: `${p.emoji || '•'} ${p.label}`.slice(0, 100), value: p.id }));
 }
+/** Pilihan produk yang memakai stock (Robux Visend, Canva Pro, ...). */
+function stockChoices() {
+  return (loadConfig()?.products || [])
+    .filter(hasStock)
+    .slice(0, 25)
+    .map((p) => ({ name: `${p.emoji || '•'} ${p.label}`.slice(0, 100), value: p.id }));
+}
+const stockProductOption = (o) => {
+  o.setName('produk').setDescription('Produk yang diatur stock-nya (default: Robux Visend)');
+  const choices = stockChoices();
+  return choices.length ? o.addChoices(...choices) : o;
+};
 const productOption = (o) =>
   o.setName('produk').setDescription('Produk yang dibuka / ditutup').setRequired(true).addChoices(...productChoices());
 
@@ -85,14 +97,16 @@ const storeCommand = {
     .addSubcommand((s) =>
       s
         .setName('stok-set')
-        .setDescription('Atur stock Robux (misal stock hari ini 5000)')
-        .addIntegerOption((o) => o.setName('jumlah').setDescription('Jumlah stock Robux').setRequired(true).setMinValue(0).setMaxValue(10_000_000)),
+        .setDescription('Atur stock produk (Robux: jumlah Robux • Canva Pro: jumlah slot email)')
+        .addIntegerOption((o) => o.setName('jumlah').setDescription('Jumlah stock (Robux / slot)').setRequired(true).setMinValue(0).setMaxValue(10_000_000))
+        .addStringOption(stockProductOption),
     )
     .addSubcommand((s) =>
       s
         .setName('stok-tambah')
-        .setDescription('Tambah / kurangi stock Robux (pakai angka minus untuk mengurangi)')
-        .addIntegerOption((o) => o.setName('jumlah').setDescription('Contoh: 1000 atau -500').setRequired(true)),
+        .setDescription('Tambah / kurangi stock produk (pakai angka minus untuk mengurangi)')
+        .addIntegerOption((o) => o.setName('jumlah').setDescription('Contoh: 1000 atau -500 (Canva: 5 atau -1)').setRequired(true))
+        .addStringOption(stockProductOption),
     )
     .addSubcommand((s) =>
       s
@@ -154,8 +168,8 @@ const storeCommand = {
       const open = sub === 'buka';
       const notes = [];
       const changed = targets.filter((p) => {
-        if (open && p.type === 'robux' && state.stock <= 0) {
-          notes.push(`⚠️ **${p.label}** tidak bisa dibuka — stock masih **0**. Atur dulu dengan \`/store stok-set\`.`);
+        if (open && hasStock(p) && stockOf(p) <= 0) {
+          notes.push(`⚠️ **${p.label}** tidak bisa dibuka — stock masih **0**. Atur dulu dengan \`/store stok-set produk:${p.label}\`.`);
           return false;
         }
         if (productState(p.id).open === open) {
@@ -172,21 +186,24 @@ const storeCommand = {
 
     if (sub === 'stok-set' || sub === 'stok-tambah') {
       const n = interaction.options.getInteger('jumlah');
-      const before = state.stock;
-      state.stock = Math.max(0, sub === 'stok-set' ? n : state.stock + n);
+      const pick = interaction.options.getString('produk');
+      const target = pick ? (cfg.products || []).find((p) => p.id === pick && hasStock(p)) : product;
+      if (!target) return interaction.editReply('❌ Produk ber-stock tidak ditemukan di store.json.');
+      const unit = stockUnit(target);
+      const before = stockOf(target);
+      const after = setStock(target, sub === 'stok-set' ? n : before + n);
       save();
       refreshPanel();
       await announce(guild, 'stock', {
-        text: `Stock Robux diperbarui: **${num(before)} → ${num(state.stock)} Robux**.`,
+        product: target,
+        text: `Stock **${target.label}** diperbarui: **${num(before)} → ${num(after)} ${unit}**.`,
       });
-      await closeIfSoldOut(guild, `📦 **Stock Robux sudah HABIS!** ${product?.label || 'Robux'} otomatis ditutup.`);
-      const reopened = await reopenIfAutoClosed(guild);
+      await closeIfSoldOut(guild, `📦 **Stock ${target.label} sudah HABIS!** ${target.label} otomatis ditutup.`, target);
+      const reopened = await reopenIfAutoClosed(guild, target);
       return interaction.editReply(
-        `📦 Stock: **${num(before)} → ${num(state.stock)} Robux**.` +
-          (reopened ? `\n🟢 **${product.label}** otomatis **DIBUKA** lagi (sebelumnya tutup karena stock habis).` : '') +
-          (product && !isProductOpen(product) && state.stock > 0
-            ? `\n**${product.label}** masih TUTUP (ditutup manual) — buka dengan \`/store buka\`.`
-            : ''),
+        `📦 Stock **${target.label}**: **${num(before)} → ${num(after)} ${unit}**.` +
+          (reopened ? `\n🟢 **${target.label}** otomatis **DIBUKA** lagi (sebelumnya tutup karena stock habis).` : '') +
+          (!isProductOpen(target) && after > 0 ? `\n**${target.label}** masih TUTUP (ditutup manual) — buka dengan \`/store buka\`.` : ''),
       );
     }
 
@@ -220,7 +237,11 @@ const storeCommand = {
         .setTitle('📊 Ringkasan Toko')
         .addFields(
           { name: '🏪 Status Produk', value: productLines || '-', inline: true },
-          { name: '📦 Stock', value: `${num(state.stock)} Robux`, inline: true },
+          {
+            name: '📦 Stock',
+            value: (cfg.products || []).filter(hasStock).map((p) => `${p.label}: ${num(stockOf(p))} ${stockUnit(p)}`).join('\n') || '-',
+            inline: true,
+          },
           { name: '💱 Rate', value: product ? `${rupiah(V.rateOf(cfg, product))} / Robux` : '-', inline: true },
           { name: '🎫 Ticket Berjalan', value: `${active.length} ticket (${num(reserved)} Robux tertahan)`, inline: true },
           { name: '🧾 Transaksi Selesai', value: `${num(s.transactions)}`, inline: true },
@@ -237,7 +258,9 @@ const storeCommand = {
           value: active
             .slice(0, 15)
             .map((t) =>
-              t.kind === 'gamepass'
+              t.kind === 'canva'
+                ? `\`${t.id}\` <#${t.channelId}> • 🎨 ${t.plan.label} • <@${t.userId}>`
+                : t.kind === 'gamepass'
                 ? `\`${t.id}\` <#${t.channelId}> • 🎟️ ${num(t.amount)} Robux (gamepass ${num(t.before)}) • <@${t.userId}>`
                 : t.kind === 'rekber'
                 ? `\`${t.id}\` <#${t.channelId}> • 🤝 ${rupiah(t.nominal)} • <@${t.buyerId}> ↔ <@${t.sellerId}>`
