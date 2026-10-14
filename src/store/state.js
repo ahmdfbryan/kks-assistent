@@ -14,6 +14,7 @@ const DEFAULT = {
   panel: null, // { channelId, messageId }
   leaderboard: null, // { channelId, messageId }
   howto: null, // panel How to Order { channelId, messageId }
+  catalog: null, // { channelId, headerId, cards: { productId: messageId } }
   seq: 0,
   rekberSeq: 0,
   gamepassSeq: 0,
