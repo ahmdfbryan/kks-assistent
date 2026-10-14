@@ -1,0 +1,71 @@
+{
+  "_petunjuk": [
+    "File ini dibaca ulang setiap dipakai — teks & pengaturan langsung berlaku TANPA restart bot.",
+    "Setelah mengubah teks panel, jalankan /store panel supaya panel ikut ter-update.",
+    "Placeholder teks: {server} = nama server.",
+    "Stock, status buka/tutup, dan rate (harga) diatur lewat command /store, bukan di file ini. 'rate' di products hanya harga awal.",
+    "ticket.staffRoleId (opsional) = role staff yang ikut bisa melihat ticket. Tombol Tutup Ticket tetap HANYA untuk Administrator."
+  ],
+  "channels": {
+    "panel": "1553667092711088160",
+    "testimoni": "1553667870221934654",
+    "leaderboard": "1559751984012329080",
+    "stock": "1553666054499344434"
+  },
+  "ticket": {
+    "categoryName": "🎫 TICKET ORDER",
+    "maxPerCategory": 50,
+    "idPrefix": "NCS",
+    "staffRoleId": "",
+    "deleteAfterSeconds": 15,
+    "testimonyTimeoutHours": 24,
+    "postWithoutReview": true
+  },
+  "pingEveryone": { "open": true, "close": true },
+  "colors": {
+    "brand": "#7C5CFF",
+    "open": "#2ECC71",
+    "closed": "#E74C3C",
+    "gold": "#F1C40F",
+    "info": "#3498DB",
+    "refund": "#E67E22"
+  },
+  "panel": {
+    "title": "🛒 {server} — Official Store",
+    "description": "Selamat datang di **Official Store {server}**! Semua transaksi diproses secara aman melalui **ticket pribadi** — hanya kamu dan admin yang bisa melihatnya.\n\n✨ Proses cepat & terpercaya\n🛡️ Transaksi aman lewat ticket pribadi\n📦 Stock terbatas setiap harinya",
+    "howToBuy": [
+      "Pastikan **Status Toko: BUKA**.",
+      "Klik tombol produk yang ingin kamu beli di bawah.",
+      "Masukkan **username Roblox** kamu, lalu konfirmasi akunnya.",
+      "Pilih jumlah Robux (atau masukkan jumlah sendiri).",
+      "Bot akan membuat **ticket pribadi** & mengirim info ke DM kamu.",
+      "Selesaikan pembayaran di ticket, lalu tunggu admin memproses pesananmu."
+    ],
+    "statusOpen": "🟢 **Status Toko: BUKA** — silakan pilih produk di bawah.",
+    "statusClosed": "🔴 **Status Toko: TUTUP** — toko sedang tidak menerima pesanan.",
+    "bannerImage": ""
+  },
+  "products": [
+    {
+      "id": "robux-visend",
+      "type": "robux",
+      "label": "Robux Visend",
+      "emoji": "💎",
+      "rate": 145,
+      "presets": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+      "minAmount": 100,
+      "maxAmount": 5000
+    },
+    {
+      "id": "coming-soon",
+      "type": "soon",
+      "label": "Coming Soon",
+      "emoji": "🔒"
+    }
+  ],
+  "payment": {
+    "title": "💳 Cara Pembayaran",
+    "description": "1. Lakukan pembayaran sesuai **Total Bayar** di atas.\n2. Kirim **bukti transfer** di ticket ini.\n3. Tunggu admin mengonfirmasi & memproses pesananmu.\n\n⚠️ Jangan melakukan pembayaran di luar ticket ini.",
+    "image": ""
+  }
+}
