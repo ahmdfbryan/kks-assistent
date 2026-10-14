@@ -274,7 +274,7 @@ async function handleInteraction(interaction) {
         await interaction.reply({ content: '⌛ Giveaway ini sudah berakhir.', flags: EPH });
       } else if (g.entries.includes(interaction.user.id)) {
         await interaction.reply({
-          content: `✅ Kamu **sudah terdaftar** di giveaway **${g.prize}**.\nPeluang menangmu saat ini: **${chance(g)}**. Ingin keluar?`,
+          content: `✅ Kamu **sudah terdaftar** di giveaway **${g.prize}**.\nIngin keluar dari giveaway?`,
           components: [
             new ActionRowBuilder().addComponents(
               new ButtonBuilder().setCustomId(`ga:leave:${g.id}`).setLabel('Keluar dari Giveaway').setEmoji('🚪').setStyle(ButtonStyle.Danger),
@@ -291,7 +291,7 @@ async function handleInteraction(interaction) {
           save();
           scheduleEdit(g);
           await interaction.reply({
-            content: `🎉 Kamu **berhasil ikut** giveaway **${g.prize}**!\n🍀 Peluang menangmu: **${chance(g)}** • Diundi ${ts(g.endAt, 'R')}`,
+            content: `🎉 Kamu **berhasil ikut** giveaway **${g.prize}**!\n⏰ Pemenang diundi ${ts(g.endAt, 'R')}. Semoga beruntung! 🍀`,
             flags: EPH,
           });
         }
@@ -316,7 +316,7 @@ async function handleInteraction(interaction) {
         .addFields(
           { name: '👥 Total', value: `\`${num(g.entries.length)} orang\``, inline: true },
           { name: '🏆 Pemenang', value: `\`${num(g.winnerCount)} orang\``, inline: true },
-          { name: '🍀 Peluangmu', value: g.entries.includes(interaction.user.id) ? `\`${chance(g)}\`` : '`Belum ikut`', inline: true },
+          { name: '🎟️ Status Kamu', value: g.entries.includes(interaction.user.id) ? '`✅ Sudah ikut`' : '`Belum ikut`', inline: true },
         );
       await interaction.reply({ embeds: [e], flags: EPH, allowedMentions: { parse: [] } });
     }
