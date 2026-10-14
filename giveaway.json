@@ -1,0 +1,22 @@
+{
+  "_petunjuk": [
+    "File ini dibaca ulang setiap dipakai — tidak perlu restart setelah mengubah teks.",
+    "channelId = channel default giveaway (bisa diganti lewat opsi channel di /giveaway mulai).",
+    "colors: active = giveaway berjalan, ended = selesai, cancelled = dibatalkan.",
+    "dmWinners = kirim DM ke pemenang. dmHost = kirim ringkasan hasil ke penyelenggara.",
+    "joinButton / leaveButton / participantsButton = teks tombol."
+  ],
+  "channelId": "1536629243704770560",
+  "colors": {
+    "active": "#3498DB",
+    "ended": "#2ECC71",
+    "cancelled": "#E74C3C"
+  },
+  "title": "🎉 GIVEAWAY 🎉",
+  "defaultDescription": "Klik tombol **🎉 Ikuti Giveaway** di bawah untuk ikut serta. Semoga beruntung! 🍀",
+  "joinButton": "Ikuti Giveaway",
+  "participantsButton": "Peserta",
+  "dmWinners": true,
+  "dmHost": true,
+  "claimText": "Hubungi admin / buka ticket dalam **24 jam** untuk mengklaim hadiahmu. Hadiah yang tidak diklaim akan di-reroll."
+}
