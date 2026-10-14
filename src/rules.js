@@ -12,6 +12,8 @@ const {
   PermissionFlagsBits,
   SlashCommandBuilder,
   ChannelType,
+  MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
 } = require('discord.js');
 
 const FILE = path.join(__dirname, '..', 'rules.json');
@@ -92,15 +94,46 @@ function translateRow(cfg) {
   return new ActionRowBuilder().addComponents(button);
 }
 
-/** Payload pesan untuk satu bahasa. withButton → tombol terjemahan di pesan terakhir. */
-function buildPayloads(cfg, lang, { withButton = false, ephemeral = false } = {}) {
+/**
+ * Banner (GIF / gambar) di paling atas rules.
+ * rules.json → banner: path file di folder bot (contoh "assets/rules-banner.gif") atau link https.
+ */
+function bannerPart(cfg) {
+  const src = String(cfg.banner || '').trim();
+  if (!src) return null;
+  if (/^https?:\/\//i.test(src)) {
+    return { gallery: new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(src)), files: [] };
+  }
+  const file = path.join(__dirname, '..', src);
+  if (!fs.existsSync(file)) {
+    console.warn(`[rules] banner ${src} tidak ditemukan — rules dikirim tanpa banner.`);
+    return null;
+  }
+  const name = `rules-banner${path.extname(file) || '.gif'}`;
+  return {
+    gallery: new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${name}`)),
+    files: [{ attachment: file, name }],
+  };
+}
+
+/**
+ * Payload pesan untuk satu bahasa.
+ * withButton → tombol terjemahan di pesan terakhir. withBanner → banner di atas pesan pertama.
+ */
+function buildPayloads(cfg, lang, { withButton = false, ephemeral = false, withBanner = false } = {}) {
   const messages = buildMessages(cfg.languages?.[lang]);
+  const banner = withBanner ? bannerPart(cfg) : null;
   return messages.map((m, i) => {
     const components = [...m.containers];
     if (withButton && i === messages.length - 1) components.push(translateRow(cfg));
     let flags = MessageFlags.IsComponentsV2;
     if (ephemeral) flags |= MessageFlags.Ephemeral;
-    return { components, flags, allowedMentions: NO_PINGS };
+    const payload = { components, flags, allowedMentions: NO_PINGS };
+    if (banner && i === 0) {
+      payload.components = [banner.gallery, ...components];
+      payload.files = banner.files;
+    }
+    return payload;
   });
 }
 
@@ -140,7 +173,7 @@ const rulesCommand = {
       return interaction.editReply(`❌ Bot tidak punya izin kirim pesan di ${channel}.`);
     }
 
-    const payloads = buildPayloads(cfg, 'id', { withButton: true });
+    const payloads = buildPayloads(cfg, 'id', { withButton: true, withBanner: true });
     if (!payloads.length) return interaction.editReply('❌ Isi rules (languages.id) di rules.json masih kosong.');
 
     for (const p of payloads) await channel.send(p);
