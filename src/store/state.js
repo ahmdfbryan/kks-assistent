@@ -10,6 +10,7 @@ const FILE = path.join(__dirname, '..', '..', 'data', 'store-state.json');
 const DEFAULT = {
   products: {}, // { productId: { open, autoClosed } } — autoClosed = tutup otomatis karena stock habis
   stock: 0, // stock Robux
+  stocks: {}, // stock produk lain { productId: jumlah } — misal slot Canva Pro
   rates: {}, // { productId: rate }
   panel: null, // { channelId, messageId }
   leaderboard: null, // { channelId, messageId }
@@ -18,6 +19,7 @@ const DEFAULT = {
   seq: 0,
   rekberSeq: 0,
   gamepassSeq: 0,
+  canvaSeq: 0,
   tickets: {},
   stats: { transactions: 0, robux: 0, revenue: 0, ratingSum: 0, ratingCount: 0, testimonies: 0, rekber: 0, rekberVolume: 0 },
   spenders: {}, // { userId: { robux, revenue, orders } }
@@ -66,11 +68,28 @@ function productState(productId) {
   return state.products[productId];
 }
 
-/** Produk bisa dipesan sekarang? (Robux juga butuh stock > 0, Coming Soon selalu tidak.) */
+/** Produk yang memakai stock: Robux Visend (Robux) & Canva Pro (slot). */
+const hasStock = (product) => product?.type === 'robux' || product?.type === 'canva';
+const stockUnit = (product) => (product?.type === 'robux' ? 'Robux' : product?.stockUnit || 'slot');
+function stockOf(product) {
+  if (product?.type === 'robux') return state.stock;
+  return Number(state.stocks?.[product?.id]) || 0;
+}
+function setStock(product, n) {
+  const v = Math.max(0, Math.floor(n));
+  if (product.type === 'robux') state.stock = v;
+  else {
+    state.stocks = state.stocks || {};
+    state.stocks[product.id] = v;
+  }
+  return v;
+}
+
+/** Produk bisa dipesan sekarang? (produk ber-stock juga butuh stock > 0, Coming Soon selalu tidak.) */
 function isProductOpen(product) {
   if (!product || product.type === 'soon') return false;
   const open = productState(product.id).open;
-  return product.type === 'robux' ? open && state.stock > 0 : open;
+  return hasStock(product) ? open && stockOf(product) > 0 : open;
 }
 
 const kindOf = (t) => t.kind || 'robux';
@@ -78,14 +97,16 @@ const kindOf = (t) => t.kind || 'robux';
 /**
  * Ticket yang masih berjalan.
  * - kind 'robux'  → cocok berdasarkan pembeli Discord / akun Roblox.
+ * - kind 'canva'    → cocok berdasarkan pembeli Discord / email yang sama.
  * - kind 'gamepass' → cocok berdasarkan pembeli Discord / akun Roblox / gamepass yang sama.
  * - kind 'rekber' → cocok kalau user adalah salah satu pihak rekber.
  */
-function activeTicketOf({ userId, robloxId, gamepassId, kind = 'robux' }) {
+function activeTicketOf({ userId, robloxId, gamepassId, email, kind = 'robux' }) {
   return (
     Object.values(state.tickets).find((t) => {
       if (t.status !== 'open' || kindOf(t) !== kind) return false;
       if (kind === 'rekber') return userId && (t.userId === userId || t.partnerId === userId);
+      if (kind === 'canva') return (userId && t.userId === userId) || (email && t.email === email);
       if (kind === 'gamepass' && gamepassId && t.gamepass?.id === gamepassId) return true;
       return (userId && t.userId === userId) || (robloxId && t.roblox?.id === robloxId);
     }) || null
@@ -97,4 +118,4 @@ function nextTicketId(prefix, key = 'seq') {
   return `${prefix || 'NCS'}-${String(state[key]).padStart(4, '0')}`;
 }
 
-module.exports = { state, save, productState, productStatsOf, isProductOpen, kindOf, activeTicketOf, nextTicketId };
+module.exports = { state, save, productState, productStatsOf, hasStock, stockUnit, stockOf, setStock, isProductOpen, kindOf, activeTicketOf, nextTicketId };
