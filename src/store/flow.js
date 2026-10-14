@@ -81,12 +81,28 @@ async function announce(guild, kind, extra = {}, ping = false) {
     .catch((e) => console.error('[store] gagal kirim pengumuman:', e.message));
 }
 
-async function setStoreOpen(guild, open, reason) {
+/**
+ * Buka / tutup toko.
+ * auto = true → ditutup otomatis karena stock habis. Toko yang tutup otomatis akan BUKA LAGI
+ * otomatis saat stock kembali (cancel / refund / stock ditambah). Toko yang ditutup manual
+ * lewat /store tutup tetap tutup sampai admin membukanya.
+ */
+async function setStoreOpen(guild, open, reason, { auto = false } = {}) {
   const cfg = loadConfig();
   state.open = open;
+  state.autoClosed = !open && auto;
   save();
   refreshPanel();
   await announce(guild, open ? 'open' : 'close', { reason }, Boolean(cfg?.pingEveryone?.[open ? 'open' : 'close']));
+}
+
+/** Stock kembali tersedia & toko sebelumnya tutup karena stock habis → buka lagi otomatis. */
+async function reopenIfAutoClosed(guild) {
+  if (!state.open && state.autoClosed && state.stock > 0) {
+    await setStoreOpen(guild, true);
+    return true;
+  }
+  return false;
 }
 
 // ══════════════════════ Kategori ticket (maks 50 channel / kategori) ══════════════════════
@@ -383,7 +399,7 @@ async function createOrder(interaction, productId, amount) {
 
   refreshPanel();
   if (state.stock <= 0 && state.open) {
-    await setStoreOpen(guild, false, `📦 **Stock Robux hari ini sudah HABIS!** Toko otomatis ditutup.`);
+    await setStoreOpen(guild, false, `📦 **Stock Robux hari ini sudah HABIS!** Toko otomatis ditutup.`, { auto: true });
   }
 }
 
@@ -527,6 +543,7 @@ async function onCloseModal(interaction, ticketId) {
       allowedMentions: { users: [t.userId] },
     });
     await announce(guild, 'returned', { ticket: t });
+    await reopenIfAutoClosed(guild);
   }
 
   // DM pembeli soal hasil pesanannya.
@@ -668,6 +685,7 @@ async function onChannelDelete(channel) {
     state.stock += t.amount;
     save();
     await announce(channel.guild, 'returned', { ticket: t });
+    await reopenIfAutoClosed(channel.guild);
     refreshPanel();
   } else save();
 }
@@ -718,6 +736,7 @@ module.exports = {
   handleInteraction,
   registerStore,
   setStoreOpen,
+  reopenIfAutoClosed,
   announce,
   refreshPanel,
   refreshLeaderboard,
