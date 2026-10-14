@@ -133,7 +133,7 @@ const logQueues = new Map();
  * Catat kejadian ke riwayat ticket & perbarui pesan log di channel log.
  * Antrian per ticket supaya pesan log tidak terkirim dobel saat kejadian beruntun.
  */
-function logOrder(guild, t, text, { withProof = false } = {}) {
+function logOrder(guild, t, text) {
   if (text) {
     t.log = t.log || [];
     t.log.push({ at: Date.now(), text });
@@ -146,14 +146,11 @@ function logOrder(guild, t, text, { withProof = false } = {}) {
       if (!isId(cfg?.channels?.log) || !guild) return;
       const channel = await guild.channels.fetch(cfg.channels.log).catch(() => null);
       if (!channel?.isTextBased()) return;
-      const proof = withProof ? proofAttachment(t) : { files: [], url: t.logProofUrl || null };
-      if (withProof && proof.url) t.logProofUrl = proof.url;
-      const payload = V.buildOrderLog(guild, cfg, t, proof.url || t.logProofUrl);
-      if (proof.files.length) payload.files = proof.files;
+      const payload = V.buildOrderLog(guild, cfg, t); // tanpa gambar — gambar bukti hanya di testimoni
 
       if (t.logMessageId) {
         try {
-          await channel.messages.edit(t.logMessageId, payload);
+          await channel.messages.edit(t.logMessageId, { ...payload, attachments: [] });
           return;
         } catch (err) {
           if (err.code !== RESTJSONErrorCodes.UnknownMessage) throw err;
@@ -933,7 +930,7 @@ async function onCloseModal(interaction, ticketId) {
     await user.send({ ...dm, files: status === 'completed' ? dmProof.files : [] }).catch(() => {});
   }
 
-  logOrder(guild, t, CLOSE_LOG[kindOf(t)][status], { withProof: true });
+  logOrder(guild, t, CLOSE_LOG[kindOf(t)][status]);
   refreshPanel();
   refreshLeaderboard();
   return interaction.editReply(`✅ Ticket **${t.id}** ditutup sebagai **${V.statusLabel(t)}**.`);
