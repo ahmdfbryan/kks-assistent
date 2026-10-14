@@ -110,7 +110,17 @@ async function getTicketCategory(guild, cfg) {
   });
 }
 
-// ══════════════════════ Langkah 1: klik produk ══════════════════════
+// ══════════════════════ Langkah 1: klik produk di panel → info produk ══════════════════════
+async function onProductInfo(interaction, productId) {
+  const cfg = loadConfig();
+  const product = getProduct(cfg, productId);
+  if (!product || product.type !== 'robux') {
+    return interaction.reply({ content: '🔒 Produk ini **Coming Soon** — nantikan ya!', flags: EPH });
+  }
+  return interaction.reply({ ...V.buildProductInfo(interaction.guild, cfg, product), flags: EPH });
+}
+
+// ══════════════════════ Langkah 1b: klik "Beli Sekarang" → form username ══════════════════════
 async function onBuy(interaction, productId) {
   const cfg = loadConfig();
   const product = getProduct(cfg, productId);
@@ -410,18 +420,28 @@ async function onCloseButton(interaction, ticketId) {
 async function saveProof(attachment, ticketId) {
   if (!attachment) return null;
   if (attachment.contentType && !attachment.contentType.startsWith('image/')) return null;
-  const ext = (path.extname(attachment.name || '') || '.png').toLowerCase();
-  const res = await fetch(attachment.url, { signal: AbortSignal.timeout(20000) });
-  if (!res.ok) throw new Error(`download bukti gagal (HTTP ${res.status})`);
-  fs.mkdirSync(PROOF_DIR, { recursive: true });
-  const file = path.join(PROOF_DIR, `${ticketId}${ext}`);
-  fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-  return file;
+  const ext = (path.extname((attachment.name || '').split('?')[0]) || '.png').toLowerCase();
+  let lastErr;
+  for (let i = 0; i < 4; i++) {
+    try {
+      const res = await fetch(attachment.url, { signal: AbortSignal.timeout(20000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      fs.mkdirSync(PROOF_DIR, { recursive: true });
+      const file = path.join(PROOF_DIR, `${ticketId}${ext}`);
+      fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
+      return file;
+    } catch (err) {
+      lastErr = err;
+      await new Promise((r) => setTimeout(r, 1500 * (i + 1))); // jaga-jaga DNS VPS sedang bermasalah
+    }
+  }
+  throw new Error(`download bukti gagal: ${lastErr?.cause?.code || lastErr?.message}`);
 }
 
 /** Lampiran bukti (dari disk) untuk dikirim bersama embed. */
 function proofAttachment(t) {
-  if (!t.proofFile || !fs.existsSync(t.proofFile)) return { files: [], url: null };
+  // Fallback: file gagal di-download ke VPS → pakai link gambar asli dari Discord.
+  if (!t.proofFile || !fs.existsSync(t.proofFile)) return { files: [], url: t.proofRemoteUrl || null };
   const name = `bukti-${t.id}${path.extname(t.proofFile)}`;
   return { files: [{ attachment: t.proofFile, name }], url: `attachment://${name}` };
 }
@@ -444,11 +464,16 @@ async function onCloseModal(interaction, ticketId) {
     return interaction.editReply('📸 Untuk status **Completed**, wajib upload **gambar bukti / testimoni**. Klik Tutup Ticket lagi.');
   }
 
+  if (upload && upload.contentType && !upload.contentType.startsWith('image/')) {
+    return interaction.editReply('❌ File bukti harus berupa **gambar** (PNG / JPG / WEBP).');
+  }
   try {
     t.proofFile = await saveProof(upload, t.id);
   } catch (err) {
-    console.error('[store] simpan bukti gagal:', err.message);
-    if (status === 'completed') return interaction.editReply('❌ Gambar bukti gagal diproses. Coba upload ulang (format gambar).');
+    // Tidak menggagalkan penutupan ticket: gambar tetap ditampilkan lewat link aslinya.
+    console.warn(`[store] ${err.message} → pakai link gambar asli.`);
+    t.proofFile = null;
+    t.proofRemoteUrl = upload?.url || null;
   }
 
   t.status = status;
@@ -647,7 +672,8 @@ async function handleInteraction(interaction) {
 
   try {
     if (interaction.isButton()) {
-      if (action === 'buy') await onBuy(interaction, arg);
+      if (action === 'buy') await onProductInfo(interaction, arg);
+      else if (action === 'order') await onBuy(interaction, arg);
       else if (action === 'confirm') await onConfirm(interaction, arg === 'yes');
       else if (action === 'close') await onCloseButton(interaction, arg);
       else if (action === 'testi') await onTestimonyButton(interaction, arg);
