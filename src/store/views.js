@@ -43,6 +43,14 @@ function buildPanel(guild, cfg) {
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null);
   if (p.bannerImage) embed.setImage(p.bannerImage);
 
+  // Total transaksi & rating (ter-update otomatis setiap ada transaksi / testimoni baru).
+  const s = state.stats;
+  const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
+  embed.addFields(
+    { name: '🧾 Total Transaksi', value: `\`${num(s.transactions)} transaksi\``, inline: true },
+    { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
+  );
+
   const buttons = (cfg.products || []).slice(0, 5).map((prod) => {
     const soon = prod.type !== 'robux';
     return new ButtonBuilder()
@@ -322,8 +330,12 @@ function buildTestimony(guild, cfg, t, buyer) {
       name: buyer ? `${buyer.displayName} (@${buyer.user.username})` : 'Pembeli',
       iconURL: buyer?.displayAvatarURL({ size: 128 }) || undefined,
     })
-    .setTitle(r ? `${STARS(r.rating)}  ${r.rating}/5` : '✅ Transaksi Berhasil')
-    .setDescription(r ? `>>> ${r.comment}` : '_Pembeli tidak memberikan ulasan._')
+    .setTitle(`🧾 Testimoni #${String(state.stats.testimonies).padStart(4, '0')}`)
+    .setDescription(
+      r
+        ? `**Rating:** ${STARS(r.rating)}  **${r.rating}/5**\n\n>>> ${r.comment}`
+        : '✅ **Transaksi Berhasil**\n\n_Pembeli tidak memberikan ulasan._',
+    )
     .addFields(
       { name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true },
       { name: '📦 Produk', value: `\`${t.productLabel}\``, inline: true },
@@ -333,7 +345,7 @@ function buildTestimony(guild, cfg, t, buyer) {
       { name: '🎫 Ticket', value: `\`${t.id}\``, inline: true },
     )
     .setThumbnail(buyer?.displayAvatarURL({ extension: 'png', size: 256 }) || t.roblox.avatar || null)
-    .setFooter(serverFooter(guild, `${storeName(cfg, guild)} • Testimoni #${state.stats.testimonies}`))
+    .setFooter(serverFooter(guild, storeName(cfg, guild)))
     .setTimestamp(new Date());
   if (t.proofUrl) embed.setImage(t.proofUrl);
   return { embeds: [embed], allowedMentions: { parse: [] } };
