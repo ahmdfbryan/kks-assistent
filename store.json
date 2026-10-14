@@ -13,7 +13,8 @@
     "Buka / tutup tiap produk terpisah: /store buka produk:<produk> dan /store tutup produk:<produk>. Setelah menambah produk baru di file ini, jalankan npm run deploy supaya muncul di pilihan.",
     "channels.log = channel LOG ORDER PUBLIK. Setiap ticket punya 1 pesan log yang ter-update otomatis (status, waktu proses, rating, progress). Catatan admin, nama admin, dan link ticket tidak ditampilkan.",
     "publicLog: showBuyer = tampilkan mention pembeli/penjual, maskRoblox = samarkan username Roblox (Bu******an), showPrice = tampilkan harga/nominal, showRekberItem = tampilkan objek transaksi rekber.",
-    "Robux Gamepass (type gamepass): rate = harga per 1 Robux Before Tax (harga gamepass), taxPercent = pajak Roblox (30), pendingDays = estimasi Robux masuk, minAmount / maxAmount = batas Robux DITERIMA (After Tax), examples = contoh harga di info produk, tutorial = isi tombol Tutorial, ticketNote = catatan penting di ticket, ticket.idPrefix / ticket.categoryName = ID & kategori ticket gamepass. Gamepass tidak memakai stock Robux."
+    "Robux Gamepass (type gamepass): rate = harga per 1 Robux Before Tax (harga gamepass), taxPercent = pajak Roblox (30), pendingDays = estimasi Robux masuk, minAmount / maxAmount = batas Robux DITERIMA (After Tax), examples = contoh harga di info produk, tutorial = isi tombol Tutorial, ticketNote = catatan penting di ticket, ticket.idPrefix / ticket.categoryName = ID & kategori ticket gamepass. Gamepass tidak memakai stock Robux.",
+    "How to Order: channels.howToOrder = channel panduan. Teks panel di howToOrder (title, description, flow, whyUs, pickText, paymentIntro, paymentMethods, faq, bannerImage). Panduan per produk di products[].howTo (intro, requirements, steps, tips, image). Kirim panel dengan /store how-to-order. Produk tanpa howTo tidak muncul di dropdown."
   ],
   "storeName": "Noname Store",
   "channels": {
@@ -21,7 +22,8 @@
     "testimoni": "1553667870221934654",
     "leaderboard": "1559751984012329080",
     "stock": "1553666054499344434",
-    "log": "1553667797383520347"
+    "log": "1553667797383520347",
+    "howToOrder": "1553666097620848700"
   },
   "publicLog": {
     "showBuyer": true,
@@ -57,6 +59,53 @@
     "description": "Ingin melakukan pembelian produk dari **{server}**?\n\nPilih tombol di bawah sesuai kebutuhanmu untuk membuka tiket pemesanan. Tim admin akan membantu proses selanjutnya. Pastikan kamu memilih kategori yang tepat agar pesanan dapat ditangani dengan lancar!",
     "bannerImage": ""
   },
+  "howToOrder": {
+    "title": "📖 How to Order | {server}",
+    "description": "Selamat datang di **{server}**! 👋\nBelanja di sini **mudah, cepat, dan aman** — semua transaksi diproses lewat **ticket pribadi** dan diawasi langsung oleh admin.\n\nBaru pertama kali order? Tenang, ikuti panduan di bawah ini. ✨",
+    "flow": "`🛒 Pilih Produk` ➜ `📝 Isi Form` ➜ `🎫 Ticket Dibuat` ➜ `💳 Bayar` ➜ `✅ Selesai` ➜ `⭐ Testimoni`",
+    "whyUs": [
+      "**Ticket pribadi** — hanya kamu & admin yang bisa melihat pesananmu",
+      "**Proses transparan** — setiap order tercatat di channel log",
+      "**Testimoni asli** dari pembeli, lengkap dengan bukti",
+      "**Admin ramah & responsif** siap membantu"
+    ],
+    "pickText": "Pilih produk di menu bawah untuk melihat **cara order lengkap**. 📌 Panduan hanya terlihat olehmu.",
+    "paymentIntro": "Semua pembayaran dilakukan **di dalam ticket** setelah ticket order dibuat. **Jangan** melakukan pembayaran di luar ticket atau ke pihak yang mengaku admin lewat DM.",
+    "paymentSteps": [
+      "Buat order dulu sampai **ticket pribadi** terbuka",
+      "Bayar sesuai **Total Bayar** yang tertera di ticket",
+      "Kirim **screenshot bukti pembayaran** di ticket",
+      "Tunggu admin **mengonfirmasi** & memproses pesananmu ✅"
+    ],
+    "paymentMethods": [
+      "QRIS (semua e-wallet & m-banking)",
+      "Transfer Bank",
+      "E-Wallet (DANA / OVO / GoPay / ShopeePay)"
+    ],
+    "faq": [
+      {
+        "q": "Berapa lama pesanan diproses?",
+        "a": "**Robux Visend** diproses setelah pembayaran dikonfirmasi admin. **Robux Gamepass** masuk ± **5 hari** setelah gamepass dibeli (masa pending Roblox)."
+      },
+      {
+        "q": "Apakah aman? Akun saya diminta password?",
+        "a": "**Tidak pernah.** {server} **tidak pernah** meminta password, kode 2FA, atau cookie akunmu. Kami hanya butuh **username Roblox**."
+      },
+      {
+        "q": "Kenapa tombol produk tidak bisa diklik?",
+        "a": "Produk sedang **TUTUP** atau stock habis. Pantau channel stock untuk info buka berikutnya."
+      },
+      {
+        "q": "Bisa batal / refund?",
+        "a": "Bisa, selama pesanan **belum diproses**. Hubungi admin di ticket kamu."
+      },
+      {
+        "q": "Saya tidak menerima DM dari bot?",
+        "a": "Aktifkan **Direct Messages** dari member server ini. Semua info pesanan tetap ada di ticket kamu."
+      }
+    ],
+    "bannerImage": ""
+  },
   "products": [
     {
       "id": "robux-visend",
@@ -72,7 +121,29 @@
       "rate": 145,
       "presets": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
       "minAmount": 100,
-      "maxAmount": 5000
+      "maxAmount": 5000,
+      "howTo": {
+        "intro": "Robux dikirim **langsung ke akun Roblox kamu** melalui Visend. Cepat, praktis, tanpa perlu membuat gamepass.",
+        "requirements": [
+          "Akun Roblox **terverifikasi 18+**",
+          "**Authenticator (2-Step Verification)** aktif",
+          "Akun **tidak sedang dibatasi** menerima Robux",
+          "**Username** Roblox (bukan display name)"
+        ],
+        "steps": [
+          "Buka channel **Store**, klik tombol **💎 Robux Visend**",
+          "Baca info & **📌 Syarat Pembelian**, lalu klik **🛒 Beli Sekarang**",
+          "Masukkan **username Roblox**, lalu konfirmasi akunmu",
+          "Pilih **jumlah Robux** (atau ✏️ Jumlah Lain)",
+          "**Ticket pribadi** otomatis dibuat — bayar sesuai **Total Bayar** & kirim bukti",
+          "Admin memproses pesanan & mengirim Robux ke akunmu 🚀",
+          "Beri **rating & testimoni** ⭐"
+        ],
+        "tips": [
+          "Pastikan semua syarat terpenuhi **sebelum** order agar tidak tertunda.",
+          "Jumlah melebihi stock tidak bisa dipesan — cek sisa stock dulu."
+        ]
+      }
     },
     {
       "id": "robux-gamepass",
@@ -116,6 +187,27 @@
       "ticket": {
         "categoryName": "🎟️ TICKET GAMEPASS",
         "idPrefix": "GP"
+      },
+      "howTo": {
+        "intro": "Kamu membuat **gamepass** dengan harga tertentu, lalu **{server}** yang membelinya. Robux masuk ke akunmu setelah masa *pending* Roblox (± 5 hari).",
+        "requirements": [
+          "**Gamepass** yang sudah dibuat & dalam status **On Sale**",
+          "Harga gamepass sesuai **Before Tax** (cek pakai 🧮 Tax Calculator)",
+          "**Link gamepass** & **username Roblox** pemilik gamepass"
+        ],
+        "steps": [
+          "Buat **gamepass** di Roblox Studio / Creator Hub",
+          "Hitung harga pakai **🧮 Tax Calculator**, lalu set harga gamepass (**Before Tax**)",
+          "Buka channel **Store**, klik **🎟️ Robux Gamepass** ➜ **🛒 Order Sekarang**",
+          "Isi form: **username Roblox**, **link gamepass**, & **harga gamepass**",
+          "Bot mengecek gamepass otomatis ✅, lalu **ticket pribadi** dibuat",
+          "Bayar sesuai **Total Bayar** di ticket & kirim bukti",
+          "Admin membeli gamepass — Robux masuk dalam **± 5 hari** ✨"
+        ],
+        "tips": [
+          "**Jangan ubah harga / Off Sale / hapus** gamepass sebelum admin selesai membeli.",
+          "Contoh: ingin terima **1.000 Robux** ➜ set gamepass **1.429 Robux**."
+        ]
       }
     },
     {
@@ -151,7 +243,28 @@
           "upTo": null,
           "percent": 1
         }
-      ]
+      ],
+      "howTo": {
+        "intro": "**Rekber (Rekening Bersama)** — dana pembeli ditahan admin dan baru diteruskan ke penjual setelah barang / jasa **benar-benar diterima**. 🛡️",
+        "requirements": [
+          "**Username Discord** pihak lawan transaksi (harus ada di server ini)",
+          "**Kesepakatan** harga & detail barang / jasa sudah jelas",
+          "**Nominal** transaksi sesuai batas rekber"
+        ],
+        "steps": [
+          "Buka channel **Store**, klik **🤝 Rekber** ➜ **Buat Ticket Rekber**",
+          "Isi form: **pihak lawan**, **peranmu**, **objek**, **nominal**, & detail",
+          "Cek ringkasan + fee, lalu **buat ticket** — kedua pihak masuk ticket",
+          "Pihak lawan klik **🤝 Setujui Transaksi**",
+          "Pembeli **transfer ke admin**, admin klik **💰 Konfirmasi Dana**",
+          "Penjual kirim barang ➜ pembeli klik **📦 Barang Sudah Diterima**",
+          "Admin **mencairkan dana** ke penjual & menutup ticket ✅"
+        ],
+        "tips": [
+          "**Jangan pernah** transfer langsung ke penjual — semua dana wajib lewat admin.",
+          "Simpan semua bukti chat & pengiriman di dalam ticket."
+        ]
+      }
     },
     {
       "id": "coming-soon",
