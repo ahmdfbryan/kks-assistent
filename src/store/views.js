@@ -703,6 +703,110 @@ function buildRekberTestimony(guild, cfg, t, buyer) {
   return { embeds: [embed], allowedMentions: { parse: [] } };
 }
 
+
+/**
+ * Embed pemberitahuan setiap langkah rekber (dikirim di dalam ticket).
+ * step: 'invite' | 'agreed' | 'funded' | 'received'
+ */
+function buildRekberStep(guild, cfg, t, step) {
+  const name = storeName(cfg, guild);
+  const e = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setFooter(serverFooter(guild, `${name} • Rekber ${t.id}`))
+    .setTimestamp(new Date());
+  let ping = [];
+
+  if (step === 'invite') {
+    const role = t.partnerId === t.buyerId ? '🛒 Pembeli' : '🏷️ Penjual';
+    ping = [t.partnerId];
+    e.setTitle('📨 Undangan Transaksi Rekber')
+      .setDescription(
+        `Halo <@${t.partnerId}>, kamu diundang oleh <@${t.userId}> untuk melakukan transaksi melalui layanan **Rekber ${name}**. 🛡️\n\n` +
+          'Mohon periksa kembali seluruh detail transaksi di atas dengan teliti. Apabila semuanya sudah **sesuai kesepakatan**, ' +
+          'klik **🤝 Setujui Transaksi** untuk memulai proses rekber.',
+      )
+      .addFields(
+        { name: '🎭 Peranmu', value: `\`${role.replace(/^\S+\s/, '')}\``, inline: true },
+        { name: '📦 Objek', value: `\`${t.item.slice(0, 80)}\``, inline: true },
+        { name: '💵 Nominal', value: `\`${rupiah(t.nominal)}\``, inline: true },
+        { name: '⏭️ Langkah Selanjutnya', value: `<@${t.partnerId}> menyetujui transaksi.` },
+      );
+  } else if (step === 'agreed') {
+    ping = [t.buyerId];
+    e.setTitle('🤝 Transaksi Resmi Disetujui')
+      .setDescription(
+        `<@${t.partnerId}> telah **menyetujui** transaksi ini. Kesepakatan kini **resmi berjalan** dan diawasi penuh oleh **${name}**. ✨`,
+      )
+      .addFields(
+        { name: '📍 Progress', value: '`✅ Disetujui` ➜ `⏳ Pembayaran` ➜ `▫️ Pengiriman` ➜ `▫️ Pencairan`' },
+        {
+          name: '💳 Langkah Selanjutnya — Pembeli',
+          value:
+            `<@${t.buyerId}>, silakan transfer sebesar **${rupiah(t.buyerPays)}** ke rekening admin sesuai instruksi, ` +
+            'lalu kirimkan **bukti transfer** di ticket ini.',
+        },
+        { name: '⚠️ Penting', value: '**Jangan** mentransfer dana langsung ke penjual. Seluruh dana wajib melalui admin.' },
+      );
+  } else if (step === 'funded') {
+    ping = [t.sellerId, t.buyerId];
+    e.setTitle('💰 Dana Telah Diamankan')
+      .setDescription(
+        `Admin <@${t.stage.fundedBy}> telah mengonfirmasi bahwa dana sebesar **${rupiah(t.buyerPays)}** dari <@${t.buyerId}> ` +
+          `**sudah diterima** dan kini **ditahan dengan aman** oleh **${name}**. 🛡️`,
+      )
+      .addFields(
+        { name: '📍 Progress', value: '`✅ Disetujui` ➜ `✅ Pembayaran` ➜ `⏳ Pengiriman` ➜ `▫️ Pencairan`' },
+        {
+          name: '📦 Langkah Selanjutnya — Penjual',
+          value: `<@${t.sellerId}>, silakan kirimkan barang / jasa kepada pembeli sesuai kesepakatan dan lampirkan **bukti pengiriman** di ticket ini.`,
+        },
+        {
+          name: '🔔 Untuk Pembeli',
+          value: `<@${t.buyerId}>, klik **📦 Barang Sudah Diterima** hanya setelah barang / jasa **benar-benar kamu terima** dan sesuai kesepakatan.`,
+        },
+      );
+  } else if (step === 'received') {
+    ping = [t.sellerId];
+    e.setColor(color(cfg, 'open', 0x2ecc71))
+      .setTitle('📦 Barang Telah Diterima')
+      .setDescription(
+        `<@${t.buyerId}> telah mengonfirmasi bahwa barang / jasa **diterima dengan baik** dan sesuai kesepakatan. 🎉`,
+      )
+      .addFields(
+        { name: '📍 Progress', value: '`✅ Disetujui` ➜ `✅ Pembayaran` ➜ `✅ Pengiriman` ➜ `⏳ Pencairan`' },
+        {
+          name: '🏦 Langkah Terakhir — Admin',
+          value: `Admin akan segera mencairkan dana sebesar **${rupiah(t.sellerGets)}** kepada <@${t.sellerId}>, lalu menutup ticket ini.`,
+        },
+      );
+  }
+  return {
+    content: ping.map((id) => `<@${id}>`).join(' ') || undefined,
+    embeds: [e],
+    allowedMentions: { users: ping },
+  };
+}
+
+/** Ucapan terima kasih setelah pembeli memberi testimoni. */
+function buildTestimonyThanks(guild, cfg, t, rating, seconds) {
+  const uid = testimonyUserId(t);
+  return {
+    embeds: [
+      new EmbedBuilder()
+        .setColor(color(cfg, 'brand', 0x3498db))
+        .setTitle('💜 Terima Kasih atas Testimonimu!')
+        .setDescription(
+          `<@${uid}>, rating ${STARS(rating)} **${rating}/5** darimu sudah kami terima dan kini tampil di channel testimoni.\n\n` +
+            `Dukunganmu sangat berarti bagi **${storeName(cfg, guild)}**. Sampai jumpa di transaksi berikutnya! ✨`,
+        )
+        .addFields({ name: '🔒 Ticket Ditutup Otomatis', value: `Channel ini akan dihapus dalam **${seconds} detik**.` })
+        .setFooter(serverFooter(guild, storeName(cfg, guild)))
+        .setTimestamp(new Date()),
+    ],
+    allowedMentions: { parse: [] },
+  };
+}
+
 module.exports = {
   STATUS_LABEL,
   REKBER_STATUS,
@@ -712,6 +816,8 @@ module.exports = {
   buildRekberInfo,
   buildRekberConfirm,
   buildRekberDmCreated,
+  buildRekberStep,
+  buildTestimonyThanks,
   rateOf,
   buildPanel,
   buildProductInfo,
