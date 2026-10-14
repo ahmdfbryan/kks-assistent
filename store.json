@@ -12,7 +12,7 @@
     "Rekber: minNominal / maxNominal = batas nominal, feePaidBy = 'pembeli' atau 'penjual', feeTiers = tabel fee (upTo = batas nominal, fee = Rp tetap, percent = persen; upTo null = di atas tier terakhir). guide = alur yang tampil di ticket rekber.",
     "Buka / tutup tiap produk terpisah: /store buka produk:<produk> dan /store tutup produk:<produk>. Setelah menambah produk baru di file ini, jalankan npm run deploy supaya muncul di pilihan.",
     "channels.log = channel LOG ORDER PUBLIK. Setiap ticket punya 1 pesan log yang ter-update otomatis (status, waktu proses, rating, progress). Catatan admin, nama admin, dan link ticket tidak ditampilkan.",
-    "publicLog: showBuyer = tampilkan mention pembeli/penjual, maskRoblox = samarkan username Roblox (Bu******an), showPrice = tampilkan harga/nominal, showProof = tampilkan gambar bukti saat selesai, showRekberItem = tampilkan objek transaksi rekber."
+    "publicLog: showBuyer = tampilkan mention pembeli/penjual, maskRoblox = samarkan username Roblox (Bu******an), showPrice = tampilkan harga/nominal, showRekberItem = tampilkan objek transaksi rekber."
   ],
   "storeName": "Noname Store",
   "channels": {
@@ -26,7 +26,6 @@
     "showBuyer": true,
     "maskRoblox": true,
     "showPrice": true,
-    "showProof": true,
     "showRekberItem": false
   },
   "ticket": {
