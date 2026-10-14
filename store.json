@@ -16,7 +16,8 @@
     "Robux Gamepass (type gamepass): rate = harga per 1 Robux Before Tax (harga gamepass), taxPercent = pajak Roblox (30), pendingDays = estimasi Robux masuk, minAmount / maxAmount = batas Robux DITERIMA (After Tax), examples = contoh harga di info produk, tutorial = isi tombol Tutorial, ticketNote = catatan penting di ticket, ticket.idPrefix / ticket.categoryName = ID & kategori ticket gamepass. Gamepass tidak memakai stock Robux.",
     "How to Order: channels.howToOrder = channel panduan. Teks panel di howToOrder (title, description, flow, whyUs, pickText, paymentIntro, paymentMethods, faq, bannerImage). Panduan per produk di products[].howTo (intro, requirements, steps, tips, image). Kirim panel dengan /store how-to-order. Produk tanpa howTo tidak muncul di dropdown.",
     "Catalog: channels.catalog = channel katalog. Teks header di catalog (title, description, bannerImage). Kartu tiap produk di products[].catalog (tagline, highlights, priceList = daftar jumlah Robux di tabel harga, thumbnail, image = banner kartu). Kirim dengan /store catalog — kirim ulang setelah menambah / menghapus produk.",
-    "Canva Pro (type canva): plans = paket (id, label, price, days). Stock = jumlah slot email, atur dengan /store stok-set produk:Canva Pro (habis → tutup otomatis, slot kembali → buka otomatis). remindDays = DM pengingat ke pembeli sebelum masa aktif habis; saat habis admin yang menutup ticket mendapat DM untuk mengeluarkan email dari team. ticket.idPrefix / categoryName = ID & kategori ticket Canva."
+    "Canva Pro (type canva): plans = paket (id, label, price, days). Stock = jumlah slot email, atur dengan /store stok-set produk:Canva Pro (habis → tutup otomatis, slot kembali → buka otomatis). remindDays = DM pengingat ke pembeli sebelum masa aktif habis; saat habis admin yang menutup ticket mendapat DM untuk mengeluarkan email dari team. ticket.idPrefix / categoryName = ID & kategori ticket Canva.",
+    "Pembayaran: payment.methods = daftar rekening (bank, number, emoji, holder opsional = atas nama per rekening). payment.accountName = atas nama untuk semua rekening (opsional). Tampil di semua ticket + tombol 💳 Konfirmasi Pembayaran & 📋 Salin No. Rekening. Admin konfirmasi dengan tombol ✅ Dana Masuk di bukti pembayaran atau /danamasuk [nominal] [catatan] di channel ticket."
   ],
   "storeName": "Noname Store",
   "channels": {
@@ -76,14 +77,18 @@
     "paymentIntro": "Semua pembayaran dilakukan **di dalam ticket** setelah ticket order dibuat. **Jangan** melakukan pembayaran di luar ticket atau ke pihak yang mengaku admin lewat DM.",
     "paymentSteps": [
       "Buat order dulu sampai **ticket pribadi** terbuka",
-      "Bayar sesuai **Total Bayar** yang tertera di ticket",
-      "Kirim **screenshot bukti pembayaran** di ticket",
-      "Tunggu admin **mengonfirmasi** & memproses pesananmu ✅"
+      "Transfer **tepat** sesuai **Total Bayar** ke salah satu rekening",
+      "Klik **💳 Konfirmasi Pembayaran** di ticket & upload **bukti transfer**",
+      "Tunggu admin memverifikasi — kamu akan mendapat notifikasi **💰 Dana Masuk** ✅"
     ],
     "paymentMethods": [
-      "QRIS (semua e-wallet & m-banking)",
-      "Transfer Bank",
-      "E-Wallet (DANA / OVO / GoPay / ShopeePay)"
+      "**BRI** — `222401016335506`",
+      "**BCA** — `7985504946`",
+      "**BNI** — `1236190154`",
+      "**BSI** — `7178340349`",
+      "**JAGO** — `104684248297`",
+      "**MANDIRI** — `1050017422167`",
+      "**SEA BANK** — `901591266000`"
     ],
     "faq": [
       {
@@ -339,7 +344,7 @@
         "description": "Demi keamanan dan kenyamanan kedua belah pihak, mohon perhatikan ketentuan berikut **sebelum membuat transaksi rekber**:\n\n✅ **Kesepakatan Jelas**\n┗ Harga, objek transaksi, dan detail barang / jasa sudah disepakati kedua pihak sebelum ticket dibuat.\n\n✅ **Transfer Hanya ke Admin**\n┗ Pembeli **wajib** mentransfer dana ke rekening admin yang tertera di ticket — **bukan** langsung ke penjual.\n\n✅ **Bukti Lengkap**\n┗ Setiap pembayaran dan pengiriman barang wajib disertai bukti (screenshot) di dalam ticket.\n\n✅ **Konfirmasi Penerimaan**\n┗ Dana baru dicairkan ke penjual setelah pembeli mengonfirmasi barang / jasa **sudah diterima** sesuai kesepakatan.\n\n✅ **Fee Layanan**\n┗ Fee rekber dibayarkan sesuai tabel fee dan **tidak dapat dikembalikan** apabila transaksi dibatalkan setelah dana diterima admin.\n\n⚠️ **Penting:** Segala bentuk transaksi di luar ticket rekber **bukan tanggung jawab {server}**. Dengan membuat ticket rekber, kedua pihak dianggap telah membaca dan menyetujui seluruh ketentuan ini."
       },
       "guideTitle": "🛡️ Alur Transaksi Rekber",
-      "guide": "`1` **Pihak lawan** klik **🤝 Setujui Transaksi** setelah memeriksa detail.\n`2` **Pembeli** transfer sesuai **Transfer Pembeli ke Admin**, lalu kirim bukti di ticket ini.\n`3` **Admin** mengecek & klik **💰 Konfirmasi Dana**.\n`4` **Penjual** mengirim barang / jasa ke pembeli.\n`5` **Pembeli** klik **📦 Barang Sudah Diterima** setelah barang sesuai.\n`6` **Admin** mencairkan dana ke penjual & menutup ticket.\n\n⚠️ Jangan pernah transfer langsung ke penjual. Semua dana **wajib** melalui admin.",
+      "guide": "`1` **Pihak lawan** klik **🤝 Setujui Transaksi** setelah memeriksa detail.\n`2` **Pembeli** transfer sesuai **Transfer Pembeli ke Admin**, lalu klik **💳 Konfirmasi Pembayaran** & upload bukti.\n`3` **Admin** mengecek & mengonfirmasi **💰 Dana Masuk**.\n`4` **Penjual** mengirim barang / jasa ke pembeli.\n`5` **Pembeli** klik **📦 Barang Sudah Diterima** setelah barang sesuai.\n`6` **Admin** mencairkan dana ke penjual & menutup ticket.\n\n⚠️ Jangan pernah transfer langsung ke penjual. Semua dana **wajib** melalui admin.",
       "minNominal": 10000,
       "maxNominal": 10000000,
       "feePaidBy": "pembeli",
@@ -406,8 +411,46 @@
     }
   ],
   "payment": {
-    "title": "💳 Cara Pembayaran",
-    "description": "1. Lakukan pembayaran sesuai **Total Bayar** di atas.\n2. Kirim **bukti transfer** di ticket ini.\n3. Tunggu admin mengonfirmasi & memproses pesananmu.\n\n⚠️ Jangan melakukan pembayaran di luar ticket ini.",
+    "title": "💳 Pembayaran",
+    "accountName": "",
+    "methods": [
+      {
+        "bank": "BRI",
+        "number": "222401016335506",
+        "emoji": "🏦"
+      },
+      {
+        "bank": "BCA",
+        "number": "7985504946",
+        "emoji": "🏦"
+      },
+      {
+        "bank": "BNI",
+        "number": "1236190154",
+        "emoji": "🏦"
+      },
+      {
+        "bank": "BSI",
+        "number": "7178340349",
+        "emoji": "🏦"
+      },
+      {
+        "bank": "JAGO",
+        "number": "104684248297",
+        "emoji": "🏦"
+      },
+      {
+        "bank": "MANDIRI",
+        "number": "1050017422167",
+        "emoji": "🏦"
+      },
+      {
+        "bank": "SEA BANK",
+        "number": "901591266000",
+        "emoji": "🏦"
+      }
+    ],
+    "description": "`1` Transfer **tepat** sesuai nominal di atas ke salah satu rekening.\n`2` Klik **💳 Konfirmasi Pembayaran** & upload **bukti transfer**.\n`3` Tunggu admin memverifikasi — kamu akan dapat notifikasi **💰 Dana Masuk**.\n\n⚠️ Jangan melakukan pembayaran di luar ticket ini.",
     "image": ""
   }
 }
