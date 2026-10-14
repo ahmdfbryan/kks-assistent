@@ -9,6 +9,7 @@ const {
   TextInputStyle,
   LabelBuilder,
   StringSelectMenuBuilder,
+  UserSelectMenuBuilder,
   FileUploadBuilder,
   MessageFlags,
   PermissionFlagsBits,
@@ -17,7 +18,7 @@ const {
   Events,
 } = require('discord.js');
 const { loadConfig, isId, rupiah, num, getProduct } = require('./config');
-const { state, save, activeTicketOf, nextTicketId } = require('./state');
+const { state, save, productState, isProductOpen, kindOf, activeTicketOf, nextTicketId } = require('./state');
 const { lookupRobloxUser } = require('./roblox');
 const V = require('./views');
 
@@ -82,32 +83,51 @@ async function announce(guild, kind, extra = {}, ping = false) {
 }
 
 /**
- * Buka / tutup toko.
- * auto = true → ditutup otomatis karena stock habis. Toko yang tutup otomatis akan BUKA LAGI
- * otomatis saat stock kembali (cancel / refund / stock ditambah). Toko yang ditutup manual
+ * Buka / tutup satu atau beberapa produk sekaligus (1 pengumuman gabungan).
+ * auto = true → ditutup otomatis karena stock habis. Produk yang tutup otomatis akan BUKA LAGI
+ * otomatis saat stock kembali (cancel / refund / stock ditambah). Produk yang ditutup manual
  * lewat /store tutup tetap tutup sampai admin membukanya.
  */
-async function setStoreOpen(guild, open, reason, { auto = false } = {}) {
+async function setProductsOpen(guild, products, open, { reason, auto = false } = {}) {
   const cfg = loadConfig();
-  state.open = open;
-  state.autoClosed = !open && auto;
+  for (const p of products) {
+    const ps = productState(p.id);
+    ps.open = open;
+    ps.autoClosed = !open && auto;
+  }
   save();
   refreshPanel();
-  await announce(guild, open ? 'open' : 'close', { reason }, Boolean(cfg?.pingEveryone?.[open ? 'open' : 'close']));
+  if (products.length) {
+    await announce(guild, open ? 'open' : 'close', { reason, products }, Boolean(cfg?.pingEveryone?.[open ? 'open' : 'close']));
+  }
 }
 
-/** Stock kembali tersedia & toko sebelumnya tutup karena stock habis → buka lagi otomatis. */
+const robuxProduct = (cfg) => (cfg?.products || []).find((p) => p.type === 'robux') || null;
+
+/** Stock kembali tersedia & Robux sebelumnya tutup karena stock habis → buka lagi otomatis. */
 async function reopenIfAutoClosed(guild) {
-  if (!state.open && state.autoClosed && state.stock > 0) {
-    await setStoreOpen(guild, true);
+  const product = robuxProduct(loadConfig());
+  if (!product) return false;
+  const ps = productState(product.id);
+  if (!ps.open && ps.autoClosed && state.stock > 0) {
+    await setProductsOpen(guild, [product], true);
+    return true;
+  }
+  return false;
+}
+
+/** Stock habis & Robux masih buka → tutup otomatis. */
+async function closeIfSoldOut(guild, reason) {
+  const product = robuxProduct(loadConfig());
+  if (product && state.stock <= 0 && productState(product.id).open) {
+    await setProductsOpen(guild, [product], false, { reason, auto: true });
     return true;
   }
   return false;
 }
 
 // ══════════════════════ Kategori ticket (maks 50 channel / kategori) ══════════════════════
-async function getTicketCategory(guild, cfg) {
-  const base = cfg.ticket?.categoryName || '🎫 TICKET ORDER';
+async function getTicketCategory(guild, cfg, base = cfg.ticket?.categoryName || '🎫 TICKET ORDER') {
   const max = Math.min(Number(cfg.ticket?.maxPerCategory) || 50, 50);
   await guild.channels.fetch();
   const categories = guild.channels.cache
@@ -130,6 +150,7 @@ async function getTicketCategory(guild, cfg) {
 async function onProductInfo(interaction, productId) {
   const cfg = loadConfig();
   const product = getProduct(cfg, productId);
+  if (product?.type === 'rekber') return interaction.reply({ ...V.buildRekberInfo(interaction.guild, cfg, product), flags: EPH });
   if (!product || product.type !== 'robux') {
     return interaction.reply({ content: '🔒 Produk ini **Coming Soon** — nantikan ya!', flags: EPH });
   }
@@ -148,12 +169,13 @@ async function onTerms(interaction, productId) {
 async function onBuy(interaction, productId) {
   const cfg = loadConfig();
   const product = getProduct(cfg, productId);
+  if (product?.type === 'rekber') return onRekberStart(interaction, product);
   if (!product || product.type !== 'robux') {
     return interaction.reply({ content: '🔒 Produk ini **Coming Soon** — nantikan ya!', flags: EPH });
   }
-  if (!state.open || state.stock <= 0) {
+  if (!isProductOpen(product)) {
     refreshPanel();
-    return interaction.reply({ content: '🔴 Toko sedang **TUTUP**. Pantau channel stock untuk info buka berikutnya.', flags: EPH });
+    return interaction.reply({ content: `🔴 **${product.label}** sedang **TUTUP**. Pantau channel stock untuk info buka berikutnya.`, flags: EPH });
   }
   const active = activeTicketOf({ userId: interaction.user.id });
   if (active) {
@@ -221,11 +243,11 @@ async function onConfirm(interaction, yes) {
   if (!session) {
     return interaction.update({ content: '⌛ Sesi sudah berakhir. Silakan klik tombol produk lagi.', embeds: [], components: [] });
   }
-  if (!state.open || state.stock <= 0) {
-    return interaction.update({ content: '🔴 Maaf, toko baru saja **TUTUP**.', embeds: [], components: [] });
-  }
   const cfg = loadConfig();
   const product = getProduct(cfg, session.productId);
+  if (!isProductOpen(product)) {
+    return interaction.update({ content: `🔴 Maaf, **${product?.label || 'produk ini'}** baru saja **TUTUP**.`, embeds: [], components: [] });
+  }
   return interaction.update({ content: null, ...V.buildAmountPicker(cfg, product, session.roblox) });
 }
 
@@ -280,7 +302,7 @@ async function createOrder(interaction, productId, amount) {
   if (!Number.isInteger(amount) || amount < min || amount > max) {
     return fail(`❌ Jumlah tidak valid. Masukkan angka **${num(min)} – ${num(max)}** Robux.`, true);
   }
-  if (!state.open || state.stock <= 0) return fail('🔴 Maaf, toko sedang **TUTUP** atau stock sudah habis.');
+  if (!isProductOpen(product)) return fail(`🔴 Maaf, **${product.label}** sedang **TUTUP** atau stock sudah habis.`);
   if (amount > state.stock) {
     return fail(
       `⚠️ **Stock tidak mencukupi.** Sisa stock saat ini hanya **${num(state.stock)} Robux**.\nSilakan pilih jumlah **maksimal ${num(state.stock)} Robux**.`,
@@ -398,9 +420,297 @@ async function createOrder(interaction, productId, amount) {
   }
 
   refreshPanel();
-  if (state.stock <= 0 && state.open) {
-    await setStoreOpen(guild, false, `📦 **Stock Robux hari ini sudah HABIS!** Toko otomatis ditutup.`, { auto: true });
+  await closeIfSoldOut(guild, `📦 **Stock Robux hari ini sudah HABIS!** ${product.label} otomatis ditutup.`);
+}
+
+// ══════════════════════ REKBER (rekening bersama) ══════════════════════
+const rekberSessions = new Map(); // userId → { draft, expires }
+
+/** Klik "Buat Ticket Rekber" → form isian rekber. */
+async function onRekberStart(interaction, product) {
+  if (!isProductOpen(product)) {
+    refreshPanel();
+    return interaction.reply({ content: `🔴 Layanan **${product.label}** sedang **TUTUP**.`, flags: EPH });
   }
+  const active = activeTicketOf({ userId: interaction.user.id, kind: 'rekber' });
+  if (active) {
+    return interaction.reply({
+      content: `⚠️ Kamu masih punya transaksi rekber yang sedang berjalan: <#${active.channelId}> (\`${active.id}\`).\nSelesaikan transaksi itu dulu sebelum membuat rekber baru.`,
+      flags: EPH,
+    });
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId(`store:rbmodal:${product.id}`)
+    .setTitle('Buat Transaksi Rekber')
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Pihak Lawan Transaksi')
+        .setDescription('Ketik username Discord pihak yang bertransaksi denganmu.')
+        .setUserSelectMenuComponent(
+          new UserSelectMenuBuilder().setCustomId('partner').setPlaceholder('🔍 Cari username Discord...').setMinValues(1).setMaxValues(1).setRequired(true),
+        ),
+      new LabelBuilder()
+        .setLabel('Peran Kamu')
+        .setStringSelectMenuComponent(
+          new StringSelectMenuBuilder()
+            .setCustomId('role')
+            .setPlaceholder('Pilih peranmu dalam transaksi...')
+            .setRequired(true)
+            .addOptions(
+              { label: 'Saya Pembeli', description: 'Saya yang membayar & menerima barang / jasa', value: 'buyer', emoji: '🛒' },
+              { label: 'Saya Penjual', description: 'Saya yang mengirim barang / jasa & menerima dana', value: 'seller', emoji: '🏷️' },
+            ),
+        ),
+      new LabelBuilder()
+        .setLabel('Transaksi Untuk Apa?')
+        .setDescription('Barang / jasa yang diperjualbelikan.')
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId('item')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('contoh: Akun Roblox / Jasa joki / Item game')
+            .setMinLength(3)
+            .setMaxLength(100)
+            .setRequired(true),
+        ),
+      new LabelBuilder()
+        .setLabel('Nominal Transaksi (Rp)')
+        .setDescription(`Minimal ${rupiah(product.minNominal || 0)} • maksimal ${rupiah(product.maxNominal || 0)}`)
+        .setTextInputComponent(
+          new TextInputBuilder().setCustomId('nominal').setStyle(TextInputStyle.Short).setPlaceholder('contoh: 150000').setMaxLength(12).setRequired(true),
+        ),
+      new LabelBuilder()
+        .setLabel('Detail Kesepakatan (opsional)')
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId('detail')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('contoh: Akun level 50, include 3 gamepass, garansi 1x24 jam')
+            .setMaxLength(500)
+            .setRequired(false),
+        ),
+    );
+  return interaction.showModal(modal);
+}
+
+/** Form rekber dikirim → validasi → tampilkan ringkasan untuk dikonfirmasi. */
+async function onRekberModal(interaction, productId) {
+  await interaction.deferReply({ flags: EPH });
+  const cfg = loadConfig();
+  const product = getProduct(cfg, productId);
+  if (!product || product.type !== 'rekber') return interaction.editReply('❌ Layanan rekber tidak ditemukan.');
+  if (!isProductOpen(product)) return interaction.editReply(`🔴 Layanan **${product.label}** sedang **TUTUP**.`);
+
+  const partner = interaction.fields.getSelectedUsers('partner')?.first?.();
+  const role = interaction.fields.getStringSelectValues('role')?.[0];
+  const item = interaction.fields.getTextInputValue('item').trim();
+  const detail = (interaction.fields.getTextInputValue('detail') || '').trim();
+  const nominal = Number(interaction.fields.getTextInputValue('nominal').replace(/[^\d]/g, ''));
+
+  if (!partner) return interaction.editReply('❌ Pilih pihak lawan transaksi.');
+  if (partner.id === interaction.user.id) return interaction.editReply('❌ Pihak lawan transaksi tidak boleh dirimu sendiri.');
+  if (partner.bot) return interaction.editReply('❌ Pihak lawan transaksi tidak boleh bot.');
+  const partnerMember = await interaction.guild.members.fetch(partner.id).catch(() => null);
+  if (!partnerMember) return interaction.editReply(`❌ ${partner} tidak ada di server ini.`);
+  const min = Number(product.minNominal) || 0;
+  const max = Number(product.maxNominal) || Infinity;
+  if (!Number.isFinite(nominal) || nominal < min || nominal > max) {
+    return interaction.editReply(`❌ Nominal tidak valid. Masukkan angka **${rupiah(min)} – ${rupiah(max)}**.`);
+  }
+  for (const uid of [interaction.user.id, partner.id]) {
+    const active = activeTicketOf({ userId: uid, kind: 'rekber' });
+    if (active) {
+      return interaction.editReply(
+        `⚠️ <@${uid}> masih punya transaksi rekber yang sedang berjalan (\`${active.id}\`). Selesaikan dulu sebelum membuat rekber baru.`,
+      );
+    }
+  }
+
+  const { fee, buyerPays, sellerGets, byBuyer } = V.rekberFee(product, nominal);
+  if (sellerGets <= 0) return interaction.editReply('❌ Nominal terlalu kecil dibanding fee rekber.');
+  const draft = {
+    productId: product.id,
+    partnerId: partner.id,
+    buyerId: role === 'seller' ? partner.id : interaction.user.id,
+    sellerId: role === 'seller' ? interaction.user.id : partner.id,
+    item,
+    detail: detail || null,
+    nominal,
+    fee,
+    buyerPays,
+    sellerGets,
+    feeByBuyer: byBuyer,
+  };
+  rekberSessions.set(interaction.user.id, { draft, expires: Date.now() + SESSION_MS });
+  return interaction.editReply(V.buildRekberConfirm(interaction.guild, cfg, draft));
+}
+
+/** Konfirmasi ringkasan → buat ticket rekber untuk kedua pihak. */
+async function onRekberConfirm(interaction, yes) {
+  const sess = rekberSessions.get(interaction.user.id);
+  rekberSessions.delete(interaction.user.id);
+  if (!yes) return interaction.update({ content: '✖️ Transaksi rekber dibatalkan.', embeds: [], components: [] });
+  if (!sess || sess.expires < Date.now()) {
+    return interaction.update({ content: '⌛ Sesi sudah berakhir. Silakan klik tombol Rekber lagi.', embeds: [], components: [] });
+  }
+  const cfg = loadConfig();
+  const guild = interaction.guild;
+  const d = sess.draft;
+  const product = getProduct(cfg, d.productId);
+  if (!isProductOpen(product)) return interaction.update({ content: '🔴 Layanan rekber baru saja **TUTUP**.', embeds: [], components: [] });
+  for (const uid of [interaction.user.id, d.partnerId]) {
+    if (activeTicketOf({ userId: uid, kind: 'rekber' })) {
+      return interaction.update({ content: `⚠️ <@${uid}> masih punya transaksi rekber yang sedang berjalan.`, embeds: [], components: [] });
+    }
+  }
+
+  const rc = cfg.rekberTicket || {};
+  const id = nextTicketId(rc.idPrefix || 'RB', 'rekberSeq');
+  const ticket = {
+    id,
+    kind: 'rekber',
+    guildId: guild.id,
+    userId: interaction.user.id,
+    ...d,
+    productLabel: product.label,
+    stage: { agreed: false, funded: false, received: false },
+    channelId: null,
+    messageId: null,
+    status: 'open',
+    createdAt: Date.now(),
+  };
+  state.tickets[id] = ticket;
+  save();
+  await interaction.update({ content: '⏳ Sedang membuat ticket rekber...', embeds: [], components: [] });
+
+  try {
+    const category = await getTicketCategory(guild, cfg, rc.categoryName || '🤝 TICKET REKBER');
+    const member = [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ReadMessageHistory,
+      PermissionFlagsBits.AttachFiles,
+      PermissionFlagsBits.EmbedLinks,
+    ];
+    const overwrites = [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: ticket.buyerId, allow: member },
+      { id: ticket.sellerId, allow: member },
+      { id: guild.members.me.id, allow: [...member, PermissionFlagsBits.ManageChannels] },
+    ];
+    if (isId(cfg.ticket?.staffRoleId)) {
+      overwrites.push({ id: cfg.ticket.staffRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
+    }
+    const slug = interaction.user.username.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+    const channel = await guild.channels.create({
+      name: `🤝・${id.toLowerCase()}-${slug}`,
+      type: ChannelType.GuildText,
+      parent: category.id,
+      topic: `Rekber ${id} • ${d.item} • ${rupiah(d.nominal)}`,
+      permissionOverwrites: overwrites,
+    });
+    ticket.channelId = channel.id;
+
+    const pings = [ticket.buyerId, ticket.sellerId];
+    const msg = await channel.send({
+      content: pings.map((u) => `<@${u}>`).join(' ') + (isId(cfg.ticket?.staffRoleId) ? ` <@&${cfg.ticket.staffRoleId}>` : ''),
+      ...V.buildTicketMessage(guild, cfg, ticket),
+      allowedMentions: { users: pings, roles: isId(cfg.ticket?.staffRoleId) ? [cfg.ticket.staffRoleId] : [] },
+    });
+    await msg.pin().catch(() => {});
+    ticket.messageId = msg.id;
+    save();
+
+    await channel
+      .send({
+        content: `👋 <@${ticket.partnerId}>, kamu diajak melakukan transaksi rekber oleh <@${ticket.userId}>. Periksa detailnya, lalu klik **🤝 Setujui Transaksi** jika sudah sesuai.`,
+        allowedMentions: { users: [ticket.partnerId] },
+      })
+      .catch(() => {});
+
+    const url = channelUrl(guild.id, channel.id);
+    for (const uid of pings) {
+      const user = await client.users.fetch(uid).catch(() => null);
+      await user?.send(V.buildRekberDmCreated(guild, cfg, ticket, url, uid)).catch(() => {});
+    }
+    await interaction.editReply({
+      content: `✅ **Ticket rekber berhasil dibuat!** Lanjutkan transaksi di ${channel}.`,
+      components: [
+        new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Buka Ticket Rekber').setEmoji('🤝').setURL(url)),
+      ],
+    });
+  } catch (err) {
+    console.error('[store] gagal membuat ticket rekber:', err);
+    delete state.tickets[id];
+    save();
+    await interaction
+      .editReply('❌ Gagal membuat ticket rekber. Pastikan bot punya izin **Manage Channels** & **Manage Roles**, lalu coba lagi.')
+      .catch(() => {});
+  }
+}
+
+/** Update tampilan ticket rekber + kirim log langkah di channel. */
+async function advanceRekber(interaction, t, logText) {
+  const cfg = loadConfig();
+  save();
+  await interaction.update(V.buildTicketMessage(interaction.guild, cfg, t));
+  await interaction.channel.send({ content: logText, allowedMentions: { users: [t.buyerId, t.sellerId] } }).catch(() => {});
+}
+
+function rekberTicketFor(interaction, ticketId) {
+  const t = state.tickets[ticketId];
+  if (!t || kindOf(t) !== 'rekber' || t.status !== 'open') {
+    interaction.reply({ content: 'Transaksi rekber ini sudah ditutup.', flags: EPH }).catch(() => {});
+    return null;
+  }
+  return t;
+}
+
+/** Langkah 1: pihak lawan menyetujui transaksi. */
+async function onRekberAgree(interaction, ticketId) {
+  const t = rekberTicketFor(interaction, ticketId);
+  if (!t) return;
+  if (interaction.user.id !== t.partnerId) {
+    return interaction.reply({ content: `⛔ Hanya <@${t.partnerId}> (pihak lawan transaksi) yang bisa menyetujui.`, flags: EPH });
+  }
+  t.stage.agreed = true;
+  return advanceRekber(
+    interaction,
+    t,
+    `🤝 <@${t.partnerId}> **menyetujui** transaksi.\n💳 <@${t.buyerId}>, silakan transfer **${rupiah(t.buyerPays)}** ke admin sesuai instruksi, lalu kirim bukti transfer di sini.`,
+  );
+}
+
+/** Langkah 2: admin mengonfirmasi dana pembeli sudah masuk. */
+async function onRekberFund(interaction, ticketId) {
+  const t = rekberTicketFor(interaction, ticketId);
+  if (!t) return;
+  if (!isAdmin(interaction.member)) return interaction.reply({ content: '⛔ Hanya **Administrator** yang bisa mengonfirmasi dana.', flags: EPH });
+  if (!t.stage.agreed) return interaction.reply({ content: 'Tunggu pihak lawan menyetujui transaksi dulu.', flags: EPH });
+  t.stage.funded = true;
+  t.stage.fundedBy = interaction.user.id;
+  return advanceRekber(
+    interaction,
+    t,
+    `💰 Dana **${rupiah(t.buyerPays)}** dari <@${t.buyerId}> sudah **diterima & diamankan admin**.\n📦 <@${t.sellerId}>, silakan kirim barang / jasa ke pembeli sekarang.`,
+  );
+}
+
+/** Langkah 3: pembeli mengonfirmasi barang / jasa sudah diterima. */
+async function onRekberReceived(interaction, ticketId) {
+  const t = rekberTicketFor(interaction, ticketId);
+  if (!t) return;
+  if (interaction.user.id !== t.buyerId) {
+    return interaction.reply({ content: `⛔ Hanya <@${t.buyerId}> (pembeli) yang bisa mengonfirmasi barang diterima.`, flags: EPH });
+  }
+  if (!t.stage.funded) return interaction.reply({ content: 'Tunggu admin mengonfirmasi dana terlebih dahulu.', flags: EPH });
+  t.stage.received = true;
+  return advanceRekber(
+    interaction,
+    t,
+    `📦 <@${t.buyerId}> mengonfirmasi barang / jasa **sudah diterima**.\n🛡️ Admin akan mencairkan **${rupiah(t.sellerGets)}** ke <@${t.sellerId}>, lalu menutup ticket.`,
+  );
 }
 
 // ══════════════════════ Tutup ticket (khusus Administrator) ══════════════════════
@@ -410,14 +720,19 @@ async function onCloseButton(interaction, ticketId) {
   }
   const t = state.tickets[ticketId];
   if (!t || t.status !== 'open') return interaction.reply({ content: 'Ticket ini sudah ditutup.', flags: EPH });
+  const rekber = kindOf(t) === 'rekber';
 
   const modal = new ModalBuilder()
     .setCustomId(`store:closemodal:${ticketId}`)
     .setTitle(`Tutup Ticket ${ticketId}`)
     .addLabelComponents(
       new LabelBuilder()
-        .setLabel('Gambar Bukti / Testimoni')
-        .setDescription('Upload screenshot bukti pengiriman. Wajib untuk status Completed.')
+        .setLabel(rekber ? 'Bukti Pencairan Dana' : 'Gambar Bukti / Testimoni')
+        .setDescription(
+          rekber
+            ? 'Upload bukti transfer dana ke penjual (atau ke pembeli untuk refund). Wajib untuk Completed.'
+            : 'Upload screenshot bukti pengiriman. Wajib untuk status Completed.',
+        )
         .setFileUploadComponent(new FileUploadBuilder().setCustomId('proof').setMinValues(0).setMaxValues(1).setRequired(false)),
       new LabelBuilder()
         .setLabel('Status Pesanan')
@@ -427,9 +742,19 @@ async function onCloseButton(interaction, ticketId) {
             .setPlaceholder('Pilih status pesanan...')
             .setRequired(true)
             .addOptions(
-              { label: 'Completed', description: 'Produk berhasil dikirim', value: 'completed', emoji: '✅' },
+              {
+                label: 'Completed',
+                description: rekber ? 'Dana dicairkan ke penjual' : 'Produk berhasil dikirim',
+                value: 'completed',
+                emoji: '✅',
+              },
               { label: 'Cancelled', description: 'Dibatalkan', value: 'cancelled', emoji: '❌' },
-              { label: 'Refund', description: 'Dana dikembalikan', value: 'refund', emoji: '💸' },
+              {
+                label: 'Refund',
+                description: rekber ? 'Dana dikembalikan ke pembeli' : 'Dana dikembalikan',
+                value: 'refund',
+                emoji: '💸',
+              },
             ),
         ),
       new LabelBuilder()
@@ -508,8 +833,17 @@ async function onCloseModal(interaction, ticketId) {
   const channel = interaction.channel;
   const proof = proofAttachment(t);
   t.proofUrl = proof.url;
+  const rekber = kindOf(t) === 'rekber';
 
-  if (status === 'completed') {
+  if (rekber) {
+    if (status === 'completed') {
+      state.stats.rekber += 1;
+      state.stats.rekberVolume += t.nominal;
+      t.testimonyDeadline = Date.now() + (Number(cfg.ticket?.testimonyTimeoutHours) || 24) * 3600 * 1000;
+    } else {
+      t.deleteAt = Date.now() + (Number(cfg.ticket?.deleteAfterSeconds) || 15) * 1000;
+    }
+  } else if (status === 'completed') {
     state.stats.transactions += 1;
     state.stats.robux += t.amount;
     state.stats.revenue += t.price;
@@ -520,7 +854,7 @@ async function onCloseModal(interaction, ticketId) {
     state.spenders[t.userId] = sp;
     t.testimonyDeadline = Date.now() + (Number(cfg.ticket?.testimonyTimeoutHours) || 24) * 3600 * 1000;
   } else {
-    state.stock += t.amount; // stock dikembalikan
+    state.stock += t.amount; // stock Robux dikembalikan
     t.deleteAt = Date.now() + (Number(cfg.ticket?.deleteAfterSeconds) || 15) * 1000;
   }
   save();
@@ -533,40 +867,44 @@ async function onCloseModal(interaction, ticketId) {
   } else {
     const secs = Number(cfg.ticket?.deleteAfterSeconds) || 15;
     const closedEmbed = V.buildDmClosed(guild, cfg, t).embeds[0].setDescription(
-      `Ticket ini ditutup dengan status **${V.STATUS_LABEL[status]}**.${note ? `\n\n📝 Catatan: ${note}` : ''}\n\nChannel ini akan dihapus dalam **${secs} detik**.`,
+      `Ticket ini ditutup dengan status **${V.statusLabel(t)}**.${note ? `\n\n📝 Catatan: ${note}` : ''}\n\nChannel ini akan dihapus dalam **${secs} detik**.`,
     );
     if (proof.url) closedEmbed.setImage(proof.url);
+    const mentionIds = rekber ? [t.buyerId, t.sellerId] : [t.userId];
     await channel.send({
-      content: `<@${t.userId}>`,
+      content: mentionIds.map((id) => `<@${id}>`).join(' '),
       embeds: [closedEmbed],
       files: proof.files,
-      allowedMentions: { users: [t.userId] },
+      allowedMentions: { users: mentionIds },
     });
-    await announce(guild, 'returned', { ticket: t });
-    await reopenIfAutoClosed(guild);
+    if (!rekber) {
+      await announce(guild, 'returned', { ticket: t });
+      await reopenIfAutoClosed(guild);
+    }
   }
 
-  // DM pembeli soal hasil pesanannya.
-  const buyer = await client.users.fetch(t.userId).catch(() => null);
-  if (buyer) {
+  // DM pembeli (rekber: kedua pihak) soal hasil transaksinya.
+  for (const uid of rekber ? [t.buyerId, t.sellerId] : [t.userId]) {
+    const user = await client.users.fetch(uid).catch(() => null);
+    if (!user) continue;
     const dm = V.buildDmClosed(guild, cfg, t);
     const dmProof = proofAttachment(t);
     if (status === 'completed' && dmProof.url) dm.embeds[0].setImage(dmProof.url);
     else dm.embeds[0].setImage(null);
-    await buyer.send({ ...dm, files: status === 'completed' ? dmProof.files : [] }).catch(() => {});
+    await user.send({ ...dm, files: status === 'completed' ? dmProof.files : [] }).catch(() => {});
   }
 
   refreshPanel();
   refreshLeaderboard();
-  return interaction.editReply(`✅ Ticket **${t.id}** ditutup sebagai **${V.STATUS_LABEL[status]}**.`);
+  return interaction.editReply(`✅ Ticket **${t.id}** ditutup sebagai **${V.statusLabel(t)}**.`);
 }
 
 // ══════════════════════ Testimoni pembeli ══════════════════════
 async function onTestimonyButton(interaction, ticketId) {
   const t = state.tickets[ticketId];
   if (!t || t.status !== 'completed') return interaction.reply({ content: 'Ticket tidak ditemukan.', flags: EPH });
-  if (interaction.user.id !== t.userId) {
-    return interaction.reply({ content: '⛔ Hanya pembeli ticket ini yang bisa memberi testimoni.', flags: EPH });
+  if (interaction.user.id !== V.testimonyUserId(t)) {
+    return interaction.reply({ content: '⛔ Hanya pembeli di ticket ini yang bisa memberi testimoni.', flags: EPH });
   }
   if (t.testimony || t.testimonyPosted) return interaction.reply({ content: '✅ Kamu sudah memberi testimoni. Terima kasih!', flags: EPH });
 
@@ -611,7 +949,7 @@ async function postTestimony(guild, t) {
   const channel = await guild.channels.fetch(cfg.channels.testimoni).catch(() => null);
   if (!channel?.isTextBased()) return;
   state.stats.testimonies += 1;
-  const buyer = await guild.members.fetch(t.userId).catch(() => null);
+  const buyer = await guild.members.fetch(V.testimonyUserId(t)).catch(() => null);
   const proof = proofAttachment(t);
   t.proofUrl = proof.url;
   await channel.send({ ...V.buildTestimony(guild, cfg, t, buyer), files: proof.files });
@@ -621,7 +959,7 @@ async function postTestimony(guild, t) {
 
 async function onTestimonyModal(interaction, ticketId) {
   const t = state.tickets[ticketId];
-  if (!t || interaction.user.id !== t.userId || t.testimony || t.testimonyPosted) {
+  if (!t || interaction.user.id !== V.testimonyUserId(t) || t.testimony || t.testimonyPosted) {
     return interaction.reply({ content: 'Testimoni tidak bisa dikirim.', flags: EPH });
   }
   await interaction.deferUpdate();
@@ -638,7 +976,7 @@ async function onTestimonyModal(interaction, ticketId) {
   await postTestimony(interaction.guild, t);
   await interaction.message?.edit({ components: [] }).catch(() => {});
   await interaction.channel
-    .send(`💜 Terima kasih <@${t.userId}> atas testimoninya (${'⭐'.repeat(rating)})! Ticket ini akan dihapus dalam **${Number(cfg.ticket?.deleteAfterSeconds) || 15} detik**.`)
+    .send(`💜 Terima kasih <@${V.testimonyUserId(t)}> atas testimoninya (${'⭐'.repeat(rating)})! Ticket ini akan dihapus dalam **${Number(cfg.ticket?.deleteAfterSeconds) || 15} detik**.`)
     .catch(() => {});
   refreshPanel();
 }
@@ -682,10 +1020,14 @@ async function onChannelDelete(channel) {
     t.closedAt = Date.now();
     t.closedBy = client.user.id;
     t.note = 'Channel ticket dihapus manual';
-    state.stock += t.amount;
-    save();
-    await announce(channel.guild, 'returned', { ticket: t });
-    await reopenIfAutoClosed(channel.guild);
+    if (kindOf(t) === 'rekber') {
+      save();
+    } else {
+      state.stock += t.amount;
+      save();
+      await announce(channel.guild, 'returned', { ticket: t });
+      await reopenIfAutoClosed(channel.guild);
+    }
     refreshPanel();
   } else save();
 }
@@ -704,6 +1046,10 @@ async function handleInteraction(interaction) {
       else if (action === 'confirm') await onConfirm(interaction, arg === 'yes');
       else if (action === 'close') await onCloseButton(interaction, arg);
       else if (action === 'testi') await onTestimonyButton(interaction, arg);
+      else if (action === 'rbconfirm') await onRekberConfirm(interaction, arg === 'yes');
+      else if (action === 'rbagree') await onRekberAgree(interaction, arg);
+      else if (action === 'rbfund') await onRekberFund(interaction, arg);
+      else if (action === 'rbrecv') await onRekberReceived(interaction, arg);
     } else if (interaction.isStringSelectMenu()) {
       if (action === 'amount') await onAmountSelect(interaction, arg);
     } else if (interaction.isModalSubmit()) {
@@ -711,6 +1057,7 @@ async function handleInteraction(interaction) {
       else if (action === 'amountmodal') await onAmountModal(interaction, arg);
       else if (action === 'closemodal') await onCloseModal(interaction, arg);
       else if (action === 'testimodal') await onTestimonyModal(interaction, arg);
+      else if (action === 'rbmodal') await onRekberModal(interaction, arg);
     }
   } catch (err) {
     console.error(`[store] error (${id}):`, err);
@@ -735,8 +1082,9 @@ function registerStore(c) {
 module.exports = {
   handleInteraction,
   registerStore,
-  setStoreOpen,
+  setProductsOpen,
   reopenIfAutoClosed,
+  closeIfSoldOut,
   announce,
   refreshPanel,
   refreshLeaderboard,
