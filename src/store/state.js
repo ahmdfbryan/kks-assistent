@@ -13,6 +13,7 @@ const DEFAULT = {
   rates: {}, // { productId: rate }
   panel: null, // { channelId, messageId }
   leaderboard: null, // { channelId, messageId }
+  howto: null, // panel How to Order { channelId, messageId }
   seq: 0,
   rekberSeq: 0,
   gamepassSeq: 0,
