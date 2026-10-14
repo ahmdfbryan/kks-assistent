@@ -9,6 +9,7 @@ const { handleVerifyButton, BUTTON_ID: VERIFY_BUTTON } = require('./verify');
 const { handleTranslateButton, TRANSLATE_BUTTON } = require('./rules');
 const voiceFinder = require('./voice-finder');
 const store = require('./store');
+const { registerSocial } = require('./social');
 
 const byName = new Map(commands.map((c) => [c.data.name, c]));
 // GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
@@ -24,6 +25,7 @@ const client = new Client({
 registerWelcome(client);
 voiceFinder.registerStickyPanel(client);
 store.registerStore(client);
+registerSocial(client);
 
 client.once(Events.ClientReady, (c) => {
   console.log(`🤖 Login sebagai ${c.user.tag}`);
