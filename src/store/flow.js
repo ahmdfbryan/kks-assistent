@@ -430,7 +430,7 @@ async function createOrder(interaction, productId, amount) {
     await msg.pin().catch(() => {});
     ticket.messageId = msg.id;
     save();
-    logOrder(guild, ticket, `🆕 Order dibuat oleh <@${ticket.userId}> • ${num(amount)} Robux`);
+    logOrder(guild, ticket, '🆕 Order masuk & menunggu pembayaran');
 
     const url = channelUrl(guild.id, channel.id);
     const dmOk = await interaction.user
@@ -664,7 +664,7 @@ async function onRekberConfirm(interaction, yes) {
     await msg.pin().catch(() => {});
     ticket.messageId = msg.id;
     save();
-    logOrder(guild, ticket, `🆕 Rekber dibuat oleh <@${ticket.userId}> • ${rupiah(ticket.nominal)}`);
+    logOrder(guild, ticket, '🆕 Transaksi rekber dimulai');
 
     await channel.send(V.buildRekberStep(guild, cfg, ticket, 'invite')).catch(() => {});
 
@@ -690,10 +690,15 @@ async function onRekberConfirm(interaction, yes) {
 }
 
 /** Update tampilan ticket rekber + kirim log langkah di channel. */
+// Teks riwayat untuk log publik (tanpa nama admin / detail sensitif).
 const STEP_LOG = {
-  agreed: (t) => `🤝 Disetujui oleh <@${t.partnerId}>`,
-  funded: (t) => `💰 Dana ${rupiah(t.buyerPays)} dikonfirmasi oleh <@${t.stage.fundedBy}>`,
-  received: (t) => `📦 Barang diterima — dikonfirmasi <@${t.buyerId}>`,
+  agreed: () => '🤝 Kedua pihak menyetujui transaksi',
+  funded: () => '💰 Dana pembeli diamankan admin',
+  received: () => '📦 Barang / jasa diterima pembeli',
+};
+const CLOSE_LOG = {
+  robux: { completed: '✅ Robux berhasil dikirim', cancelled: '❌ Order dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
+  rekber: { completed: '✅ Dana dicairkan ke penjual', cancelled: '❌ Transaksi dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
 };
 
 async function advanceRekber(interaction, t, step) {
@@ -928,7 +933,7 @@ async function onCloseModal(interaction, ticketId) {
     await user.send({ ...dm, files: status === 'completed' ? dmProof.files : [] }).catch(() => {});
   }
 
-  logOrder(guild, t, `🔒 Ditutup oleh <@${t.closedBy}> — ${V.statusLabel(t)}`, { withProof: true });
+  logOrder(guild, t, CLOSE_LOG[kindOf(t)][status], { withProof: true });
   refreshPanel();
   refreshLeaderboard();
   return interaction.editReply(`✅ Ticket **${t.id}** ditutup sebagai **${V.statusLabel(t)}**.`);
@@ -1009,7 +1014,7 @@ async function onTestimonyModal(interaction, ticketId) {
   save();
 
   await postTestimony(interaction.guild, t);
-  logOrder(interaction.guild, t, `⭐ Testimoni ${rating}/5 dari <@${V.testimonyUserId(t)}>`);
+  logOrder(interaction.guild, t, `⭐ Pembeli memberi rating ${rating}/5`);
   await interaction.message?.edit({ components: [] }).catch(() => {});
   await interaction.channel
     .send(V.buildTestimonyThanks(interaction.guild, cfg, t, rating, Number(cfg.ticket?.deleteAfterSeconds) || 15))
@@ -1031,7 +1036,6 @@ async function housekeeping() {
         t.testimonyPosted = true;
         t.deleteAt = now;
         save();
-        if (guild) logOrder(guild, t, '⏰ Batas waktu testimoni habis — tanpa ulasan');
       }
       // Hapus channel ticket yang sudah selesai.
       if (t.deleteAt && !t.deleted && t.deleteAt <= now) {
@@ -1041,7 +1045,7 @@ async function housekeeping() {
         if (ch) await ch.delete(`Ticket ${t.id} selesai`).catch(() => {});
         const guild = client.guilds.cache.get(t.guildId);
         // Tunggu log selesai (gambar bukti sudah ter-upload) sebelum file bukti dihapus.
-        if (guild) await logOrder(guild, t, '🗑️ Channel ticket dihapus otomatis');
+        if (guild) await (logQueues.get(t.id) || Promise.resolve());
         if (t.proofFile) fs.rm(t.proofFile, { force: true }, () => {});
       }
     } catch (err) {
@@ -1060,7 +1064,7 @@ async function onChannelDelete(channel) {
     t.closedAt = Date.now();
     t.closedBy = client.user.id;
     t.note = 'Channel ticket dihapus manual';
-    logOrder(channel.guild, t, '🗑️ Channel ticket dihapus manual — otomatis dibatalkan');
+    logOrder(channel.guild, t, kindOf(t) === 'rekber' ? '❌ Transaksi dibatalkan' : '❌ Order dibatalkan');
     if (kindOf(t) === 'rekber') {
       save();
     } else {
@@ -1070,10 +1074,7 @@ async function onChannelDelete(channel) {
       await reopenIfAutoClosed(channel.guild);
     }
     refreshPanel();
-  } else {
-    save();
-    logOrder(channel.guild, t, '🗑️ Channel ticket dihapus');
-  }
+  } else save();
 }
 
 // ══════════════════════ Router interaksi ══════════════════════
