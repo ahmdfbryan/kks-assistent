@@ -6,6 +6,7 @@ const { voiceFinderCommand } = require('./voice-finder');
 const { storeCommand } = require('./store');
 const { socialCommand } = require('./social');
 const { invitesCommand, inviteLogCommand } = require('./invite-tracker');
+const { giveawayCommand } = require('./giveaway');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -35,6 +36,6 @@ const welcomeCommand = {
   },
 };
 
-const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, socialCommand, invitesCommand, inviteLogCommand];
+const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, socialCommand, invitesCommand, inviteLogCommand, giveawayCommand];
 
 module.exports = { commands };
