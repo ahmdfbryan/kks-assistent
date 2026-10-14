@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { color, rupiah, num, fill } = require('./config');
-const { state, isProductOpen, productStatsOf } = require('./state');
+const { state, isProductOpen, productStatsOf, stockOf, stockUnit } = require('./state');
 const V = require('./views');
 
 /**
@@ -99,6 +99,14 @@ function buildCatalogCard(guild, cfg, p) {
     );
     const table = priceTable(list.map((a) => [`${num(a)} Robux`, rupiah(V.gpQuote(cfg, p, V.gpBeforeTax(p, a)).price)]));
     if (table) embed.addFields({ name: '📊 Daftar Harga (After Tax)', value: table });
+  } else if (p.type === 'canva') {
+    embed.addFields(
+      { name: '💱 Harga', value: `\`Mulai ${rupiah(V.minPlanPrice(p))}\``, inline: true },
+      { name: '🎟️ Sisa Slot', value: `\`${num(stockOf(p))} ${stockUnit(p)}\``, inline: true },
+      { name: '🏪 Status', value: statusBadge(p), inline: true },
+    );
+    const table = V.planTable(p);
+    if (table) embed.addFields({ name: '🗓️ Pilihan Paket', value: table });
   } else if (p.type === 'rekber') {
     embed.addFields(
       { name: '💵 Nominal', value: `\`${rupiah(p.minNominal || 0)} – ${rupiah(p.maxNominal || 0)}\``, inline: true },
@@ -125,10 +133,15 @@ function buildCatalogCard(guild, cfg, p) {
             { name: '🤝 Rekber Sukses', value: `\`${num(state.stats.rekber)} transaksi\``, inline: true },
             { name: '🛡️ Dana Diamankan', value: `\`${rupiah(state.stats.rekberVolume)}\``, inline: true },
           ]
-        : [
-            { name: '✅ Order Selesai', value: `\`${num(ps.orders)} order\``, inline: true },
-            { name: '💎 Robux Terjual', value: `\`${num(ps.robux)} Robux\``, inline: true },
-          ];
+        : p.type === 'canva'
+          ? [
+              { name: '✅ Order Selesai', value: `\`${num(ps.orders)} order\``, inline: true },
+              { name: '👥 Member Aktif', value: `\`${num(V.canvaActiveCount(p.id))} member\``, inline: true },
+            ]
+          : [
+              { name: '✅ Order Selesai', value: `\`${num(ps.orders)} order\``, inline: true },
+              { name: '💎 Robux Terjual', value: `\`${num(ps.robux)} Robux\``, inline: true },
+            ];
     embed.addFields(...sold, {
       name: '⭐ Rating',
       value: rating ? `${STARS(rating.avg)} \`${rating.avg.toFixed(1)}\` (${num(rating.count)})` : '`Belum ada ulasan`',
@@ -145,7 +158,7 @@ function buildCatalogCard(guild, cfg, p) {
     buttons.push(
       new ButtonBuilder()
         .setCustomId(`store:buy:${p.id}`)
-        .setLabel(open ? (p.type === 'rekber' ? 'Mulai Rekber' : 'Order Sekarang') : 'Sedang Tutup')
+        .setLabel(open ? (p.type === 'rekber' ? 'Mulai Rekber' : 'Order Sekarang') : p.type === 'canva' && stockOf(p) <= 0 ? 'Slot Habis' : 'Sedang Tutup')
         .setEmoji(open ? '🛒' : '🔴')
         .setStyle(open ? ButtonStyle.Success : ButtonStyle.Secondary)
         .setDisabled(!open),
