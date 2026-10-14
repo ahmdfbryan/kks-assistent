@@ -46,14 +46,9 @@ function buildHowToPanel(guild, cfg) {
     .setDescription(fill(h.description || '', name).slice(0, 4096) || null)
     .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null);
 
-  if (h.flow) embed.addFields({ name: '⚡ Alur Order Singkat', value: h.flow });
-  if (products.length) {
-    embed.addFields({
-      name: '🛍️ Produk Tersedia',
-      value: products
-        .map((p) => `${p.emoji || '•'} **${p.label}** ${isProductOpen(p) ? '`🟢 BUKA`' : '`🔴 TUTUP`'}\n┗ ${productSummary(cfg, p)}`)
-        .join('\n') + (h.divider === '' ? '' : `\n${h.divider || DIVIDER}`),
-    });
+  // Garis pemisah di bawah alur order (daftar produk ada di channel Catalog).
+  if (h.flow) {
+    embed.addFields({ name: '⚡ Alur Order Singkat', value: h.flow + (h.divider === '' ? '' : `\n${h.divider || DIVIDER}`) });
   }
   if (h.whyUs?.length) embed.addFields({ name: `🛡️ Kenapa ${V.storeName(cfg, guild)}?`, value: bullets(h.whyUs).slice(0, 1024) });
   embed.addFields({ name: '👇 Pilih Panduan', value: h.pickText || 'Pilih produk di menu bawah untuk melihat **cara order lengkap**. Panduan hanya terlihat olehmu.' });
