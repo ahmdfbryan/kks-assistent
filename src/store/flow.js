@@ -622,12 +622,7 @@ async function onRekberConfirm(interaction, yes) {
     ticket.messageId = msg.id;
     save();
 
-    await channel
-      .send({
-        content: `👋 <@${ticket.partnerId}>, kamu diajak melakukan transaksi rekber oleh <@${ticket.userId}>. Periksa detailnya, lalu klik **🤝 Setujui Transaksi** jika sudah sesuai.`,
-        allowedMentions: { users: [ticket.partnerId] },
-      })
-      .catch(() => {});
+    await channel.send(V.buildRekberStep(guild, cfg, ticket, 'invite')).catch(() => {});
 
     const url = channelUrl(guild.id, channel.id);
     for (const uid of pings) {
@@ -651,11 +646,11 @@ async function onRekberConfirm(interaction, yes) {
 }
 
 /** Update tampilan ticket rekber + kirim log langkah di channel. */
-async function advanceRekber(interaction, t, logText) {
+async function advanceRekber(interaction, t, step) {
   const cfg = loadConfig();
   save();
   await interaction.update(V.buildTicketMessage(interaction.guild, cfg, t));
-  await interaction.channel.send({ content: logText, allowedMentions: { users: [t.buyerId, t.sellerId] } }).catch(() => {});
+  await interaction.channel.send(V.buildRekberStep(interaction.guild, cfg, t, step)).catch(() => {});
 }
 
 function rekberTicketFor(interaction, ticketId) {
@@ -675,11 +670,7 @@ async function onRekberAgree(interaction, ticketId) {
     return interaction.reply({ content: `⛔ Hanya <@${t.partnerId}> (pihak lawan transaksi) yang bisa menyetujui.`, flags: EPH });
   }
   t.stage.agreed = true;
-  return advanceRekber(
-    interaction,
-    t,
-    `🤝 <@${t.partnerId}> **menyetujui** transaksi.\n💳 <@${t.buyerId}>, silakan transfer **${rupiah(t.buyerPays)}** ke admin sesuai instruksi, lalu kirim bukti transfer di sini.`,
-  );
+  return advanceRekber(interaction, t, 'agreed');
 }
 
 /** Langkah 2: admin mengonfirmasi dana pembeli sudah masuk. */
@@ -690,11 +681,7 @@ async function onRekberFund(interaction, ticketId) {
   if (!t.stage.agreed) return interaction.reply({ content: 'Tunggu pihak lawan menyetujui transaksi dulu.', flags: EPH });
   t.stage.funded = true;
   t.stage.fundedBy = interaction.user.id;
-  return advanceRekber(
-    interaction,
-    t,
-    `💰 Dana **${rupiah(t.buyerPays)}** dari <@${t.buyerId}> sudah **diterima & diamankan admin**.\n📦 <@${t.sellerId}>, silakan kirim barang / jasa ke pembeli sekarang.`,
-  );
+  return advanceRekber(interaction, t, 'funded');
 }
 
 /** Langkah 3: pembeli mengonfirmasi barang / jasa sudah diterima. */
@@ -706,11 +693,7 @@ async function onRekberReceived(interaction, ticketId) {
   }
   if (!t.stage.funded) return interaction.reply({ content: 'Tunggu admin mengonfirmasi dana terlebih dahulu.', flags: EPH });
   t.stage.received = true;
-  return advanceRekber(
-    interaction,
-    t,
-    `📦 <@${t.buyerId}> mengonfirmasi barang / jasa **sudah diterima**.\n🛡️ Admin akan mencairkan **${rupiah(t.sellerGets)}** ke <@${t.sellerId}>, lalu menutup ticket.`,
-  );
+  return advanceRekber(interaction, t, 'received');
 }
 
 // ══════════════════════ Tutup ticket (khusus Administrator) ══════════════════════
@@ -976,7 +959,7 @@ async function onTestimonyModal(interaction, ticketId) {
   await postTestimony(interaction.guild, t);
   await interaction.message?.edit({ components: [] }).catch(() => {});
   await interaction.channel
-    .send(`💜 Terima kasih <@${V.testimonyUserId(t)}> atas testimoninya (${'⭐'.repeat(rating)})! Ticket ini akan dihapus dalam **${Number(cfg.ticket?.deleteAfterSeconds) || 15} detik**.`)
+    .send(V.buildTestimonyThanks(interaction.guild, cfg, t, rating, Number(cfg.ticket?.deleteAfterSeconds) || 15))
     .catch(() => {});
   refreshPanel();
 }
