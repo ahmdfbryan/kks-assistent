@@ -52,4 +52,52 @@ async function lookupRobloxUser(username) {
   };
 }
 
-module.exports = { lookupRobloxUser };
+/** Ambil ID gamepass dari link (roblox.com/game-pass/123…, Creator Hub …/passes/123…) atau angka saja. */
+function parseGamepassId(input) {
+  const str = String(input || '').trim();
+  const m = str.match(/(?:game-pass(?:es)?|passes)\/(\d{3,20})/i) || str.match(/^(\d{3,20})$/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Cek detail gamepass di Roblox.
+ * Mengembalikan { id, name, price, forSale, creatorId, creatorName, creatorType, icon }, null kalau tidak ada,
+ * atau throw kalau server Roblox tidak bisa dihubungi.
+ */
+async function lookupGamepass(id) {
+  let info = null;
+  let lastErr = null;
+  for (const url of [
+    `https://apis.${DOMAIN}/game-passes/v1/game-passes/${id}/product-info`,
+    `https://economy.${DOMAIN}/v1/game-pass/${id}/game-pass-product-info`,
+  ]) {
+    try {
+      info = await request(url, {}, 1);
+      if (info) break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (!info) {
+    if (lastErr) throw lastErr;
+    return null;
+  }
+  const thumb = await request(
+    `https://thumbnails.${DOMAIN}/v1/game-passes?gamePassIds=${id}&size=150x150&format=Png&isCircular=false`,
+  ).catch(() => null);
+  const c = info.Creator || {};
+  const price = Number(info.PriceInRobux ?? info.priceInRobux ?? info.price);
+  return {
+    id: String(id),
+    name: info.Name || info.name || `Gamepass ${id}`,
+    price: Number.isFinite(price) && price > 0 ? price : null,
+    forSale: Boolean(info.IsForSale ?? info.isForSale) && Number.isFinite(price) && price > 0,
+    creatorId: String(c.CreatorTargetId ?? c.Id ?? ''),
+    creatorAltId: String(c.Id ?? ''),
+    creatorName: c.Name || null,
+    creatorType: c.CreatorType || null,
+    icon: thumb?.data?.[0]?.imageUrl || null,
+  };
+}
+
+module.exports = { lookupRobloxUser, lookupGamepass, parseGamepassId };
