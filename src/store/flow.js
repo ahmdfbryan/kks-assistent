@@ -126,6 +126,48 @@ async function closeIfSoldOut(guild, reason) {
   return false;
 }
 
+// ══════════════════════ Log order (1 pesan per ticket, di-edit otomatis) ══════════════════════
+const logQueues = new Map();
+
+/**
+ * Catat kejadian ke riwayat ticket & perbarui pesan log di channel log.
+ * Antrian per ticket supaya pesan log tidak terkirim dobel saat kejadian beruntun.
+ */
+function logOrder(guild, t, text, { withProof = false } = {}) {
+  if (text) {
+    t.log = t.log || [];
+    t.log.push({ at: Date.now(), text });
+    save();
+  }
+  const prev = logQueues.get(t.id) || Promise.resolve();
+  const next = prev
+    .then(async () => {
+      const cfg = loadConfig();
+      if (!isId(cfg?.channels?.log) || !guild) return;
+      const channel = await guild.channels.fetch(cfg.channels.log).catch(() => null);
+      if (!channel?.isTextBased()) return;
+      const proof = withProof ? proofAttachment(t) : { files: [], url: t.logProofUrl || null };
+      if (withProof && proof.url) t.logProofUrl = proof.url;
+      const payload = V.buildOrderLog(guild, cfg, t, proof.url || t.logProofUrl);
+      if (proof.files.length) payload.files = proof.files;
+
+      if (t.logMessageId) {
+        try {
+          await channel.messages.edit(t.logMessageId, payload);
+          return;
+        } catch (err) {
+          if (err.code !== RESTJSONErrorCodes.UnknownMessage) throw err;
+        }
+      }
+      const msg = await channel.send(payload);
+      t.logMessageId = msg.id;
+      save();
+    })
+    .catch((e) => console.error(`[store] log order ${t.id}:`, e.message));
+  logQueues.set(t.id, next);
+  return next;
+}
+
 // ══════════════════════ Kategori ticket (maks 50 channel / kategori) ══════════════════════
 async function getTicketCategory(guild, cfg, base = cfg.ticket?.categoryName || '🎫 TICKET ORDER') {
   const max = Math.min(Number(cfg.ticket?.maxPerCategory) || 50, 50);
@@ -388,6 +430,7 @@ async function createOrder(interaction, productId, amount) {
     await msg.pin().catch(() => {});
     ticket.messageId = msg.id;
     save();
+    logOrder(guild, ticket, `🆕 Order dibuat oleh <@${ticket.userId}> • ${num(amount)} Robux`);
 
     const url = channelUrl(guild.id, channel.id);
     const dmOk = await interaction.user
@@ -621,6 +664,7 @@ async function onRekberConfirm(interaction, yes) {
     await msg.pin().catch(() => {});
     ticket.messageId = msg.id;
     save();
+    logOrder(guild, ticket, `🆕 Rekber dibuat oleh <@${ticket.userId}> • ${rupiah(ticket.nominal)}`);
 
     await channel.send(V.buildRekberStep(guild, cfg, ticket, 'invite')).catch(() => {});
 
@@ -646,9 +690,16 @@ async function onRekberConfirm(interaction, yes) {
 }
 
 /** Update tampilan ticket rekber + kirim log langkah di channel. */
+const STEP_LOG = {
+  agreed: (t) => `🤝 Disetujui oleh <@${t.partnerId}>`,
+  funded: (t) => `💰 Dana ${rupiah(t.buyerPays)} dikonfirmasi oleh <@${t.stage.fundedBy}>`,
+  received: (t) => `📦 Barang diterima — dikonfirmasi <@${t.buyerId}>`,
+};
+
 async function advanceRekber(interaction, t, step) {
   const cfg = loadConfig();
   save();
+  logOrder(interaction.guild, t, STEP_LOG[step](t));
   await interaction.update(V.buildTicketMessage(interaction.guild, cfg, t));
   await interaction.channel.send(V.buildRekberStep(interaction.guild, cfg, t, step)).catch(() => {});
 }
@@ -877,6 +928,7 @@ async function onCloseModal(interaction, ticketId) {
     await user.send({ ...dm, files: status === 'completed' ? dmProof.files : [] }).catch(() => {});
   }
 
+  logOrder(guild, t, `🔒 Ditutup oleh <@${t.closedBy}> — ${V.statusLabel(t)}`, { withProof: true });
   refreshPanel();
   refreshLeaderboard();
   return interaction.editReply(`✅ Ticket **${t.id}** ditutup sebagai **${V.statusLabel(t)}**.`);
@@ -957,6 +1009,7 @@ async function onTestimonyModal(interaction, ticketId) {
   save();
 
   await postTestimony(interaction.guild, t);
+  logOrder(interaction.guild, t, `⭐ Testimoni ${rating}/5 dari <@${V.testimonyUserId(t)}>`);
   await interaction.message?.edit({ components: [] }).catch(() => {});
   await interaction.channel
     .send(V.buildTestimonyThanks(interaction.guild, cfg, t, rating, Number(cfg.ticket?.deleteAfterSeconds) || 15))
@@ -978,6 +1031,7 @@ async function housekeeping() {
         t.testimonyPosted = true;
         t.deleteAt = now;
         save();
+        if (guild) logOrder(guild, t, '⏰ Batas waktu testimoni habis — tanpa ulasan');
       }
       // Hapus channel ticket yang sudah selesai.
       if (t.deleteAt && !t.deleted && t.deleteAt <= now) {
@@ -985,6 +1039,9 @@ async function housekeeping() {
         save();
         const ch = await client.channels.fetch(t.channelId).catch(() => null);
         if (ch) await ch.delete(`Ticket ${t.id} selesai`).catch(() => {});
+        const guild = client.guilds.cache.get(t.guildId);
+        // Tunggu log selesai (gambar bukti sudah ter-upload) sebelum file bukti dihapus.
+        if (guild) await logOrder(guild, t, '🗑️ Channel ticket dihapus otomatis');
         if (t.proofFile) fs.rm(t.proofFile, { force: true }, () => {});
       }
     } catch (err) {
@@ -1003,6 +1060,7 @@ async function onChannelDelete(channel) {
     t.closedAt = Date.now();
     t.closedBy = client.user.id;
     t.note = 'Channel ticket dihapus manual';
+    logOrder(channel.guild, t, '🗑️ Channel ticket dihapus manual — otomatis dibatalkan');
     if (kindOf(t) === 'rekber') {
       save();
     } else {
@@ -1012,7 +1070,10 @@ async function onChannelDelete(channel) {
       await reopenIfAutoClosed(channel.guild);
     }
     refreshPanel();
-  } else save();
+  } else {
+    save();
+    logOrder(channel.guild, t, '🗑️ Channel ticket dihapus');
+  }
 }
 
 // ══════════════════════ Router interaksi ══════════════════════
