@@ -7,7 +7,8 @@
     "ticket.staffRoleId (opsional) = role staff yang ikut bisa melihat ticket. Tombol Tutup Ticket tetap HANYA untuk Administrator.",
     "storeName = nama toko yang tampil di semua keterangan (panel, DM, ticket, testimoni, leaderboard, pengumuman).",
     "products[].description = keterangan produk yang muncul saat pembeli klik tombol produk (hanya pembeli yang lihat).",
-    "products[].terms = syarat pembelian yang muncul saat tombol 'Syarat Pembelian' diklik (hanya pembeli yang lihat). Hapus bagian terms kalau tidak perlu."
+    "products[].terms = syarat pembelian yang muncul saat tombol 'Syarat Pembelian' diklik (hanya pembeli yang lihat). Hapus bagian terms kalau tidak perlu.",
+    "colors.brand = warna tema toko (biru) untuk semua embed. open = hijau (toko buka / pesanan selesai), closed = merah (toko tutup / dibatalkan), refund = oranye."
   ],
   "storeName": "Noname Store",
   "channels": {
@@ -27,11 +28,9 @@
   },
   "pingEveryone": { "open": true, "close": true },
   "colors": {
-    "brand": "#7C5CFF",
+    "brand": "#3498DB",
     "open": "#2ECC71",
     "closed": "#E74C3C",
-    "gold": "#F1C40F",
-    "info": "#3498DB",
     "refund": "#E67E22"
   },
   "panel": {
