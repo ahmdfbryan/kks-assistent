@@ -3,6 +3,7 @@ const { sendWelcome } = require('./welcome');
 const { verifyCommand } = require('./verify');
 const { rulesCommand } = require('./rules');
 const { voiceFinderCommand } = require('./voice-finder');
+const { storeCommand } = require('./store');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -32,6 +33,6 @@ const welcomeCommand = {
   },
 };
 
-const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand];
+const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand];
 
 module.exports = { commands };
