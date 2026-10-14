@@ -3,6 +3,7 @@ const { loadConfig, isId, rupiah, num, color } = require('./config');
 const { state, save, productState, isProductOpen } = require('./state');
 const V = require('./views');
 const H = require('./howto');
+const C = require('./catalog');
 const { setProductsOpen, reopenIfAutoClosed, closeIfSoldOut, announce, refreshPanel } = require('./flow');
 
 const TEXT = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
@@ -63,6 +64,12 @@ const storeCommand = {
     )
     .addSubcommand((s) =>
       s
+        .setName('catalog')
+        .setDescription('Kirim / pindahkan katalog produk (kartu tiap produk, ter-update otomatis)')
+        .addChannelOption((o) => o.setName('channel').setDescription('Default: channel catalog di store.json').addChannelTypes(...TEXT)),
+    )
+    .addSubcommand((s) =>
+      s
         .setName('how-to-order')
         .setDescription('Kirim / pindahkan panel How to Order (panduan cara order + dropdown produk)')
         .addChannelOption((o) => o.setName('channel').setDescription('Default: channel howToOrder di store.json').addChannelTypes(...TEXT)),
@@ -113,6 +120,23 @@ const storeCommand = {
       if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
       await placeTracked(interaction, sub, channel, sub === 'panel' ? V.buildPanel : V.buildLeaderboard);
       return interaction.editReply(`✅ ${sub === 'panel' ? 'Panel store' : 'Leaderboard'} dikirim ke ${channel} dan akan ter-update otomatis.`);
+    }
+
+    if (sub === 'catalog') {
+      const channel = await resolveChannel(interaction, 'catalog');
+      if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
+      const old = state.catalog;
+      const header = await channel.send(C.buildCatalogHeader(guild, cfg));
+      const cards = {};
+      for (const p of C.catalogProducts(cfg)) cards[p.id] = (await channel.send(C.buildCatalogCard(guild, cfg, p))).id;
+      state.catalog = { channelId: channel.id, headerId: header.id, cards };
+      save();
+      // Hapus katalog lama supaya tidak dobel.
+      if (old) {
+        const oldCh = await guild.channels.fetch(old.channelId).catch(() => null);
+        for (const id of [old.headerId, ...Object.values(old.cards || {})]) await oldCh?.messages.delete(id).catch(() => {});
+      }
+      return interaction.editReply(`✅ Katalog (${Object.keys(cards).length} produk) dikirim ke ${channel} dan akan ter-update otomatis.`);
     }
 
     if (sub === 'how-to-order') {
