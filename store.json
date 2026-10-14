@@ -4,7 +4,8 @@
     "Setelah mengubah teks panel, jalankan /store panel supaya panel ikut ter-update.",
     "Placeholder teks: {server} = nama server.",
     "Stock, status buka/tutup, dan rate (harga) diatur lewat command /store, bukan di file ini. 'rate' di products hanya harga awal.",
-    "ticket.staffRoleId (opsional) = role staff yang ikut bisa melihat ticket. Tombol Tutup Ticket tetap HANYA untuk Administrator."
+    "ticket.staffRoleId (opsional) = role staff yang ikut bisa melihat ticket. Tombol Tutup Ticket tetap HANYA untuk Administrator.",
+    "panel.howToBuy (opsional) = daftar langkah tata cara pembelian. Kosongkan [] kalau tidak mau ditampilkan."
   ],
   "channels": {
     "panel": "1553667092711088160",
@@ -31,18 +32,9 @@
     "refund": "#E67E22"
   },
   "panel": {
-    "title": "🛒 {server} — Official Store",
-    "description": "Selamat datang di **Official Store {server}**! Semua transaksi diproses secara aman melalui **ticket pribadi** — hanya kamu dan admin yang bisa melihatnya.\n\n✨ Proses cepat & terpercaya\n🛡️ Transaksi aman lewat ticket pribadi\n📦 Stock terbatas setiap harinya",
-    "howToBuy": [
-      "Pastikan **Status Toko: BUKA**.",
-      "Klik tombol produk yang ingin kamu beli di bawah.",
-      "Masukkan **username Roblox** kamu, lalu konfirmasi akunnya.",
-      "Pilih jumlah Robux (atau masukkan jumlah sendiri).",
-      "Bot akan membuat **ticket pribadi** & mengirim info ke DM kamu.",
-      "Selesaikan pembayaran di ticket, lalu tunggu admin memproses pesananmu."
-    ],
-    "statusOpen": "🟢 **Status Toko: BUKA** — silakan pilih produk di bawah.",
-    "statusClosed": "🔴 **Status Toko: TUTUP** — toko sedang tidak menerima pesanan.",
+    "title": "🛒 {server}",
+    "description": "Selamat datang di **Official Store {server}**! Semua transaksi diproses secara aman melalui **ticket pribadi** — hanya kamu dan admin yang bisa melihatnya.",
+    "howToBuy": [],
     "bannerImage": ""
   },
   "products": [
