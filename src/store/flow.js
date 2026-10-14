@@ -18,7 +18,7 @@ const {
   Events,
 } = require('discord.js');
 const { loadConfig, isId, rupiah, num, getProduct } = require('./config');
-const { state, save, productState, productStatsOf, isProductOpen, kindOf, activeTicketOf, nextTicketId } = require('./state');
+const { state, save, productState, productStatsOf, hasStock, stockOf, setStock, stockUnit, isProductOpen, kindOf, activeTicketOf, nextTicketId } = require('./state');
 const { lookupRobloxUser, lookupGamepass, parseGamepassId } = require('./roblox');
 const V = require('./views');
 const H = require('./howto');
@@ -130,22 +130,23 @@ async function setProductsOpen(guild, products, open, { reason, auto = false } =
 
 const robuxProduct = (cfg) => (cfg?.products || []).find((p) => p.type === 'robux') || null;
 
-/** Stock kembali tersedia & Robux sebelumnya tutup karena stock habis → buka lagi otomatis. */
-async function reopenIfAutoClosed(guild) {
-  const product = robuxProduct(loadConfig());
-  if (!product) return false;
-  const ps = productState(product.id);
-  if (!ps.open && ps.autoClosed && state.stock > 0) {
-    await setProductsOpen(guild, [product], true);
-    return true;
-  }
-  return false;
+/**
+ * Stock kembali tersedia & produk sebelumnya tutup karena stock habis → buka lagi otomatis.
+ * product kosong → cek semua produk ber-stock (Robux & Canva).
+ */
+async function reopenIfAutoClosed(guild, product) {
+  const list = product ? [product] : (loadConfig()?.products || []).filter(hasStock);
+  const reopen = list.filter((p) => {
+    const ps = productState(p.id);
+    return !ps.open && ps.autoClosed && stockOf(p) > 0;
+  });
+  if (reopen.length) await setProductsOpen(guild, reopen, true);
+  return reopen.length > 0;
 }
 
-/** Stock habis & Robux masih buka → tutup otomatis. */
-async function closeIfSoldOut(guild, reason) {
-  const product = robuxProduct(loadConfig());
-  if (product && state.stock <= 0 && productState(product.id).open) {
+/** Stock habis & produk masih buka → tutup otomatis (default: Robux Visend). */
+async function closeIfSoldOut(guild, reason, product = robuxProduct(loadConfig())) {
+  if (product && stockOf(product) <= 0 && productState(product.id).open) {
     await setProductsOpen(guild, [product], false, { reason, auto: true });
     return true;
   }
@@ -217,6 +218,7 @@ async function onProductInfo(interaction, productId) {
   const product = getProduct(cfg, productId);
   if (product?.type === 'rekber') return interaction.reply({ ...V.buildRekberInfo(interaction.guild, cfg, product), flags: EPH });
   if (product?.type === 'gamepass') return interaction.reply({ ...V.buildGamepassInfo(interaction.guild, cfg, product), flags: EPH });
+  if (product?.type === 'canva') return interaction.reply({ ...V.buildCanvaInfo(interaction.guild, cfg, product), flags: EPH });
   if (!product || product.type !== 'robux') {
     return interaction.reply({ content: '🔒 Produk ini **Coming Soon** — nantikan ya!', flags: EPH });
   }
@@ -237,6 +239,7 @@ async function onBuy(interaction, productId) {
   const product = getProduct(cfg, productId);
   if (product?.type === 'rekber') return onRekberStart(interaction, product);
   if (product?.type === 'gamepass') return onGamepassStart(interaction, product);
+  if (product?.type === 'canva') return onCanvaStart(interaction, product);
   if (!product || product.type !== 'robux') {
     return interaction.reply({ content: '🔒 Produk ini **Coming Soon** — nantikan ya!', flags: EPH });
   }
@@ -723,6 +726,7 @@ const STEP_LOG = {
 };
 const CLOSE_LOG = {
   robux: { completed: '✅ Robux berhasil dikirim', cancelled: '❌ Order dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
+  canva: { completed: '✅ Canva Pro aktif', cancelled: '❌ Order dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
   gamepass: { completed: '✅ Gamepass dibeli — Robux masuk setelah masa pending', cancelled: '❌ Order dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
   rekber: { completed: '✅ Dana dicairkan ke penjual', cancelled: '❌ Transaksi dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
 };
@@ -1084,6 +1088,231 @@ async function onGamepassCheck(interaction, ticketId) {
   return interaction.editReply(V.buildGamepassCheck(cfg, t, check.live, [...check.problems, ...check.warnings]));
 }
 
+// ══════════════════════ CANVA PRO ══════════════════════
+const cvSessions = new Map(); // userId → { draft, expires }
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[a-z]{2,}$/i;
+
+function returnSlot(cfg, t) {
+  const product = getProduct(cfg, t.productId);
+  if (product) setStock(product, stockOf(product) + 1);
+}
+
+/** "Order Sekarang" → form pilih paket + email. */
+async function onCanvaStart(interaction, product) {
+  if (!isProductOpen(product)) {
+    refreshPanel();
+    const why = stockOf(product) <= 0 ? 'slot sedang **HABIS**' : 'sedang **TUTUP**';
+    return interaction.reply({ content: `🔴 **${product.label}** ${why}. Pantau channel stock untuk info berikutnya.`, flags: EPH });
+  }
+  const active = activeTicketOf({ userId: interaction.user.id, kind: 'canva' });
+  if (active) {
+    return interaction.reply({
+      content: `⚠️ Kamu masih punya ticket ${product.label} yang sedang berjalan: <#${active.channelId}> (\`${active.id}\`).`,
+      flags: EPH,
+    });
+  }
+  const plans = V.canvaPlans(product).slice(0, 25);
+  const modal = new ModalBuilder()
+    .setCustomId(`store:cvmodal:${product.id}`)
+    .setTitle(`Order ${product.label}`.slice(0, 45))
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Pilih Paket')
+        .setStringSelectMenuComponent(
+          new StringSelectMenuBuilder()
+            .setCustomId('plan')
+            .setPlaceholder('Pilih paket Canva Pro...')
+            .setRequired(true)
+            .addOptions(
+              plans.map((x) => {
+                const save = V.planSaving(product, x);
+                return {
+                  label: `${x.label} — ${rupiah(x.price)}`.slice(0, 100),
+                  description: `Aktif ${num(x.days)} hari${save ? ` • Hemat ${save}%` : ''}`.slice(0, 100),
+                  value: x.id,
+                  emoji: x.emoji || '🗓️',
+                };
+              }),
+            ),
+        ),
+      new LabelBuilder()
+        .setLabel('Alamat Email Canva')
+        .setDescription('Email yang akan diundang ke team Canva Pro (boleh email baru / akun Canva yang sudah ada).')
+        .setTextInputComponent(textInput('email', { placeholder: 'contoh: namakamu@gmail.com', min: 6, max: 100 })),
+      new LabelBuilder()
+        .setLabel('Ulangi Alamat Email')
+        .setDescription('Ketik ulang email untuk memastikan tidak ada salah ketik.')
+        .setTextInputComponent(textInput('email2', { placeholder: 'contoh: namakamu@gmail.com', min: 6, max: 100 })),
+    );
+  return interaction.showModal(modal);
+}
+
+async function onCanvaModal(interaction, productId) {
+  await interaction.deferReply({ flags: EPH });
+  const cfg = loadConfig();
+  const product = getProduct(cfg, productId);
+  if (!product || product.type !== 'canva') return interaction.editReply('❌ Produk tidak ditemukan.');
+  if (!isProductOpen(product)) return interaction.editReply(`🔴 **${product.label}** sedang **TUTUP** atau slot habis.`);
+
+  const planId = interaction.fields.getStringSelectValues('plan')?.[0];
+  const plan = V.canvaPlans(product).find((x) => x.id === planId);
+  const email = interaction.fields.getTextInputValue('email').trim().toLowerCase();
+  const email2 = interaction.fields.getTextInputValue('email2').trim().toLowerCase();
+  if (!plan) return interaction.editReply('❌ Pilih paket terlebih dahulu.');
+  if (!EMAIL_RE.test(email)) return interaction.editReply('❌ Alamat email tidak valid. Contoh: `namakamu@gmail.com`');
+  if (email !== email2) return interaction.editReply('❌ Kedua alamat email **tidak sama**. Periksa lagi lalu klik Order Sekarang.');
+  const busy = activeTicketOf({ userId: interaction.user.id, email, kind: 'canva' });
+  if (busy) return interaction.editReply(`⚠️ Kamu / email ini masih punya ticket yang sedang berjalan (\`${busy.id}\`).`);
+
+  const draft = { productId: product.id, plan: { id: plan.id, label: plan.label, days: Number(plan.days) || 30 }, price: Number(plan.price), email };
+  cvSessions.set(interaction.user.id, { draft, expires: Date.now() + SESSION_MS });
+  return interaction.editReply(V.buildCanvaConfirm(interaction.guild, cfg, product, draft));
+}
+
+async function onCanvaConfirm(interaction, yes) {
+  const sess = cvSessions.get(interaction.user.id);
+  cvSessions.delete(interaction.user.id);
+  if (!yes) return interaction.update({ content: '✖️ Pesanan dibatalkan.', embeds: [], components: [] });
+  if (!sess || sess.expires < Date.now()) {
+    return interaction.update({ content: '⌛ Sesi sudah berakhir. Silakan klik Order Sekarang lagi.', embeds: [], components: [] });
+  }
+  const cfg = loadConfig();
+  const guild = interaction.guild;
+  const d = sess.draft;
+  const product = getProduct(cfg, d.productId);
+  if (!isProductOpen(product)) {
+    return interaction.update({ content: `🔴 Maaf, **${product?.label || 'produk ini'}** baru saja **TUTUP** / slot habis.`, embeds: [], components: [] });
+  }
+  if (activeTicketOf({ userId: interaction.user.id, email: d.email, kind: 'canva' })) {
+    return interaction.update({ content: '⚠️ Kamu / email ini masih punya ticket yang sedang berjalan.', embeds: [], components: [] });
+  }
+
+  // Kunci 1 slot SEKARANG supaya tidak terjual melebihi stock.
+  setStock(product, stockOf(product) - 1);
+  const tc = product.ticket || {};
+  const id = nextTicketId(tc.idPrefix || 'CV', 'canvaSeq');
+  const ticket = {
+    id,
+    kind: 'canva',
+    guildId: guild.id,
+    userId: interaction.user.id,
+    channelId: null,
+    messageId: null,
+    productId: product.id,
+    productLabel: product.label,
+    plan: d.plan,
+    email: d.email,
+    amount: 0,
+    price: d.price,
+    stage: { invited: false, joined: false },
+    status: 'open',
+    createdAt: Date.now(),
+  };
+  state.tickets[id] = ticket;
+  save();
+  await interaction.update({ content: '⏳ Sedang membuat ticket kamu...', embeds: [], components: [] });
+
+  try {
+    const category = await getTicketCategory(guild, cfg, tc.categoryName || '🎨 TICKET CANVA');
+    const member = [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ReadMessageHistory,
+      PermissionFlagsBits.AttachFiles,
+      PermissionFlagsBits.EmbedLinks,
+    ];
+    const overwrites = [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: interaction.user.id, allow: member },
+      { id: guild.members.me.id, allow: [...member, PermissionFlagsBits.ManageChannels] },
+    ];
+    const staff = isId(cfg.ticket?.staffRoleId) ? cfg.ticket.staffRoleId : null;
+    if (staff) overwrites.push({ id: staff, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
+    const slug = interaction.user.username.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+    const channel = await guild.channels.create({
+      name: `🎨・${id.toLowerCase()}-${slug}`,
+      type: ChannelType.GuildText,
+      parent: category.id,
+      topic: `${id} • ${product.label} ${d.plan.label} • ${interaction.user.tag}`,
+      permissionOverwrites: overwrites,
+    });
+    ticket.channelId = channel.id;
+
+    const msg = await channel.send({
+      content: `<@${interaction.user.id}>${staff ? ` <@&${staff}>` : ''}`,
+      ...V.buildTicketMessage(guild, cfg, ticket),
+      allowedMentions: { users: [interaction.user.id], roles: staff ? [staff] : [] },
+    });
+    await msg.pin().catch(() => {});
+    ticket.messageId = msg.id;
+    save();
+    logOrder(guild, ticket, '🆕 Order masuk & menunggu pembayaran');
+
+    const url = channelUrl(guild.id, channel.id);
+    const dmOk = await interaction.user
+      .send(V.buildDmCreated(guild, cfg, ticket, url))
+      .then(() => true)
+      .catch(() => false);
+    if (!dmOk) channel.send('ℹ️ Bot tidak bisa mengirim DM ke kamu (DM tertutup). Semua info pesanan ada di ticket ini.').catch(() => {});
+
+    await interaction.editReply({
+      content: `✅ **Ticket berhasil dibuat!** Lanjutkan pembayaran di ${channel}.`,
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Buka Ticket').setEmoji('🎫').setURL(url))],
+    });
+  } catch (err) {
+    console.error('[store] gagal membuat ticket canva:', err);
+    setStock(product, stockOf(product) + 1);
+    delete state.tickets[id];
+    save();
+    await interaction
+      .editReply('❌ Gagal membuat ticket. Pastikan bot punya izin **Manage Channels** & **Manage Roles**, lalu coba lagi.')
+      .catch(() => {});
+    refreshPanel();
+    return;
+  }
+  refreshPanel();
+  await closeIfSoldOut(guild, `🎨 **Slot ${product.label} sudah HABIS!** ${product.label} otomatis ditutup.`, product);
+}
+
+function canvaTicketFor(interaction, ticketId) {
+  const t = state.tickets[ticketId];
+  if (!t || kindOf(t) !== 'canva' || t.status !== 'open') {
+    interaction.reply({ content: 'Ticket ini sudah ditutup.', flags: EPH }).catch(() => {});
+    return null;
+  }
+  t.stage = t.stage || {};
+  return t;
+}
+
+async function advanceCanva(interaction, t, step, logText) {
+  const cfg = loadConfig();
+  save();
+  logOrder(interaction.guild, t, logText);
+  await interaction.update(V.buildTicketMessage(interaction.guild, cfg, t));
+  await interaction.channel.send(V.buildCanvaStep(interaction.guild, cfg, t, step)).catch(() => {});
+}
+
+/** Admin: undangan team sudah dikirim ke email pembeli. */
+async function onCanvaInvite(interaction, ticketId) {
+  if (!isAdmin(interaction.member)) return interaction.reply({ content: '⛔ Hanya **Administrator** yang bisa menandai undangan terkirim.', flags: EPH });
+  const t = canvaTicketFor(interaction, ticketId);
+  if (!t) return;
+  t.stage.invited = true;
+  t.stage.invitedAt = Date.now();
+  return advanceCanva(interaction, t, 'invited', '📨 Undangan team dikirim ke email pembeli');
+}
+
+/** Pembeli: sudah menerima undangan & bergabung ke team. */
+async function onCanvaJoined(interaction, ticketId) {
+  const t = canvaTicketFor(interaction, ticketId);
+  if (!t) return;
+  if (interaction.user.id !== t.userId) return interaction.reply({ content: `⛔ Hanya <@${t.userId}> (pembeli) yang bisa mengonfirmasi.`, flags: EPH });
+  if (!t.stage.invited) return interaction.reply({ content: 'Tunggu admin mengirim undangan terlebih dahulu.', flags: EPH });
+  t.stage.joined = true;
+  t.stage.joinedAt = Date.now();
+  return advanceCanva(interaction, t, 'joined', '🎉 Pembeli bergabung ke team Canva Pro');
+}
+
 // ══════════════════════ Tutup ticket (khusus Administrator) ══════════════════════
 async function onCloseButton(interaction, ticketId) {
   if (!isAdmin(interaction.member)) {
@@ -1227,9 +1456,11 @@ async function onCloseModal(interaction, ticketId) {
     ps.orders += 1;
     ps.robux += t.amount;
     ps.revenue += t.price;
+    if (kindOf(t) === 'canva') t.expiresAt = t.closedAt + (Number(t.plan?.days) || 30) * 86400000;
     t.testimonyDeadline = Date.now() + (Number(cfg.ticket?.testimonyTimeoutHours) || 24) * 3600 * 1000;
   } else {
     if (kindOf(t) === 'robux') state.stock += t.amount; // stock Robux dikembalikan (gamepass tidak memakai stock)
+    if (kindOf(t) === 'canva') returnSlot(cfg, t); // slot Canva dikembalikan
     t.deleteAt = Date.now() + (Number(cfg.ticket?.deleteAfterSeconds) || 15) * 1000;
   }
   save();
@@ -1252,7 +1483,7 @@ async function onCloseModal(interaction, ticketId) {
       files: proof.files,
       allowedMentions: { users: mentionIds },
     });
-    if (kindOf(t) === 'robux') {
+    if (kindOf(t) === 'robux' || kindOf(t) === 'canva') {
       await announce(guild, 'returned', { ticket: t });
       await reopenIfAutoClosed(guild);
     }
@@ -1373,6 +1604,23 @@ async function housekeeping() {
         t.deleteAt = now;
         save();
       }
+      // Canva Pro: ingatkan pembeli H-3 & beri tahu admin saat masa aktif habis.
+      if (kindOf(t) === 'canva' && t.status === 'completed' && t.expiresAt) {
+        const guild = client.guilds.cache.get(t.guildId) || client.guilds.cache.first();
+        const remindMs = (Number(getProduct(cfg, t.productId)?.remindDays ?? 3) || 0) * 86400000;
+        if (!t.remindedBuyer && remindMs && t.expiresAt - remindMs <= now && t.expiresAt > now && guild) {
+          t.remindedBuyer = true;
+          save();
+          const u = await client.users.fetch(t.userId).catch(() => null);
+          await u?.send(V.buildCanvaExpiry(guild, cfg, t, 'buyer')).catch(() => {});
+        }
+        if (!t.remindedAdmin && t.expiresAt <= now && guild) {
+          t.remindedAdmin = true;
+          save();
+          const admin = t.closedBy ? await client.users.fetch(t.closedBy).catch(() => null) : null;
+          await admin?.send(V.buildCanvaExpiry(guild, cfg, t, 'admin')).catch(() => {});
+        }
+      }
       // Hapus channel ticket yang sudah selesai.
       if (t.deleteAt && !t.deleted && t.deleteAt <= now) {
         t.deleted = true;
@@ -1401,10 +1649,11 @@ async function onChannelDelete(channel) {
     t.closedBy = client.user.id;
     t.note = 'Channel ticket dihapus manual';
     logOrder(channel.guild, t, kindOf(t) === 'rekber' ? '❌ Transaksi dibatalkan' : '❌ Order dibatalkan');
-    if (kindOf(t) !== 'robux') {
+    if (kindOf(t) !== 'robux' && kindOf(t) !== 'canva') {
       save();
     } else {
-      state.stock += t.amount;
+      if (kindOf(t) === 'canva') returnSlot(loadConfig(), t);
+      else state.stock += t.amount;
       save();
       await announce(channel.guild, 'returned', { ticket: t });
       await reopenIfAutoClosed(channel.guild);
@@ -1444,6 +1693,9 @@ async function handleInteraction(interaction) {
       else if (action === 'gptutor') await onGamepassTutorial(interaction, arg);
       else if (action === 'gpconfirm') await onGamepassConfirm(interaction, arg === 'yes');
       else if (action === 'gpcheck') await onGamepassCheck(interaction, arg);
+      else if (action === 'cvconfirm') await onCanvaConfirm(interaction, arg === 'yes');
+      else if (action === 'cvinvite') await onCanvaInvite(interaction, arg);
+      else if (action === 'cvjoined') await onCanvaJoined(interaction, arg);
       else if (action === 'howtobtn') {
         const cfg = loadConfig();
         await interaction.reply({ ...H.buildHowToGuide(interaction.guild, cfg, arg), flags: EPH });
@@ -1458,6 +1710,7 @@ async function handleInteraction(interaction) {
       else if (action === 'testimodal') await onTestimonyModal(interaction, arg);
       else if (action === 'rbmodal') await onRekberModal(interaction, arg);
       else if (action === 'gpmodal') await onGamepassModal(interaction, arg);
+      else if (action === 'cvmodal') await onCanvaModal(interaction, arg);
       else if (action === 'gpcalcprice' || action === 'gpcalctax') await onGamepassCalcModal(interaction, arg, action === 'gpcalctax' ? 'tax' : 'price');
     }
   } catch (err) {
