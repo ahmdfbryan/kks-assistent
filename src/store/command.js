@@ -2,6 +2,7 @@ const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, Emb
 const { loadConfig, isId, rupiah, num, color } = require('./config');
 const { state, save, productState, isProductOpen, hasStock, stockOf, setStock, stockUnit } = require('./state');
 const V = require('./views');
+const SP = require('./spender');
 const H = require('./howto');
 const C = require('./catalog');
 const { setProductsOpen, reopenIfAutoClosed, closeIfSoldOut, announce, refreshPanel, onDanaMasukCommand } = require('./flow');
@@ -119,7 +120,8 @@ const storeCommand = {
           return choices.length ? o.addChoices(...choices) : o;
         }),
     )
-    .addSubcommand((s) => s.setName('status').setDescription('Lihat ringkasan toko')),
+    .addSubcommand((s) => s.setName('status').setDescription('Lihat ringkasan toko'))
+    .addSubcommand((s) => s.setName('sinkron-role').setDescription('Pasang ulang role Buyer & tier spender ke semua pembeli')),
 
   async execute(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -224,6 +226,19 @@ const storeCommand = {
       );
     }
 
+    if (sub === 'sinkron-role') {
+      const ids = Object.keys(state.spenders);
+      let changed = 0;
+      for (const id of ids) {
+        const res = await SP.applySpenderRoles(guild, id, cfg).catch(() => null);
+        if (res && (res.added.length || res.removed.length)) changed += 1;
+      }
+      return interaction.editReply(
+        `✅ Sinkron role spender selesai: **${ids.length}** pembeli dicek, **${changed}** diperbarui.\n` +
+          'Kalau ada yang gagal: pastikan bot punya izin **Manage Roles** & role bot berada **di atas** semua role spender.',
+      );
+    }
+
     if (sub === 'status') {
       const active = Object.values(state.tickets).filter((t) => t.status === 'open');
       const reserved = active.filter((t) => !t.kind || t.kind === 'robux').reduce((a, t) => a + t.amount, 0);
@@ -286,4 +301,18 @@ const danaMasukCommand = {
   execute: (interaction) => onDanaMasukCommand(interaction),
 };
 
-module.exports = { storeCommand, danaMasukCommand };
+/** /spender [member] → kartu total belanja, tier, & progres ke tier berikutnya (semua member). */
+const spenderCommand = {
+  data: new SlashCommandBuilder()
+    .setName('spender')
+    .setDescription('Lihat total belanja & tier spender kamu / member lain')
+    .setDMPermission(false)
+    .addUserOption((o) => o.setName('member').setDescription('Default: kamu sendiri')),
+  async execute(interaction) {
+    const cfg = loadConfig();
+    const user = interaction.options.getUser('member') || interaction.user;
+    return interaction.reply({ ...SP.buildSpenderCard(interaction.guild, cfg, user), flags: MessageFlags.Ephemeral });
+  },
+};
+
+module.exports = { storeCommand, danaMasukCommand, spenderCommand };
