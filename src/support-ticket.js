@@ -15,6 +15,14 @@ const {
   ChannelType,
   MessageFlags,
   Events,
+  ContainerBuilder,
+  SectionBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
 } = require('discord.js');
 const giveaway = require('./giveaway');
 
@@ -70,25 +78,41 @@ const isStaff = (member, cfg) =>
   member?.permissions?.has(PermissionFlagsBits.Administrator) || (staffRole(cfg) && member?.roles?.cache?.has(staffRole(cfg)));
 
 // ───────────────────────── Panel ─────────────────────────
+/**
+ * Panel memakai Components V2 → garis pemisah (separator) selalu pas sampai ujung kotak di HP & laptop.
+ */
 function buildPanel(guild, cfg) {
   const p = cfg.panel || {};
   const types = (cfg.types || []).filter((t) => t.enabled !== false);
   const open = Object.values(data.tickets).filter((t) => t.status === 'open').length;
-  const e = new EmbedBuilder()
-    .setColor(brand(cfg))
-    .setTitle(p.title || '🎫 NCS Ticket Center')
-    .setDescription(`${p.description || ''}`.slice(0, 4096) || null)
-    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null);
-  if (types.length) {
-    e.addFields({
-      name: '📂 Jenis Ticket',
-      value: types.map((t) => `${t.emoji || '🎫'} **${t.label}**${t.comingSoon ? ' `SEGERA`' : ''}\n┗ ${t.description || '-'}`).join('\n'),
-    });
+  const line = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+  const text = (content) => new TextDisplayBuilder().setContent(String(content).slice(0, 4000));
+
+  const box = new ContainerBuilder().setAccentColor(brand(cfg));
+  const header = `# ${p.title || '🎫 NCS Ticket Center'}\n${p.description || ''}`;
+  const icon = guild.iconURL({ extension: 'png', size: 256 });
+  if (icon) {
+    box.addSectionComponents(new SectionBuilder().addTextDisplayComponents(text(header)).setThumbnailAccessory(new ThumbnailBuilder().setURL(icon)));
+  } else {
+    box.addTextDisplayComponents(text(header));
   }
-  if (p.notes?.length) e.addFields({ name: '📌 Sebelum Membuka Ticket', value: p.notes.map((x) => `▸ ${x}`).join('\n').slice(0, 1024) });
-  e.addFields({ name: '🟢 Ticket Aktif', value: `\`${open} ticket\``, inline: true }, { name: '⏱️ Respon', value: '`Secepatnya`', inline: true });
-  if (p.bannerImage) e.setImage(p.bannerImage);
-  e.setFooter(footer(guild)).setTimestamp(new Date());
+  if (p.bannerImage) box.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(p.bannerImage)));
+
+  if (types.length) {
+    box.addSeparatorComponents(line());
+    box.addTextDisplayComponents(
+      text(
+        '### 📂 Jenis Ticket\n' +
+          types.map((t) => `${t.emoji || '🎫'} **${t.label}**${t.comingSoon ? ' `SEGERA`' : ''}\n┗ ${t.description || '-'}`).join('\n'),
+      ),
+    );
+  }
+  if (p.notes?.length) {
+    box.addSeparatorComponents(line()); // garis sebelum "Sebelum Membuka Ticket"
+    box.addTextDisplayComponents(text(`### 📌 Sebelum Membuka Ticket\n${p.notes.map((x) => `▸ ${x}`).join('\n')}`));
+  }
+  box.addSeparatorComponents(line());
+  box.addTextDisplayComponents(text(`🟢 **Ticket Aktif:** \`${open} ticket\`　•　⏱️ **Respon:** \`Secepatnya\``));
 
   const select = new StringSelectMenuBuilder()
     .setCustomId('st:open')
@@ -101,7 +125,9 @@ function buildPanel(guild, cfg) {
         emoji: t.emoji || '🎫',
       })),
     );
-  return { embeds: [e], components: [new ActionRowBuilder().addComponents(select)] };
+  box.addActionRowComponents(new ActionRowBuilder().addComponents(select));
+  box.addTextDisplayComponents(text(`-# ${guild.name} • NCS Ticket Center`));
+  return { components: [box], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } };
 }
 
 async function refreshPanel() {
