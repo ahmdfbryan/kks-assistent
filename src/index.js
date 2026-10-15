@@ -1,7 +1,7 @@
 const { ensureSingleInstance } = require('./single-instance');
 ensureSingleInstance(); // tolak jalan kalau bot sudah jalan di proses lain
 
-const { Client, GatewayIntentBits, Events, MessageFlags } = require('discord.js');
+const { Client, GatewayIntentBits, Events, MessageFlags, Partials } = require('discord.js');
 const config = require('./config');
 const { commands } = require('./commands');
 const { registerWelcome } = require('./welcome');
@@ -24,6 +24,8 @@ const client = new Client({
     GatewayIntentBits.GuildMessages, // untuk panel sticky (tidak membaca isi pesan)
     GatewayIntentBits.GuildInvites, // invite log: mendeteksi link undangan yang dipakai member baru
   ],
+  // Partials: event member keluar tetap diterima walau member belum tersimpan di cache bot (member lama / setelah restart).
+  partials: [Partials.GuildMember, Partials.User],
 });
 registerWelcome(client);
 voiceFinder.registerStickyPanel(client);
