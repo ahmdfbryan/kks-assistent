@@ -5,7 +5,8 @@ const {
   ButtonStyle,
   StringSelectMenuBuilder,
 } = require('discord.js');
-const { color, rupiah, num, fill, ts } = require('./config');
+const { color, rupiah, num, fill, ts, loadConfig } = require('./config');
+const SP = require('./spender');
 const { state, productState, productStatsOf, hasStock, stockOf, stockUnit, isProductOpen, kindOf } = require('./state');
 
 const STATUS_LABEL = {
@@ -132,7 +133,8 @@ function buildLeaderboard(guild, cfg) {
   const lines = top.length
     ? top.map(([userId, d], i) => {
         const rank = medals[i] || `\`#${i + 1}\``;
-        return `${rank} <@${userId}>\n┗ 💰 **${rupiah(d.revenue)}** • ${num(d.orders)} order`;
+        const tier = SP.tierFor(d.revenue, cfg);
+        return `${rank} <@${userId}>\n┗ 💰 **${rupiah(d.revenue)}** • ${num(d.orders)} order${tier ? ` • ${SP.tierLabel(tier)}` : ''}`;
       })
     : ['_Belum ada transaksi. Jadilah spender pertama!_ 🚀'];
 
