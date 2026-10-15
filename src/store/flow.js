@@ -57,11 +57,18 @@ async function editTracked(key, build) {
   if (!channel) return;
   const cfg = loadConfig();
   if (!cfg) return;
+  const payload = build(channel.guild, cfg);
   try {
-    await channel.messages.edit(loc.messageId, build(channel.guild, cfg));
+    await channel.messages.edit(loc.messageId, payload);
   } catch (err) {
     if (err.code === RESTJSONErrorCodes.UnknownMessage) {
       state[key] = null; // pesan dihapus manual → berhenti di-update
+      save();
+    } else if (payload.flags) {
+      // Pesan lama format embed tidak bisa diubah ke Components V2 → kirim baru & hapus yang lama.
+      const sent = await channel.send(payload);
+      await channel.messages.delete(loc.messageId).catch(() => {});
+      state[key] = { channelId: channel.id, messageId: sent.id };
       save();
     } else throw err;
   }
@@ -1889,7 +1896,8 @@ async function onChannelDelete(channel) {
 async function onHowTo(interaction) {
   const cfg = loadConfig();
   if (!cfg) return interaction.reply({ content: '❌ store.json tidak bisa dibaca.', flags: EPH });
-  await interaction.reply({ ...H.buildHowToGuide(interaction.guild, cfg, interaction.values[0]), flags: EPH });
+  const guide = H.buildHowToGuide(interaction.guild, cfg, interaction.values[0]);
+  await interaction.reply({ ...guide, flags: (guide.flags || 0) | EPH });
   // Reset pilihan dropdown supaya produk yang sama bisa dipilih lagi.
   interaction.message?.edit(H.buildHowToPanel(interaction.guild, cfg)).catch(() => {});
 }
@@ -1925,7 +1933,8 @@ async function handleInteraction(interaction) {
       else if (action === 'cvjoined') await onCanvaJoined(interaction, arg);
       else if (action === 'howtobtn') {
         const cfg = loadConfig();
-        await interaction.reply({ ...H.buildHowToGuide(interaction.guild, cfg, arg), flags: EPH });
+        const guide = H.buildHowToGuide(interaction.guild, cfg, arg);
+        await interaction.reply({ ...guide, flags: (guide.flags || 0) | EPH });
       }
     } else if (interaction.isStringSelectMenu()) {
       if (action === 'amount') await onAmountSelect(interaction, arg);
