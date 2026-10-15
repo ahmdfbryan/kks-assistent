@@ -1,0 +1,57 @@
+{
+  "_petunjuk": [
+    "NCS Ticket Center — ticket layanan (bukan ticket jualan). Kirim panel dengan /ticket panel.",
+    "panelChannelId = channel panel ticket. categoryId kosong = ticket dibuat di kategori yang sama dengan channel panel (Customer Service).",
+    "staffRoleId = role staff yang bisa melihat & menangani ticket (kosong = hanya Administrator).",
+    "logChannelId = channel log ticket + transcript (opsional, kosongkan kalau tidak perlu).",
+    "types = pilihan di dropdown. comingSoon: true = muncul di dropdown tapi belum bisa dibuka. enabled: false = disembunyikan.",
+    "maxOpenPerUser = jumlah ticket aktif per member per jenis."
+  ],
+  "panelChannelId": "1553814079293095986",
+  "categoryId": "",
+  "staffRoleId": "",
+  "logChannelId": "",
+  "maxOpenPerUser": 1,
+  "deleteAfterSeconds": 10,
+  "color": "#3498DB",
+  "panel": {
+    "title": "🎫 NCS Ticket Center",
+    "description": "Pilih jenis ticket yang mau dibuka dari dropdown di bawah. Setelah mengisi form (kalau perlu), channel ticket bakal dibuat otomatis oleh system.",
+    "placeholder": "📂 Pilih jenis ticket...",
+    "bannerImage": "",
+    "notes": [
+      "Buka ticket **sesuai kebutuhan** — satu masalah, satu ticket.",
+      "Jelaskan kendalamu dengan **detail** agar cepat ditangani.",
+      "Mohon **sabar** menunggu, tim kami akan membalas secepatnya.",
+      "Dilarang **spam / membuka ticket iseng**."
+    ]
+  },
+  "types": [
+    {
+      "id": "support",
+      "label": "Support",
+      "emoji": "🛟",
+      "description": "Butuh bantuan umum? Buka ticket support",
+      "prefix": "SUP",
+      "enabled": true,
+      "welcome": "Terima kasih telah menghubungi **NCS Support**! 💙\nTim kami akan segera membantu kendalamu. Sambil menunggu, silakan lampirkan **screenshot / bukti pendukung** bila ada."
+    },
+    {
+      "id": "claim-giveaway",
+      "label": "Claim Giveaway",
+      "emoji": "🎁",
+      "description": "Menang giveaway? Klaim hadiahmu di sini",
+      "prefix": "CLM",
+      "enabled": true,
+      "welcome": "Selamat atas kemenanganmu! 🎉\nTim kami akan **memverifikasi** data giveaway lalu memproses pengiriman hadiahmu. Pastikan data penerimaan yang kamu isi sudah benar."
+    },
+    {
+      "id": "coming-soon",
+      "label": "Coming Soon",
+      "emoji": "🔒",
+      "description": "Layanan baru segera hadir",
+      "enabled": true,
+      "comingSoon": true
+    }
+  ]
+}
