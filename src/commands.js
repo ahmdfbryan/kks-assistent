@@ -3,7 +3,7 @@ const { sendWelcome } = require('./welcome');
 const { verifyCommand } = require('./verify');
 const { rulesCommand } = require('./rules');
 const { voiceFinderCommand } = require('./voice-finder');
-const { storeCommand, danaMasukCommand } = require('./store');
+const { storeCommand, danaMasukCommand, spenderCommand } = require('./store');
 const { socialCommand } = require('./social');
 const { invitesCommand, inviteLogCommand } = require('./invite-tracker');
 const { giveawayCommand } = require('./giveaway');
@@ -36,6 +36,6 @@ const welcomeCommand = {
   },
 };
 
-const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, danaMasukCommand, socialCommand, invitesCommand, inviteLogCommand, giveawayCommand];
+const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, danaMasukCommand, spenderCommand, socialCommand, invitesCommand, inviteLogCommand, giveawayCommand];
 
 module.exports = { commands };
