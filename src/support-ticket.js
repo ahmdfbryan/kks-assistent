@@ -291,7 +291,90 @@ async function createTicket(interaction, type, answers, extra = {}) {
   save();
   refreshPanel().catch(() => {});
   logTicket(guild, cfg, t, 'open').catch(() => {});
+  historyLog(guild, t, '🆕 Ticket dibuka');
   return { t, channel };
+}
+
+// ───────────────────────── Tickets History (Components V2, 1 pesan per ticket) ─────────────────────────
+const historyQueues = new Map();
+const HSTATUS = {
+  waiting: { text: '⏳ Menunggu Staff', color: 0x3498db },
+  claimed: { text: '🙋 Sedang Ditangani', color: 0x9b59b6 },
+  closed: { text: '✅ Selesai', color: 0x2ecc71 },
+};
+const hline = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+const htext = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000));
+const hrow = (label, value) => `» **${label} :** ${value}`;
+
+function buildHistoryCard(guild, cfg, t) {
+  const type = typeOf(cfg, t.type) || { label: t.type, emoji: '🎫' };
+  const st = t.status !== 'open' ? HSTATUS.closed : t.claimedBy ? HSTATUS.claimed : HSTATUS.waiting;
+  const h = cfg.history || {};
+  const box = new ContainerBuilder().setAccentColor(st.color);
+  box.addTextDisplayComponents(htext(`## ${type.emoji || '🎫'} ${t.id} • ${st.text}\n-# Tickets History`));
+  box.addSeparatorComponents(hline());
+
+  const info = [hrow('Jenis', `\`${type.label}\``), hrow('Dibuka Oleh', `<@${t.userId}>`)];
+  info.push(hrow('Ditangani', t.claimedBy ? `<@${t.claimedBy}>` : '`Belum ada`'));
+  if (t.giveawayId) info.push(hrow('Giveaway', `\`${t.giveawayId}\``));
+  if (h.showTopic !== false) {
+    const topic = (t.answers || []).find(([k]) => /Topik/.test(k));
+    if (topic) info.push(hrow('Topik', topic[1]));
+  }
+  const thumb = t.avatar || guild.iconURL({ extension: 'png', size: 256 });
+  if (thumb) box.addSectionComponents(new SectionBuilder().addTextDisplayComponents(htext(info.join('\n'))).setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb)));
+  else box.addTextDisplayComponents(htext(info.join('\n')));
+
+  const time = [hrow('Status', `**${st.text}**`), hrow('Dibuka', ts(t.createdAt, 'f'))];
+  if (t.claimedAt) time.push(hrow('Respon Staff', `\`${duration(t.claimedAt - t.createdAt)}\``));
+  if (t.closedAt) {
+    time.push(hrow('Ditutup', ts(t.closedAt, 'f')), hrow('Durasi', `\`${duration(t.closedAt - t.createdAt)}\``));
+    if (t.closedBy) time.push(hrow('Ditutup Oleh', `<@${t.closedBy}>`));
+    if (t.closeReason && h.showCloseReason !== false) time.push(hrow('Alasan', t.closeReason.slice(0, 200)));
+  }
+  box.addSeparatorComponents(hline());
+  box.addTextDisplayComponents(htext(time.join('\n')));
+
+  const timeline = (t.history || []).slice(-10).map((x) => `${ts(x.at, 't')} ┃ ${x.text}`).join('\n');
+  if (timeline) {
+    box.addSeparatorComponents(hline());
+    box.addTextDisplayComponents(htext(`**🗂️ Progress**\n${timeline}`));
+  }
+  box.addSeparatorComponents(hline());
+  box.addTextDisplayComponents(htext(`-# 🎫 NCS Ticket Center • ${ts(t.closedAt || t.createdAt, 'f')}`));
+  return { components: [box], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } };
+}
+
+/** Catat kejadian ticket & perbarui kartunya di channel Tickets History (antrian per ticket, tidak dobel). */
+function historyLog(guild, t, text) {
+  if (text) {
+    t.history = t.history || [];
+    t.history.push({ at: Date.now(), text });
+    save();
+  }
+  const prev = historyQueues.get(t.id) || Promise.resolve();
+  const next = prev
+    .then(async () => {
+      const cfg = loadConfig();
+      if (!isId(cfg.historyChannelId) || !guild) return;
+      const ch = await guild.channels.fetch(cfg.historyChannelId).catch(() => null);
+      if (!ch?.isTextBased()) return;
+      const payload = buildHistoryCard(guild, cfg, t);
+      if (t.historyMessageId) {
+        try {
+          await ch.messages.edit(t.historyMessageId, payload);
+          return;
+        } catch {
+          // pesan dihapus manual → kirim baru
+        }
+      }
+      const msg = await ch.send(payload);
+      t.historyMessageId = msg.id;
+      save();
+    })
+    .catch((e) => console.error(`[ticket] history ${t.id}:`, e.message));
+  historyQueues.set(t.id, next);
+  return next;
 }
 
 async function logTicket(guild, cfg, t, kind, files = []) {
@@ -369,6 +452,7 @@ async function closeTicket(interaction, t, reason) {
   }
   const transcript = channel ? await buildTranscript(channel, t).catch(() => null) : null;
   await logTicket(guild, cfg, t, 'close', transcript ? [transcript] : []);
+  historyLog(guild, t, `🔒 Ditutup oleh <@${t.closedBy}>`);
 
   // DM pembuka ticket
   const user = await client.users.fetch(t.userId).catch(() => null);
@@ -489,6 +573,8 @@ async function handleInteraction(interaction) {
     if (action === 'claim') {
       if (!isStaff(interaction.member, cfg)) return void (await interaction.reply({ content: '⛔ Hanya **staff** yang bisa menangani ticket.', flags: EPH }));
       t.claimedBy = interaction.user.id;
+      t.claimedAt = Date.now();
+      historyLog(interaction.guild, t, `🙋 Ditangani oleh <@${interaction.user.id}>`);
       save();
       await interaction.update(buildTicketMessage(interaction.guild, cfg, t));
       await interaction.channel
@@ -627,6 +713,7 @@ function registerSupportTickets(c) {
     t.status = 'closed';
     t.closedAt = Date.now();
     t.closeReason = 'Channel dihapus manual';
+    historyLog(ch.guild, t, '🗑️ Channel ticket dihapus manual');
     save();
     refreshPanel().catch(() => {});
   });
