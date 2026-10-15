@@ -1784,6 +1784,199 @@ function buildOrderLogV2(guild, cfg, t) {
   });
 }
 
+// ══════════════════════ Panel & info produk (Components V2) ══════════════════════
+function pcard({ accent, header, thumb, image, blocks = [], footer, rows = [] }) {
+  const box = new ContainerBuilder().setAccentColor(accent);
+  if (thumb) box.addSectionComponents(new SectionBuilder().addTextDisplayComponents(v2Text(header)).setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb)));
+  else box.addTextDisplayComponents(v2Text(header));
+  if (image) box.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(image)));
+  for (const b of blocks.filter(Boolean)) {
+    box.addSeparatorComponents(v2Line());
+    box.addTextDisplayComponents(v2Text(b));
+  }
+  if (footer) {
+    box.addSeparatorComponents(v2Line());
+    box.addTextDisplayComponents(v2Text(`-# ${footer}`));
+  }
+  for (const r of rows.filter(Boolean)) box.addActionRowComponents(r);
+  return { components: [box], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } };
+}
+const icon256 = (guild) => guild.iconURL({ extension: 'png', size: 256 }) || null;
+const nowTs = () => `<t:${Math.floor(Date.now() / 1000)}:f>`;
+const openBadge = (open) => (open ? '`🟢 BUKA`' : '`🔴 TUTUP`');
+const ratingLine = () => {
+  const s = state.stats;
+  const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
+  const stars = s.ratingCount ? STARS(Math.round(s.ratingSum / s.ratingCount)) : '☆☆☆☆☆';
+  return `⭐ **Rating Pembeli:** ${stars} \`${avg} / 5\` (${num(s.ratingCount)} ulasan)`;
+};
+const termsButton = (product, label) =>
+  product.terms?.description
+    ? new ButtonBuilder().setCustomId(`store:terms:${product.id}`).setLabel(product.terms.button || label).setEmoji('📌').setStyle(ButtonStyle.Secondary)
+    : null;
+const btnRow = (buttons) => new ActionRowBuilder().addComponents(buttons.filter(Boolean).slice(0, 5));
+
+/** Panel utama store (V2): judul, keterangan, total transaksi, rating, tombol produk. */
+function buildPanelV2(guild, cfg) {
+  const p = cfg.panel || {};
+  const name = { name: storeName(cfg, guild) };
+  const s = state.stats;
+  const styles = { robux: ButtonStyle.Success, gamepass: ButtonStyle.Success, canva: ButtonStyle.Primary, rekber: ButtonStyle.Primary };
+  const buttons = (cfg.products || []).slice(0, 5).map((prod) =>
+    new ButtonBuilder()
+      .setCustomId(`store:buy:${prod.id}`)
+      .setLabel(prod.label)
+      .setEmoji(prod.emoji || '🛒')
+      .setStyle(styles[prod.type] || ButtonStyle.Secondary)
+      .setDisabled(!isProductOpen(prod)),
+  );
+  return pcard({
+    accent: color(cfg, 'brand', 0x3498db),
+    thumb: icon256(guild),
+    header: `# ${fill(p.title || '🛒 {server}', name)}\n-# ${fill(p.subtitle || 'Official Store • {server}', name)}`,
+    image: p.bannerImage || null,
+    blocks: [
+      fill(p.description, name) || null,
+      [`🧾 **Total Transaksi:** \`${num((s.transactions || 0) + (s.rekber || 0))} transaksi\``, ratingLine()].join('\n'),
+    ],
+    footer: `${name.name} • Diperbarui <t:${Math.floor(Date.now() / 1000)}:R>`,
+    rows: buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [],
+  });
+}
+
+/** Info Robux Visend (V2, hanya terlihat pembeli). */
+function buildProductInfoV2(guild, cfg, product) {
+  const open = isProductOpen(product);
+  const name = { name: storeName(cfg, guild) };
+  return pcard({
+    accent: color(cfg, 'brand', 0x3498db),
+    thumb: product.thumbnail || icon256(guild),
+    header: `## ${product.emoji || '💎'} ${product.label}\n${fill(product.description || '', name)}`,
+    blocks: [
+      [`💎 **Harga:** \`${rupiah(rateOf(cfg, product))} / Robux\``, `📦 **Sisa Stock:** \`${num(state.stock)} Robux\``, `🏪 **Status:** ${openBadge(open)}`].join('\n'),
+      [
+        `🧾 **Total Transaksi:** \`${num(state.stats.transactions)} transaksi\``,
+        `💎 **${product.label} Terjual:** \`${num(productStatsOf(product.id).robux)} Robux\``,
+        ratingLine(),
+      ].join('\n'),
+    ],
+    footer: `${name.name} • ${nowTs()}`,
+    rows: [
+      btnRow([
+        new ButtonBuilder()
+          .setCustomId(`store:order:${product.id}`)
+          .setLabel(open ? 'Beli Sekarang' : 'Toko Sedang Tutup')
+          .setEmoji('🛒')
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(!open),
+        product.howTo ? new ButtonBuilder().setCustomId(`store:howtobtn:${product.id}`).setLabel('Cara Order').setEmoji('📖').setStyle(ButtonStyle.Primary) : null,
+        termsButton(product, 'Syarat Pembelian'),
+      ]),
+    ],
+  });
+}
+
+/** Info Robux Gamepass (V2). */
+function buildGamepassInfoV2(guild, cfg, product) {
+  const open = isProductOpen(product);
+  const name = { name: storeName(cfg, guild) };
+  const ps = productStatsOf(product.id);
+  const ex = gpExamples(cfg, product);
+  const notes = (product.notes || []).map((n) => `▸ ${fill(n, name)}`);
+  notes.push(`▸ ⏳ ${gpEstimate(product)}`);
+  return pcard({
+    accent: color(cfg, 'brand', 0x3498db),
+    thumb: product.thumbnail || icon256(guild),
+    header: `## ${product.emoji || '🎟️'} ${product.label}\n${fill(product.description || '', name)}`,
+    blocks: [
+      [`💱 **Rate:** \`${rupiah(rateOf(cfg, product))} / Robux\``, `⏱️ **Estimasi:** \`± ${num(product.pendingDays || 5)} hari\``, `🏪 **Status:** ${openBadge(open)}`].join('\n'),
+      ex ? `### 📊 Contoh Harga (After Tax)\n${ex}` : null,
+      `### 📝 Catatan\n${notes.join('\n')}`,
+      [`🧾 **Transaksi Gamepass:** \`${num(ps.orders)} transaksi\``, `💎 **Robux Terkirim:** \`${num(ps.robux)} Robux\``, ratingLine()].join('\n'),
+    ],
+    footer: `${name.name} • ${nowTs()}`,
+    rows: [btnRow(gpButtons(product))],
+  });
+}
+
+/** Info Canva Pro (V2). */
+function buildCanvaInfoV2(guild, cfg, product) {
+  const open = isProductOpen(product);
+  const name = { name: storeName(cfg, guild) };
+  const ps = productStatsOf(product.id);
+  const table = planTable(product);
+  return pcard({
+    accent: color(cfg, 'brand', 0x3498db),
+    thumb: product.thumbnail || icon256(guild),
+    header: `## ${product.emoji || '🎨'} ${product.label}\n${fill(product.description || '', name)}`,
+    blocks: [
+      table ? `### 🗓️ Pilihan Paket\n${table}` : null,
+      [`🎟️ **Sisa Slot:** \`${num(stockOf(product))} ${stockUnit(product)}\``, `🏪 **Status:** ${openBadge(open)}`, '📧 **Aktivasi:** `Undangan via email`'].join('\n'),
+      product.features?.length ? `### ✨ Keuntungan\n${product.features.map((x) => `▸ ${x}`).join('\n')}` : null,
+      product.howItWorks?.length ? `### 🔄 Cara Kerja\n${product.howItWorks.map((x, i) => `${KEYCAPS[i] || `\`${i + 1}\``} ${x}`).join('\n')}` : null,
+      [`✅ **Order Selesai:** \`${num(ps.orders)} order\``, `👥 **Member Aktif:** \`${num(canvaActiveCount(product.id))} member\``, ratingLine()].join('\n'),
+    ],
+    footer: `${name.name} • ${nowTs()}`,
+    rows: [
+      btnRow([
+        new ButtonBuilder()
+          .setCustomId(`store:order:${product.id}`)
+          .setLabel(open ? 'Order Sekarang' : stockOf(product) <= 0 ? 'Slot Habis' : 'Sedang Tutup')
+          .setEmoji('🛒')
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(!open),
+        product.howTo ? new ButtonBuilder().setCustomId(`store:howtobtn:${product.id}`).setLabel('Cara Order').setEmoji('📖').setStyle(ButtonStyle.Primary) : null,
+        termsButton(product, 'Syarat'),
+      ]),
+    ],
+  });
+}
+
+/** Info Rekber (V2). */
+function buildRekberInfoV2(guild, cfg, product) {
+  const open = isProductOpen(product);
+  const name = { name: storeName(cfg, guild) };
+  const s = state.stats;
+  return pcard({
+    accent: color(cfg, 'brand', 0x3498db),
+    thumb: product.thumbnail || icon256(guild),
+    header: `## ${product.emoji || '🤝'} ${product.label} — Rekening Bersama\n${fill(product.description || '', name)}`,
+    blocks: [
+      `### 🧾 Fee Rekber\n${feeTable(product) || '-'}`,
+      [
+        `💵 **Nominal Transaksi:** \`${rupiah(product.minNominal || 0)} – ${rupiah(product.maxNominal || 0)}\``,
+        `💳 **Fee Ditanggung:** \`${(product.feePaidBy || 'pembeli') === 'penjual' ? 'Penjual' : 'Pembeli'}\``,
+        `🏪 **Status:** ${openBadge(open)}`,
+      ].join('\n'),
+      [`🤝 **Rekber Sukses:** \`${num(s.rekber)} transaksi\``, `🛡️ **Dana Diamankan:** \`${rupiah(s.rekberVolume)}\``].join('\n'),
+    ],
+    footer: `${name.name} • ${nowTs()}`,
+    rows: [
+      btnRow([
+        new ButtonBuilder()
+          .setCustomId(`store:order:${product.id}`)
+          .setLabel(open ? 'Buat Ticket Rekber' : 'Rekber Sedang Tutup')
+          .setEmoji('🤝')
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(!open),
+        product.howTo ? new ButtonBuilder().setCustomId(`store:howtobtn:${product.id}`).setLabel('Cara Order').setEmoji('📖').setStyle(ButtonStyle.Secondary) : null,
+        termsButton(product, 'Syarat & Ketentuan'),
+      ]),
+    ],
+  });
+}
+
+/** Syarat produk (V2). */
+function buildProductTermsV2(guild, cfg, product) {
+  const t = product.terms || {};
+  return pcard({
+    accent: color(cfg, 'brand', 0x3498db),
+    header: `## ${t.title || `📌 Persyaratan ${product.label}`}`,
+    blocks: [fill(t.description || '-', { name: storeName(cfg, guild) })],
+    footer: `${storeName(cfg, guild)} • ${nowTs()}`,
+  });
+}
+
 module.exports = {
   payAmount,
   isPaid,
@@ -1799,7 +1992,7 @@ module.exports = {
   planTable,
   minPlanPrice,
   canvaActiveCount,
-  buildCanvaInfo,
+  buildCanvaInfo: buildCanvaInfoV2,
   buildCanvaConfirm,
   buildCanvaStep,
   buildCanvaExpiry,
@@ -1807,7 +2000,7 @@ module.exports = {
   gpQuote,
   gpAfterTax,
   gpBeforeTax,
-  buildGamepassInfo,
+  buildGamepassInfo: buildGamepassInfoV2,
   buildGamepassTutorial,
   buildGamepassCalc,
   buildGamepassConfirm,
@@ -1817,7 +2010,7 @@ module.exports = {
   statusLabel,
   testimonyUserId,
   rekberFee,
-  buildRekberInfo,
+  buildRekberInfo: buildRekberInfoV2,
   buildRekberConfirm,
   buildRekberDmCreated,
   buildRekberStep,
@@ -1825,9 +2018,9 @@ module.exports = {
   buildOrderLogLegacy: buildOrderLog,
   buildTestimonyThanks,
   rateOf,
-  buildPanel,
-  buildProductInfo,
-  buildProductTerms,
+  buildPanel: buildPanelV2,
+  buildProductInfo: buildProductInfoV2,
+  buildProductTerms: buildProductTermsV2,
   storeName,
   buildLeaderboard,
   buildConfirmAccount,
