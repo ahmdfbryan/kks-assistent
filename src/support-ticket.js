@@ -1,0 +1,610 @@
+const fs = require('fs');
+const path = require('path');
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  ModalBuilder,
+  LabelBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  SlashCommandBuilder,
+  PermissionFlagsBits,
+  ChannelType,
+  MessageFlags,
+  Events,
+} = require('discord.js');
+const giveaway = require('./giveaway');
+
+/**
+ * NCS Ticket Center — ticket layanan (Support, Claim Giveaway, ...), terpisah dari ticket jualan.
+ * Panel dropdown → form → channel ticket otomatis → staff menangani → tutup + transcript.
+ * Pengaturan di tickets.json.
+ */
+const FILE = path.join(__dirname, '..', 'tickets.json');
+const DATA = path.join(__dirname, '..', 'data', 'support-tickets.json');
+const EPH = MessageFlags.Ephemeral;
+const isId = (v) => /^\d{17,20}$/.test(String(v || ''));
+const ts = (ms, s = 'f') => `<t:${Math.floor(ms / 1000)}:${s}>`;
+let client = null;
+
+function loadConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(FILE, 'utf8'));
+  } catch (err) {
+    console.error('[ticket] tickets.json tidak bisa dibaca:', err.message);
+    return { types: [] };
+  }
+}
+function loadData() {
+  try {
+    return { seq: {}, tickets: {}, panel: null, ...JSON.parse(fs.readFileSync(DATA, 'utf8')) };
+  } catch {
+    return { seq: {}, tickets: {}, panel: null };
+  }
+}
+const data = loadData();
+function save() {
+  fs.mkdirSync(path.dirname(DATA), { recursive: true });
+  fs.writeFileSync(`${DATA}.tmp`, JSON.stringify(data, null, 2));
+  fs.renameSync(`${DATA}.tmp`, DATA);
+}
+const brand = (cfg) => {
+  const n = parseInt(String(cfg.color || '').replace('#', ''), 16);
+  return Number.isNaN(n) ? 0x3498db : n;
+};
+const footer = (guild, text) => ({ text: text || guild.name, iconURL: guild.iconURL({ extension: 'png', size: 128 }) || undefined });
+/** Baca isian form yang opsional dengan aman (kosong / tidak ada → ''). */
+const optional = (fields, id) => {
+  try {
+    return (fields.getTextInputValue(id) || '').trim();
+  } catch {
+    return '';
+  }
+};
+const typeOf = (cfg, id) => (cfg.types || []).find((t) => t.id === id) || null;
+const staffRole = (cfg) => (isId(cfg.staffRoleId) ? cfg.staffRoleId : null);
+const isStaff = (member, cfg) =>
+  member?.permissions?.has(PermissionFlagsBits.Administrator) || (staffRole(cfg) && member?.roles?.cache?.has(staffRole(cfg)));
+
+// ───────────────────────── Panel ─────────────────────────
+function buildPanel(guild, cfg) {
+  const p = cfg.panel || {};
+  const types = (cfg.types || []).filter((t) => t.enabled !== false);
+  const open = Object.values(data.tickets).filter((t) => t.status === 'open').length;
+  const e = new EmbedBuilder()
+    .setColor(brand(cfg))
+    .setTitle(p.title || '🎫 NCS Ticket Center')
+    .setDescription(`${p.description || ''}`.slice(0, 4096) || null)
+    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null);
+  if (types.length) {
+    e.addFields({
+      name: '📂 Jenis Ticket',
+      value: types.map((t) => `${t.emoji || '🎫'} **${t.label}**${t.comingSoon ? ' `SEGERA`' : ''}\n┗ ${t.description || '-'}`).join('\n'),
+    });
+  }
+  if (p.notes?.length) e.addFields({ name: '📌 Sebelum Membuka Ticket', value: p.notes.map((x) => `▸ ${x}`).join('\n').slice(0, 1024) });
+  e.addFields({ name: '🟢 Ticket Aktif', value: `\`${open} ticket\``, inline: true }, { name: '⏱️ Respon', value: '`Secepatnya`', inline: true });
+  if (p.bannerImage) e.setImage(p.bannerImage);
+  e.setFooter(footer(guild)).setTimestamp(new Date());
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('st:open')
+    .setPlaceholder(p.placeholder || '📂 Pilih jenis ticket...')
+    .addOptions(
+      (types.length ? types : [{ id: 'none', label: 'Belum ada layanan', comingSoon: true }]).slice(0, 25).map((t) => ({
+        label: `${t.label}${t.comingSoon ? ' (Segera Hadir)' : ''}`.slice(0, 100),
+        description: (t.description || '').slice(0, 100) || undefined,
+        value: t.id,
+        emoji: t.emoji || '🎫',
+      })),
+    );
+  return { embeds: [e], components: [new ActionRowBuilder().addComponents(select)] };
+}
+
+async function refreshPanel() {
+  const loc = data.panel;
+  if (!client || !loc) return;
+  const ch = await client.channels.fetch(loc.channelId).catch(() => null);
+  if (!ch?.guild) return;
+  await ch.messages.edit(loc.messageId, buildPanel(ch.guild, loadConfig())).catch(() => {});
+}
+
+// ───────────────────────── Form ─────────────────────────
+function buildForm(type, userId) {
+  const modal = new ModalBuilder().setCustomId(`st:form:${type.id}`).setTitle(`${type.label}`.slice(0, 45));
+  if (type.id === 'claim-giveaway') {
+    const wins = giveaway.winsOf ? giveaway.winsOf(userId).slice(0, 25) : [];
+    const first = wins.length
+      ? new LabelBuilder()
+          .setLabel('Giveaway yang Dimenangkan')
+          .setStringSelectMenuComponent(
+            new StringSelectMenuBuilder()
+              .setCustomId('gaid')
+              .setPlaceholder('Pilih giveaway...')
+              .setRequired(true)
+              .addOptions(wins.map((g) => ({ label: `${g.id} • ${g.prize}`.slice(0, 100), value: g.id, emoji: '🎁' }))),
+          )
+      : new LabelBuilder()
+          .setLabel('ID Giveaway / Nama Hadiah')
+          .setDescription('Contoh: GA-0001 atau 100 Robux')
+          .setTextInputComponent(new TextInputBuilder().setCustomId('gatext').setStyle(TextInputStyle.Short).setMaxLength(100).setRequired(true));
+    modal.addLabelComponents(
+      first,
+      new LabelBuilder()
+        .setLabel('Data Penerimaan Hadiah')
+        .setDescription('Contoh: username Roblox, email, atau data lain yang dibutuhkan.')
+        .setTextInputComponent(
+          new TextInputBuilder().setCustomId('receiver').setStyle(TextInputStyle.Short).setPlaceholder('contoh: Builderman').setMaxLength(100).setRequired(true),
+        ),
+      new LabelBuilder()
+        .setLabel('Catatan (opsional)')
+        .setTextInputComponent(new TextInputBuilder().setCustomId('note').setStyle(TextInputStyle.Paragraph).setMaxLength(500).setRequired(false)),
+    );
+  } else {
+    modal.addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Topik')
+        .setDescription('Ringkasan singkat kendalamu.')
+        .setTextInputComponent(
+          new TextInputBuilder().setCustomId('topic').setStyle(TextInputStyle.Short).setPlaceholder('contoh: Pesanan belum masuk').setMinLength(3).setMaxLength(100).setRequired(true),
+        ),
+      new LabelBuilder()
+        .setLabel('Jelaskan Kendalamu')
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId('detail')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('Ceritakan detail kendalamu agar tim kami bisa membantu lebih cepat.')
+            .setMinLength(10)
+            .setMaxLength(1000)
+            .setRequired(true),
+        ),
+    );
+  }
+  return modal;
+}
+
+// ───────────────────────── Ticket ─────────────────────────
+function buildTicketMessage(guild, cfg, t) {
+  const type = typeOf(cfg, t.type) || { label: t.type, emoji: '🎫' };
+  const closed = t.status !== 'open';
+  const e = new EmbedBuilder()
+    .setColor(closed ? 0x95a5a6 : brand(cfg))
+    .setAuthor({ name: `${guild.name} • NCS Ticket Center`, iconURL: guild.iconURL({ size: 128 }) || undefined })
+    .setTitle(`${type.emoji || '🎫'} ${type.label} • ${t.id}`)
+    .setDescription(type.welcome || 'Tim kami akan segera membantumu.')
+    .setThumbnail(t.avatar || guild.iconURL({ extension: 'png', size: 256 }) || null)
+    .addFields(
+      { name: '👤 Dibuka Oleh', value: `<@${t.userId}>`, inline: true },
+      { name: '📂 Jenis', value: `\`${type.label}\``, inline: true },
+      { name: '🕒 Dibuat', value: ts(t.createdAt, 'R'), inline: true },
+    );
+  for (const [k, v] of t.answers || []) e.addFields({ name: k, value: String(v).slice(0, 1024) || '-' });
+  if (t.verified != null) {
+    e.addFields({ name: '🔎 Verifikasi Pemenang', value: t.verified ? '`✅ Terverifikasi sebagai pemenang`' : '`⚠️ Tidak ditemukan di data giveaway — cek manual`' });
+  }
+  e.addFields({
+    name: '📌 Status',
+    value: closed ? `\`🔒 Ditutup\` ${t.closedAt ? ts(t.closedAt, 'R') : ''}` : t.claimedBy ? `\`🙋 Ditangani\` oleh <@${t.claimedBy}>` : '`⏳ Menunggu Staff`',
+    inline: true,
+  });
+  e.setFooter(footer(guild, `NCS Ticket Center • ${t.id}`)).setTimestamp(t.createdAt);
+
+  const components = closed
+    ? []
+    : [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`st:claim:${t.id}`)
+            .setLabel(t.claimedBy ? 'Sudah Ditangani' : 'Tangani Ticket (Staff)')
+            .setEmoji('🙋')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(Boolean(t.claimedBy)),
+          new ButtonBuilder().setCustomId(`st:close:${t.id}`).setLabel('Tutup Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+        ),
+      ];
+  return { embeds: [e], components, allowedMentions: { parse: [] } };
+}
+
+async function createTicket(interaction, type, answers, extra = {}) {
+  const cfg = loadConfig();
+  const guild = interaction.guild;
+  const prefix = type.prefix || type.id.slice(0, 3).toUpperCase();
+  data.seq[type.id] = (data.seq[type.id] || 0) + 1;
+  const id = `${prefix}-${String(data.seq[type.id]).padStart(4, '0')}`;
+  const t = {
+    id,
+    type: type.id,
+    guildId: guild.id,
+    userId: interaction.user.id,
+    avatar: interaction.user.displayAvatarURL({ extension: 'png', size: 256 }),
+    answers,
+    ...extra,
+    status: 'open',
+    createdAt: Date.now(),
+  };
+
+  // Kategori: tickets.json → categoryId, atau kategori channel panel (Customer Service).
+  let parent = isId(cfg.categoryId) ? cfg.categoryId : null;
+  if (!parent) {
+    const panelCh = await guild.channels.fetch(cfg.panelChannelId || data.panel?.channelId || interaction.channelId).catch(() => null);
+    parent = panelCh?.parentId || null;
+  }
+  const member = [
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.SendMessages,
+    PermissionFlagsBits.ReadMessageHistory,
+    PermissionFlagsBits.AttachFiles,
+    PermissionFlagsBits.EmbedLinks,
+  ];
+  const overwrites = [
+    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: interaction.user.id, allow: member },
+    { id: guild.members.me.id, allow: [...member, PermissionFlagsBits.ManageChannels] },
+  ];
+  if (staffRole(cfg)) overwrites.push({ id: staffRole(cfg), allow: member });
+  const slug = interaction.user.username.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+  const channel = await guild.channels.create({
+    name: `${type.emoji || '🎫'}・${id.toLowerCase()}-${slug}`,
+    type: ChannelType.GuildText,
+    parent: parent || undefined,
+    topic: `${id} • ${type.label} • ${interaction.user.tag}`,
+    permissionOverwrites: overwrites,
+  });
+  t.channelId = channel.id;
+  const msg = await channel.send({
+    content: `<@${interaction.user.id}>${staffRole(cfg) ? ` <@&${staffRole(cfg)}>` : ''}`,
+    ...buildTicketMessage(guild, cfg, t),
+    allowedMentions: { users: [interaction.user.id], roles: staffRole(cfg) ? [staffRole(cfg)] : [] },
+  });
+  await msg.pin().catch(() => {});
+  t.messageId = msg.id;
+  data.tickets[id] = t;
+  save();
+  refreshPanel().catch(() => {});
+  logTicket(guild, cfg, t, 'open').catch(() => {});
+  return { t, channel };
+}
+
+async function logTicket(guild, cfg, t, kind, files = []) {
+  if (!isId(cfg.logChannelId)) return;
+  const ch = await guild.channels.fetch(cfg.logChannelId).catch(() => null);
+  if (!ch?.isTextBased()) return;
+  const type = typeOf(cfg, t.type) || { label: t.type, emoji: '🎫' };
+  const e = new EmbedBuilder()
+    .setColor(kind === 'open' ? 0x2ecc71 : 0xe74c3c)
+    .setTitle(`${kind === 'open' ? '📥 Ticket Dibuka' : '🔒 Ticket Ditutup'} • ${t.id}`)
+    .addFields(
+      { name: '📂 Jenis', value: `${type.emoji || ''} ${type.label}`, inline: true },
+      { name: '👤 Pembuka', value: `<@${t.userId}>`, inline: true },
+      { name: kind === 'open' ? '🎫 Channel' : '🙋 Ditutup Oleh', value: kind === 'open' ? `<#${t.channelId}>` : `<@${t.closedBy}>`, inline: true },
+    )
+    .setFooter(footer(guild, 'NCS Ticket Center'))
+    .setTimestamp(new Date());
+  if (kind === 'close') {
+    if (t.claimedBy) e.addFields({ name: '🛡️ Ditangani', value: `<@${t.claimedBy}>`, inline: true });
+    if (t.closeReason) e.addFields({ name: '📝 Alasan', value: t.closeReason.slice(0, 1024) });
+  }
+  await ch.send({ embeds: [e], files, allowedMentions: { parse: [] } }).catch(() => {});
+}
+
+/** Transcript teks seluruh percakapan ticket. */
+async function buildTranscript(channel, t) {
+  const lines = [];
+  let before;
+  for (let i = 0; i < 5; i++) {
+    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    if (!batch?.size) break;
+    lines.push(...batch.values());
+    before = batch.last().id;
+    if (batch.size < 100) break;
+  }
+  const text = lines
+    .reverse()
+    .map((m) => {
+      const time = new Date(m.createdTimestamp).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+      const body = [m.content, ...m.embeds.map((e) => `[embed] ${e.title || ''} ${e.description || ''}`.trim()), ...[...m.attachments.values()].map((a) => `[lampiran] ${a.url}`)]
+        .filter(Boolean)
+        .join(' | ');
+      return `[${time}] ${m.author?.tag || 'unknown'}: ${body}`;
+    })
+    .join('\n');
+  const header = `NCS Ticket Center — Transcript ${t.id}\nDibuka oleh: ${t.userId} • ${new Date(t.createdAt).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}\n${'='.repeat(60)}\n`;
+  return { attachment: Buffer.from(header + text, 'utf8'), name: `transcript-${t.id}.txt` };
+}
+
+async function closeTicket(interaction, t, reason) {
+  const cfg = loadConfig();
+  const guild = interaction.guild;
+  t.status = 'closed';
+  t.closedAt = Date.now();
+  t.closedBy = interaction.user.id;
+  t.closeReason = reason || null;
+  save();
+  const channel = await guild.channels.fetch(t.channelId).catch(() => null);
+  const secs = Number(cfg.deleteAfterSeconds) || 10;
+  if (channel) {
+    if (t.messageId) await channel.messages.edit(t.messageId, buildTicketMessage(guild, cfg, t)).catch(() => {});
+    await channel
+      .send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(0xe74c3c)
+            .setTitle('🔒 Ticket Ditutup')
+            .setDescription(`Ticket **${t.id}** ditutup oleh <@${t.closedBy}>.${reason ? `\n📝 **Alasan:** ${reason}` : ''}\n\nChannel ini akan dihapus dalam **${secs} detik**.`)
+            .setFooter(footer(guild, 'NCS Ticket Center'))
+            .setTimestamp(new Date()),
+        ],
+        allowedMentions: { parse: [] },
+      })
+      .catch(() => {});
+  }
+  const transcript = channel ? await buildTranscript(channel, t).catch(() => null) : null;
+  await logTicket(guild, cfg, t, 'close', transcript ? [transcript] : []);
+
+  // DM pembuka ticket
+  const user = await client.users.fetch(t.userId).catch(() => null);
+  const type = typeOf(cfg, t.type) || { label: t.type, emoji: '🎫' };
+  await user
+    ?.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(brand(cfg))
+          .setAuthor({ name: `${guild.name} • NCS Ticket Center`, iconURL: guild.iconURL({ size: 128 }) || undefined })
+          .setTitle('🔒 Ticket Kamu Telah Ditutup')
+          .setDescription(`Terima kasih telah menghubungi kami! 💙 Jika masih ada kendala, silakan buka ticket baru kapan saja.`)
+          .addFields(
+            { name: '🎫 Ticket', value: `\`${t.id}\``, inline: true },
+            { name: '📂 Jenis', value: `\`${type.label}\``, inline: true },
+            { name: '⏱️ Durasi', value: `\`${duration(t.closedAt - t.createdAt)}\``, inline: true },
+          )
+          .addFields(reason ? [{ name: '📝 Alasan', value: reason.slice(0, 1024) }] : [])
+          .setFooter(footer(guild, 'Transcript percakapan terlampir'))
+          .setTimestamp(new Date()),
+      ],
+      files: transcript ? [transcript] : [],
+    })
+    .catch(() => {});
+
+  refreshPanel().catch(() => {});
+  if (channel) setTimeout(() => channel.delete(`Ticket ${t.id} ditutup`).catch(() => {}), secs * 1000);
+}
+
+function duration(ms) {
+  const m = Math.max(1, Math.round(ms / 60000));
+  if (m < 60) return `${m} menit`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h} jam ${m % 60} menit` : `${Math.floor(h / 24)} hari ${h % 24} jam`;
+}
+
+// ───────────────────────── Interaksi ─────────────────────────
+async function handleInteraction(interaction) {
+  const id = interaction.customId;
+  if (typeof id !== 'string' || !id.startsWith('st:')) return false;
+  const [, action, arg] = id.split(':');
+  const cfg = loadConfig();
+  try {
+    if (action === 'open' && interaction.isStringSelectMenu()) {
+      const type = typeOf(cfg, interaction.values[0]);
+      // Reset pilihan dropdown supaya bisa dipilih lagi.
+      interaction.message?.edit(buildPanel(interaction.guild, cfg)).catch(() => {});
+      if (!type || type.enabled === false || type.comingSoon) {
+        return void (await interaction.reply({ content: '🔒 Layanan ini **segera hadir**. Nantikan ya! ✨', flags: EPH }));
+      }
+      const max = Number(cfg.maxOpenPerUser) || 1;
+      const mine = Object.values(data.tickets).filter((t) => t.status === 'open' && t.userId === interaction.user.id && t.type === type.id);
+      if (mine.length >= max) {
+        return void (await interaction.reply({
+          content: `⚠️ Kamu masih punya ticket **${type.label}** yang aktif: <#${mine[0].channelId}> (\`${mine[0].id}\`).`,
+          flags: EPH,
+        }));
+      }
+      return void (await interaction.showModal(buildForm(type, interaction.user.id)));
+    }
+
+    if (action === 'form' && interaction.isModalSubmit()) {
+      const type = typeOf(cfg, arg);
+      if (!type) return void (await interaction.reply({ content: '❌ Jenis ticket tidak ditemukan.', flags: EPH }));
+      await interaction.deferReply({ flags: EPH });
+      const answers = [];
+      const extra = {};
+      if (type.id === 'claim-giveaway') {
+        let picked = null;
+        let typed = null;
+        try {
+          picked = interaction.fields.getStringSelectValues('gaid')?.[0] || null;
+        } catch {}
+        if (!picked) {
+          try {
+            typed = interaction.fields.getTextInputValue('gatext');
+          } catch {}
+        }
+        const g = giveaway.getGiveaway ? giveaway.getGiveaway(picked || typed) : null;
+        const won = g && (g.allWinners || g.winners || []).includes(interaction.user.id);
+        answers.push(['🎁 Giveaway', g ? `\`${g.id}\` • **${g.prize}**` : `\`${typed || picked}\``]);
+        if (g) answers.push(['📅 Berakhir', g.endedAt ? ts(g.endedAt, 'f') : '-']);
+        answers.push(['📦 Data Penerimaan', `\`${interaction.fields.getTextInputValue('receiver').trim()}\``]);
+        const note = optional(interaction.fields, 'note');
+        if (note) answers.push(['📝 Catatan', note]);
+        extra.verified = Boolean(won);
+        extra.giveawayId = g?.id || null;
+      } else {
+        answers.push(['📌 Topik', `\`${interaction.fields.getTextInputValue('topic').trim()}\``]);
+        answers.push(['💬 Detail Kendala', interaction.fields.getTextInputValue('detail').trim()]);
+      }
+      try {
+        const { channel } = await createTicket(interaction, type, answers, extra);
+        return void (await interaction.editReply({
+          content: `✅ Ticket **${type.label}** berhasil dibuat: ${channel}`,
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setStyle(ButtonStyle.Link)
+                .setLabel('Buka Ticket')
+                .setEmoji('🎫')
+                .setURL(`https://discord.com/channels/${interaction.guild.id}/${channel.id}`),
+            ),
+          ],
+        }));
+      } catch (err) {
+        console.error('[ticket] gagal membuat ticket:', err);
+        return void (await interaction.editReply('❌ Gagal membuat ticket. Pastikan bot punya izin **Manage Channels** & **Manage Roles**.'));
+      }
+    }
+
+    const t = data.tickets[arg];
+    if (!t || t.status !== 'open') {
+      if (interaction.isRepliable() && !interaction.replied) await interaction.reply({ content: 'Ticket ini sudah ditutup.', flags: EPH }).catch(() => {});
+      return true;
+    }
+
+    if (action === 'claim') {
+      if (!isStaff(interaction.member, cfg)) return void (await interaction.reply({ content: '⛔ Hanya **staff** yang bisa menangani ticket.', flags: EPH }));
+      t.claimedBy = interaction.user.id;
+      save();
+      await interaction.update(buildTicketMessage(interaction.guild, cfg, t));
+      await interaction.channel
+        .send({
+          content: `<@${t.userId}>`,
+          embeds: [
+            new EmbedBuilder()
+              .setColor(brand(cfg))
+              .setDescription(`🙋 <@${interaction.user.id}> akan **menangani ticket kamu**. Silakan jelaskan kendalamu di sini ya! 💙`),
+          ],
+          allowedMentions: { users: [t.userId] },
+        })
+        .catch(() => {});
+      return true;
+    }
+
+    if (action === 'close') {
+      if (interaction.user.id !== t.userId && !isStaff(interaction.member, cfg)) {
+        return void (await interaction.reply({ content: '⛔ Hanya pembuka ticket atau staff yang bisa menutup ticket.', flags: EPH }));
+      }
+      return void (await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId(`st:closemodal:${t.id}`)
+          .setTitle(`Tutup Ticket ${t.id}`)
+          .addLabelComponents(
+            new LabelBuilder()
+              .setLabel('Alasan Penutupan (opsional)')
+              .setTextInputComponent(
+                new TextInputBuilder().setCustomId('reason').setStyle(TextInputStyle.Paragraph).setPlaceholder('contoh: Masalah sudah selesai').setMaxLength(300).setRequired(false),
+              ),
+          ),
+      ));
+    }
+
+    if (action === 'closemodal' && interaction.isModalSubmit()) {
+      await interaction.deferReply({ flags: EPH });
+      await closeTicket(interaction, t, optional(interaction.fields, 'reason'));
+      return void (await interaction.editReply(`🔒 Ticket **${t.id}** ditutup.`));
+    }
+  } catch (err) {
+    console.error('[ticket] error:', err);
+    const msg = { content: '❌ Terjadi kesalahan, coba lagi.', flags: EPH };
+    if (interaction.deferred || interaction.replied) await interaction.followUp(msg).catch(() => {});
+    else await interaction.reply(msg).catch(() => {});
+  }
+  return true;
+}
+
+// ───────────────────────── Command ─────────────────────────
+const ticketCommand = {
+  data: new SlashCommandBuilder()
+    .setName('ticket')
+    .setDescription('NCS Ticket Center')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDMPermission(false)
+    .addSubcommand((s) =>
+      s
+        .setName('panel')
+        .setDescription('Kirim / pindahkan panel NCS Ticket Center')
+        .addChannelOption((o) => o.setName('channel').setDescription('Default: panelChannelId di tickets.json').addChannelTypes(ChannelType.GuildText)),
+    )
+    .addSubcommand((s) =>
+      s
+        .setName('tambah')
+        .setDescription('Tambahkan member ke ticket ini')
+        .addUserOption((o) => o.setName('member').setDescription('Member yang ditambahkan').setRequired(true)),
+    )
+    .addSubcommand((s) =>
+      s
+        .setName('keluarkan')
+        .setDescription('Keluarkan member dari ticket ini')
+        .addUserOption((o) => o.setName('member').setDescription('Member yang dikeluarkan').setRequired(true)),
+    )
+    .addSubcommand((s) =>
+      s
+        .setName('tutup')
+        .setDescription('Tutup ticket ini')
+        .addStringOption((o) => o.setName('alasan').setDescription('Alasan penutupan (opsional)').setMaxLength(300)),
+    ),
+
+  async execute(interaction) {
+    const cfg = loadConfig();
+    const sub = interaction.options.getSubcommand();
+    if (sub === 'panel') {
+      await interaction.deferReply({ flags: EPH });
+      const channel =
+        interaction.options.getChannel('channel') ||
+        (isId(cfg.panelChannelId) ? await interaction.guild.channels.fetch(cfg.panelChannelId).catch(() => null) : null) ||
+        interaction.channel;
+      const old = data.panel;
+      const sent = await channel.send(buildPanel(interaction.guild, cfg));
+      data.panel = { channelId: channel.id, messageId: sent.id };
+      save();
+      if (old && old.messageId !== sent.id) {
+        const oldCh = await interaction.guild.channels.fetch(old.channelId).catch(() => null);
+        await oldCh?.messages.delete(old.messageId).catch(() => {});
+      }
+      return interaction.editReply(`✅ Panel **NCS Ticket Center** dikirim ke ${channel}.`);
+    }
+
+    const t = Object.values(data.tickets).find((x) => x.channelId === interaction.channelId && x.status === 'open');
+    if (!t) return interaction.reply({ content: '❌ Jalankan perintah ini di dalam **channel ticket** yang masih aktif.', flags: EPH });
+
+    if (sub === 'tambah' || sub === 'keluarkan') {
+      const user = interaction.options.getUser('member');
+      if (sub === 'tambah') {
+        await interaction.channel.permissionOverwrites.edit(user.id, {
+          ViewChannel: true,
+          SendMessages: true,
+          ReadMessageHistory: true,
+          AttachFiles: true,
+          EmbedLinks: true,
+        });
+        return interaction.reply({ content: `➕ ${user} ditambahkan ke ticket ini.`, allowedMentions: { parse: [] } });
+      }
+      if (user.id === t.userId) return interaction.reply({ content: '❌ Pembuka ticket tidak bisa dikeluarkan.', flags: EPH });
+      await interaction.channel.permissionOverwrites.delete(user.id).catch(() => {});
+      return interaction.reply({ content: `➖ ${user} dikeluarkan dari ticket ini.`, allowedMentions: { parse: [] } });
+    }
+
+    if (sub === 'tutup') {
+      await interaction.deferReply({ flags: EPH });
+      await closeTicket(interaction, t, interaction.options.getString('alasan'));
+      return interaction.editReply(`🔒 Ticket **${t.id}** ditutup.`);
+    }
+  },
+};
+
+function registerSupportTickets(c) {
+  client = c;
+  c.once(Events.ClientReady, () => refreshPanel().catch(() => {}));
+  // Channel ticket dihapus manual → tandai ditutup.
+  c.on(Events.ChannelDelete, (ch) => {
+    const t = Object.values(data.tickets).find((x) => x.channelId === ch.id && x.status === 'open');
+    if (!t) return;
+    t.status = 'closed';
+    t.closedAt = Date.now();
+    t.closeReason = 'Channel dihapus manual';
+    save();
+    refreshPanel().catch(() => {});
+  });
+}
+
+module.exports = { ticketCommand, registerSupportTickets, handleInteraction };
