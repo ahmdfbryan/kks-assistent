@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -9,6 +8,14 @@ const {
   PermissionFlagsBits,
   SlashCommandBuilder,
   ChannelType,
+  ContainerBuilder,
+  SectionBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
 } = require('discord.js');
 
 const FILE = path.join(__dirname, '..', 'verify.json');
@@ -23,6 +30,24 @@ function loadConfig() {
   } catch (err) {
     console.error('[verify] verify.json tidak bisa dibaca:', err.message);
     return null;
+  }
+}
+
+/** Lokasi panel terakhir (data/verify-panel.json) → panel lama dihapus saat kirim ulang. */
+const PANEL_FILE = path.join(__dirname, '..', 'data', 'verify-panel.json');
+function loadPanel() {
+  try {
+    return JSON.parse(fs.readFileSync(PANEL_FILE, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+function savePanel(v) {
+  try {
+    fs.mkdirSync(path.dirname(PANEL_FILE), { recursive: true });
+    fs.writeFileSync(PANEL_FILE, JSON.stringify(v, null, 2));
+  } catch (err) {
+    console.warn('[verify] gagal simpan lokasi panel:', err.message);
   }
 }
 
@@ -47,72 +72,156 @@ async function resolveRole(guild, cfg) {
   return { role };
 }
 
+// ───────────────────────── Tampilan (Components V2) ─────────────────────────
+const V2 = MessageFlags.IsComponentsV2;
+const EPH = MessageFlags.Ephemeral;
+const KEYCAPS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+const text = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000));
+const line = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+const ts = (ms, s = 'R') => `<t:${Math.floor(ms / 1000)}:${s}>`;
+const num = (n) => Number(n || 0).toLocaleString('id-ID');
+
+const DEFAULT_PERKS = [
+  'Akses ke **seluruh channel** komunitas',
+  'Role awal {role}',
+  'Ikut **event, giveaway** & belanja di **store**',
+];
+const DEFAULT_STEPS = ['Klik tombol **Verify Sekarang** di bawah', 'Role diberikan **otomatis** dalam hitungan detik', 'Semua channel langsung **terbuka** — selamat bergabung! 🎉'];
+
+/** Kotak V2: header (+ gambar kecil) → blok teks dipisah garis → banner → footer → tombol. */
+function card({ color, header, thumb, blocks = [], image, footer, rows = [] }) {
+  const box = new ContainerBuilder().setAccentColor(color);
+  if (thumb) box.addSectionComponents(new SectionBuilder().addTextDisplayComponents(text(header)).setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb)));
+  else box.addTextDisplayComponents(text(header));
+  for (const b of blocks.filter(Boolean)) {
+    box.addSeparatorComponents(line());
+    box.addTextDisplayComponents(text(b));
+  }
+  if (image) box.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(image)));
+  if (footer) {
+    box.addSeparatorComponents(line());
+    box.addTextDisplayComponents(text(`-# ${footer}`));
+  }
+  for (const r of rows.filter(Boolean)) box.addActionRowComponents(r);
+  return { components: [box], flags: V2, allowedMentions: { parse: [] } };
+}
+
 /**
- * Panel verifikasi.
- * - verified: false → panel utama (merah) + tombol "Verify Sekarang" aktif. Dikirim ke channel.
- * - verified: true  → panel hijau + tombol mati "Terverifikasi". Ditampilkan KHUSUS ke member
- *   yang klik (ephemeral), karena panel utama dilihat semua orang dan harus tetap aktif untuk member baru.
+ * Panel verifikasi utama (dikirim ke channel, dilihat semua orang).
+ * Teks diatur di verify.json → panel (title, description, perks, steps, image, footer, button).
  */
-function buildPanel(guild, cfg, { verified = false, role = null } = {}) {
+function buildPanel(guild, cfg, { role = null } = {}) {
   const p = cfg.panel || {};
+  const fillRole = (t) => String(t).replace(/\{role\}/g, role ? `${role}` : '**Member**');
+  const perks = (p.perks || DEFAULT_PERKS).map((x) => `▸ ${fillRole(x)}`).join('\n');
+  const steps = (p.steps || DEFAULT_STEPS).map((x, i) => `${KEYCAPS[i] || `\`${i + 1}\``} ${fillRole(x)}`).join('\n');
+  const buttons = [
+    new ButtonBuilder().setCustomId(BUTTON_ID).setStyle(ButtonStyle.Success).setLabel(p.button || 'Verify Sekarang').setEmoji('✅'),
+  ];
+  if (isId(cfg.rulesChannelId)) {
+    buttons.push(
+      new ButtonBuilder()
+        .setStyle(ButtonStyle.Link)
+        .setLabel(p.rulesButton || 'Baca Rules')
+        .setEmoji('📜')
+        .setURL(`https://discord.com/channels/${guild.id}/${cfg.rulesChannelId}`),
+    );
+  }
+  return card({
+    color: parseColor(cfg.color),
+    thumb: guild.iconURL({ extension: 'png', size: 256 }),
+    header: `# 🛡️ ${p.title || 'Verifikasi Diperlukan'}\n-# ${p.subtitle || `${guild.name} • Member Verification`}`,
+    blocks: [
+      fillRole(p.description || 'Klik tombol di bawah untuk verifikasi.'),
+      `### 🔓 Yang Kamu Dapatkan\n${perks}`,
+      `### 🧭 Cara Verifikasi\n${steps}`,
+      p.note ? `-# ${fillRole(p.note)}` : null,
+    ],
+    image: p.image || null,
+    footer: `🔐 ${p.footer || guild.name} • Verifikasi aman & otomatis`,
+    rows: [new ActionRowBuilder().addComponents(buttons)],
+  });
+}
+
+/** Kartu hijau untuk member yang baru / sudah terverifikasi (hanya terlihat olehnya). */
+function buildVerified(guild, cfg, member, role, { already = false } = {}) {
   const v = cfg.verifiedPanel || {};
-  const icon = guild.iconURL({ extension: 'png', size: 256 }) || undefined;
-  const fillRole = (t) => String(t).replace(/\{role\}/g, role ? `${role}` : 'member');
+  const fillRole = (t) => String(t).replace(/\{role\}/g, `${role}`).replace(/\{user\}/g, `${member}`);
+  const title = already ? v.alreadyTitle || '✅ Kamu Sudah Terverifikasi' : v.title || '✅ Verifikasi Berhasil';
+  const desc = already
+    ? v.alreadyDescription || 'Kamu sudah terverifikasi sebelumnya dan memiliki role {role}. Semua channel sudah terbuka untukmu!'
+    : v.description || 'Kamu sudah terverifikasi dan mendapatkan role {role}. Semua channel sudah terbuka!';
+  const info = [
+    `👤 **Member:** ${member} • \`@${member.user.username}\``,
+    `🎖️ **Role:** ${role}`,
+    member.joinedTimestamp ? `📅 **Bergabung:** ${ts(member.joinedTimestamp, 'D')} (${ts(member.joinedTimestamp, 'R')})` : null,
+    `🕒 **${already ? 'Dicek' : 'Diverifikasi'}:** ${ts(Date.now(), 'f')}`,
+  ].filter(Boolean);
+  const next = (v.next || []).map((x) => `▸ ${fillRole(x)}`).join('\n');
+  return {
+    ...card({
+      color: parseColor(v.color || '#43B581'),
+      thumb: member.displayAvatarURL({ extension: 'png', size: 256 }),
+      header: `# ${title}\nSelamat datang, **${member.displayName}**! 💙`,
+      blocks: [fillRole(desc), info.join('\n'), next ? `### 🚀 Langkah Selanjutnya\n${next}` : null],
+      footer: `${cfg.panel?.footer || guild.name} • Member Verification`,
+      rows: [
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(BUTTON_ID).setStyle(ButtonStyle.Success).setLabel(v.button || 'Terverifikasi').setEmoji('✅').setDisabled(true),
+        ),
+      ],
+    }),
+    allowedMentions: { parse: [] },
+  };
+}
 
-  const embed = new EmbedBuilder()
-    .setColor(parseColor(verified ? v.color || '#43B581' : cfg.color))
-    .setTitle(verified ? v.title || '✅ Verifikasi Berhasil' : p.title || 'Verifikasi Diperlukan')
-    .setDescription(
-      verified
-        ? fillRole(v.description || 'Kamu sudah terverifikasi dan mendapatkan role {role}. Semua channel sudah terbuka!')
-        : p.description || 'Klik tombol di bawah untuk verifikasi.',
-    )
-    .setFooter({ text: p.footer || guild.name, iconURL: icon })
-    .setTimestamp(new Date());
-  if (icon) embed.setThumbnail(icon);
+/** Kartu merah kalau verifikasi gagal. */
+function buildFailed(guild, cfg, message) {
+  return card({
+    color: 0xe74c3c,
+    header: '## ❌ Verifikasi Gagal',
+    blocks: [message || 'Verifikasi gagal diproses. Silakan hubungi admin.', '-# Coba lagi beberapa saat, atau buka ticket support bila masalah berlanjut.'],
+    footer: `${cfg?.panel?.footer || guild.name} • Member Verification`,
+  });
+}
 
-  const button = new ButtonBuilder()
-    .setCustomId(BUTTON_ID)
-    .setStyle(ButtonStyle.Success)
-    .setLabel(verified ? v.button || 'Terverifikasi' : p.button || 'Verify Sekarang')
-    .setEmoji('✅')
-    .setDisabled(verified);
-
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(button)] };
+/** editReply V2; kalau gagal (mis. versi lama), kirim teks biasa. */
+async function replyV2(interaction, payload, fallback) {
+  try {
+    return await interaction.editReply(payload);
+  } catch (err) {
+    console.warn('[verify] V2 reply gagal, pakai teks:', err.message);
+    return interaction.editReply({ content: fallback }).catch(() => {});
+  }
 }
 
 /** Saat member klik "Verify Sekarang". */
 async function handleVerifyButton(interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.deferReply({ flags: EPH });
   const cfg = loadConfig();
   const msg = cfg?.messages || {};
+  const failText = String(msg.failed || '❌ Verifikasi gagal diproses. Silakan hubungi admin.').replace(/^❌\s*/, '');
 
   const { role, error } = await resolveRole(interaction.guild, cfg);
   if (error) {
     console.warn(`[verify] ${interaction.user.tag}: ${error}`);
-    return interaction.editReply(msg.failed || '❌ Verifikasi gagal diproses. Silakan hubungi admin.');
+    return replyV2(interaction, buildFailed(interaction.guild, cfg, failText), `❌ ${failText}`);
   }
 
   const member = await interaction.guild.members.fetch(interaction.user.id);
-  const greenPanel = buildPanel(interaction.guild, cfg, { verified: true, role });
-
   if (member.roles.cache.has(role.id)) {
-    // Sudah member → tampilkan panel hijau dengan tombol mati.
-    return interaction.editReply({ content: msg.already || null, ...greenPanel });
+    return replyV2(interaction, buildVerified(interaction.guild, cfg, member, role, { already: true }), msg.already || '✅ Kamu sudah terverifikasi.');
   }
 
   try {
     await member.roles.add(role, 'Verifikasi lewat tombol Verify Sekarang');
   } catch (err) {
     console.error(`[verify] gagal memberi role ke ${interaction.user.tag}:`, err.message);
-    return interaction.editReply(msg.failed || '❌ Verifikasi gagal diproses. Silakan hubungi admin.');
+    return replyV2(interaction, buildFailed(interaction.guild, cfg, failText), `❌ ${failText}`);
   }
 
   console.log(`[verify] ${interaction.user.tag} terverifikasi.`);
-  return interaction.editReply({
-    content: String(msg.success ?? '').replace(/\{role\}/g, `${role}`) || null,
-    ...greenPanel,
-  });
+  return replyV2(interaction, buildVerified(interaction.guild, cfg, member, role), `✅ Verifikasi berhasil! Kamu mendapat role ${role}.`);
 }
 
 /** /verify kirim | beri-semua */
@@ -152,11 +261,22 @@ const verifyCommand = {
     if (sub === 'kirim') {
       const channel = interaction.options.getChannel('channel') || interaction.channel;
       const perms = channel.permissionsFor(interaction.guild.members.me);
-      if (!perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
-        return interaction.editReply(`❌ Bot butuh izin View Channel, Send Messages, dan Embed Links di ${channel}.`);
+      if (!perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
+        return interaction.editReply(`❌ Bot butuh izin View Channel dan Send Messages di ${channel}.`);
       }
-      await channel.send(buildPanel(interaction.guild, cfg));
-      return interaction.editReply(`✅ Panel verifikasi dikirim ke ${channel}. Member yang klik tombolnya akan mendapat role ${role}.`);
+      const sent = await channel.send(buildPanel(interaction.guild, cfg, { role }));
+      // Hapus panel lama (supaya tidak dobel), lalu simpan lokasi panel baru.
+      const last = loadPanel();
+      let removed = false;
+      if (last?.messageId && last.messageId !== sent.id) {
+        const oldCh = await interaction.guild.channels.fetch(last.channelId).catch(() => null);
+        const old = oldCh ? await oldCh.messages.fetch(last.messageId).catch(() => null) : null;
+        if (old) removed = await old.delete().then(() => true).catch(() => false);
+      }
+      savePanel({ channelId: channel.id, messageId: sent.id });
+      return interaction.editReply(
+        `✅ Panel verifikasi dikirim ke ${channel}${removed ? ' (panel lama dihapus)' : ''}. Member yang klik tombolnya akan mendapat role ${role}.`,
+      );
     }
 
     if (sub === 'beri-semua') {
@@ -186,4 +306,4 @@ const verifyCommand = {
   },
 };
 
-module.exports = { verifyCommand, handleVerifyButton, BUTTON_ID };
+module.exports = { verifyCommand, handleVerifyButton, BUTTON_ID, buildPanel, buildVerified };
