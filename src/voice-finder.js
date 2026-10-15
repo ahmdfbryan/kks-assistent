@@ -98,10 +98,6 @@ function buildPanel(guild, cfg) {
   const voices = [...activeVoices(guild).values()];
   const inVoice = voices.reduce((a, c) => a + humans(c).size, 0);
   const top = voices.slice(0, Math.max(0, Number(cfg.topVoices ?? 3)));
-  const KEY = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
-  const steps = (p.steps || ['Klik kotak **pencarian** di bawah', 'Ketik **username / nama** temanmu, lalu pilih orangnya', 'Lihat dia di voice mana & klik **🔊 Join** untuk menyusul'])
-    .map((x, i) => `${KEY[i] || `\`${i + 1}\``} ${x}`)
-    .join('\n');
   const live = [`🎧 **Sedang di Voice:** \`${inVoice} member\``, `🔊 **Voice Aktif:** \`${voices.length} channel\``];
   if (top.length) live.push('', '**🔥 Voice Teramai**', ...top.map((c, i) => `\`${i + 1}.\` <#${c.id}> • 👥 \`${limitText(c)}\``));
 
@@ -111,7 +107,6 @@ function buildPanel(guild, cfg) {
     header: `# ${p.title || '🔎 Cari Teman di Voice'}\n-# ${p.subtitle || `${guild.name} • Voice Finder`}`,
     blocks: [
       p.description || 'Pilih member di bawah untuk melihat dia sedang di voice mana.',
-      `### 🧭 Cara Pakai\n${steps}`,
       `### 📡 Live Voice\n${live.join('\n')}`,
     ],
     footer: `${p.footer || guild.name} • Diperbarui ${ts(Date.now())}`,
