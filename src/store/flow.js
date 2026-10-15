@@ -181,7 +181,10 @@ function logOrder(guild, t, text) {
           await channel.messages.edit(t.logMessageId, { ...payload, attachments: [] });
           return;
         } catch (err) {
-          if (err.code !== RESTJSONErrorCodes.UnknownMessage) throw err;
+          // Pesan log lama (format embed) tidak bisa diubah ke Components V2 → kirim baru & hapus yang lama.
+          if (err.code !== RESTJSONErrorCodes.UnknownMessage) {
+            await channel.messages.delete(t.logMessageId).catch(() => {});
+          }
         }
       }
       const msg = await channel.send(payload);
