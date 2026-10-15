@@ -4,7 +4,6 @@
     "channelId = channel ucapan terima kasih booster.",
     "Boost terdeteksi otomatis dari pesan sistem boost Discord (aktifkan 'Send a message when someone boosts this server' di Server Settings → Overview → System Messages) dan dari perubahan status booster member.",
     "Placeholder: {user} = mention booster, {name} = nama booster, {server} = nama server.",
-    "perks = daftar benefit booster yang ditampilkan. bannerImage = link gambar/GIF banner (opsional).",
     "rewardRoleId = role tambahan yang diberikan saat boost & dilepas saat boost berakhir (opsional, role Server Booster bawaan Discord tetap otomatis).",
     "dmBooster = kirim DM terima kasih ke booster. pingBooster = mention booster di pesan ucapan.",
     "logUnboost = kirim info kecil saat member berhenti boost."
@@ -18,12 +17,6 @@
   "logUnboost": false,
   "title": "💎 Terima Kasih Sudah Boost!",
   "message": "Hai {user}, terima kasih banyak telah **mem-boost {server}**! 🚀\nDukunganmu membuat server ini makin keren, makin lengkap, dan makin nyaman untuk semua member. 💖",
-  "perks": [
-    "Role **Server Booster** eksklusif dengan warna nama spesial",
-    "Badge 💎 booster di profilmu",
-    "Prioritas di **event & giveaway** tertentu",
-    "Akses ke fitur & channel khusus booster"
-  ],
   "thanksButton": "Ucapkan Terima Kasih",
   "dmTitle": "💎 Terima Kasih, Booster!",
   "dmMessage": "Terima kasih sudah mem-boost **{server}**! Boost darimu sangat berarti untuk perkembangan komunitas kami. 💖\nNikmati semua benefit booster yang sudah aktif di akunmu ya!"
