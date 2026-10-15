@@ -5,7 +5,7 @@ const V = require('./views');
 const SP = require('./spender');
 const H = require('./howto');
 const C = require('./catalog');
-const { setProductsOpen, reopenIfAutoClosed, closeIfSoldOut, announce, refreshPanel, onDanaMasukCommand } = require('./flow');
+const { setProductsOpen, reopenIfAutoClosed, closeIfSoldOut, announce, refreshPanel, onDanaMasukCommand, migrateToV2 } = require('./flow');
 
 const TEXT = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -121,7 +121,8 @@ const storeCommand = {
         }),
     )
     .addSubcommand((s) => s.setName('status').setDescription('Lihat ringkasan toko'))
-    .addSubcommand((s) => s.setName('sinkron-role').setDescription('Pasang ulang role Buyer & tier spender ke semua pembeli')),
+    .addSubcommand((s) => s.setName('sinkron-role').setDescription('Pasang ulang role Buyer & tier spender ke semua pembeli'))
+    .addSubcommand((s) => s.setName('perbarui-tampilan').setDescription('Ubah history order & testimoni lama ke tampilan baru (Components V2)')),
 
   async execute(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -223,6 +224,18 @@ const storeCommand = {
           : `100 Robux = ${rupiah(rate * 100)}`;
       return interaction.editReply(
         `💱 Harga **${target.label}** sekarang **${rupiah(rate)} / Robux** (${example}).\nTicket yang sudah berjalan tetap memakai harga lama.`,
+      );
+    }
+
+    if (sub === 'perbarui-tampilan') {
+      await interaction.editReply('⏳ Sedang memperbarui history order & testimoni lama... (bisa beberapa menit)');
+      const r = await migrateToV2(guild);
+      return interaction.editReply(
+        `✅ **Selesai!**\n🧾 History order diperbarui: **${r.logs}**\n⭐ Testimoni diperbarui: **${r.testi}**` +
+          (r.testiSkipped || r.logSkipped
+            ? `\n\nℹ️ Dilewati karena datanya sudah tidak ada di bot (misal pesanan percobaan yang sudah di-reset): ` +
+              `**${r.logSkipped}** history & **${r.testiSkipped}** testimoni — bisa dihapus manual.`
+            : ''),
       );
     }
 
