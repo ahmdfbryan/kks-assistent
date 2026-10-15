@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
@@ -11,10 +10,18 @@ const {
   MessageFlags,
   RESTJSONErrorCodes,
   Events,
+  ContainerBuilder,
+  SectionBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
 } = require('discord.js');
 
 /**
- * Embed Social Media: 1 kartu header + kartu Roblox, TikTok, Discord + tombol link.
+ * Social Media (Components V2): 1 kotak pembuka + kotak Roblox, TikTok, Discord (masing-masing dengan tombol link).
  * Data Roblox (username, avatar, followers) & Discord (member, invite) diambil otomatis
  * dan di-update tiap 1 jam. Teks diatur di social.json.
  */
@@ -124,93 +131,106 @@ async function discordInfo(client, guild, d, st) {
   };
 }
 
+// ───────────────────────── Tampilan (Components V2) ─────────────────────────
+const V2 = MessageFlags.IsComponentsV2;
+const text = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000));
+const line = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+
+/** Satu kotak V2 per platform: header (+ avatar) → garis → info → tombol → footer (khusus kotak terakhir). */
+function box({ accent, header, thumb, blocks = [], image, button }) {
+  const c = new ContainerBuilder().setAccentColor(accent);
+  if (thumb) c.addSectionComponents(new SectionBuilder().addTextDisplayComponents(text(header)).setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb)));
+  else c.addTextDisplayComponents(text(header));
+  if (image) c.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(image)));
+  for (const b of blocks.filter(Boolean)) {
+    c.addSeparatorComponents(line());
+    c.addTextDisplayComponents(text(b));
+  }
+  if (button) c.addActionRowComponents(new ActionRowBuilder().addComponents(button));
+  return c;
+}
+const link = (label, emoji, url) => new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(label).setEmoji(emoji).setURL(url);
+
 async function buildSocial(client, guild) {
   const cfg = loadConfig();
   if (!cfg) return null;
   const st = loadState();
-  const embeds = [];
-  const buttons = [];
+  const boxes = [];
 
-  embeds.push(
-    new EmbedBuilder()
-      .setColor(color(cfg.color, 0x3498db))
-      .setTitle(fill(cfg.title || '🌐 Social Media | {server}', guild))
-      .setDescription(fill(cfg.description, guild) || null)
-      .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
-      .setImage(cfg.bannerImage || null),
+  // Kotak pembuka
+  boxes.push(
+    box({
+      accent: color(cfg.color, 0x3498db),
+      thumb: guild.iconURL({ extension: 'png', size: 256 }),
+      header: `# ${fill(cfg.title || '🌐 Social Media | {server}', guild)}\n-# ${fill(cfg.subtitle || 'Official Social Media • {server}', guild)}`,
+      image: cfg.bannerImage || null,
+      blocks: [fill(cfg.description, guild) || null],
+    }),
   );
 
   if (cfg.roblox?.userId) {
     const r = cfg.roblox;
     const info = await robloxInfo(r.userId);
     const url = r.url || `https://www.roblox.com/users/${r.userId}/profile`;
-    const e = new EmbedBuilder()
-      .setColor(color(r.color, 0x00a2ff))
-      .setTitle(r.title || '🎮 Roblox')
-      .setURL(url)
-      .setDescription(fill(r.description, guild) || null);
+    const lines = [];
     if (info?.name) {
-      e.addFields(
-        { name: '👤 Username', value: `\`@${info.name}\``, inline: true },
-        { name: '✨ Display Name', value: `\`${info.displayName}\``, inline: true },
-      );
-      if (info.followers != null) e.addFields({ name: '👥 Followers', value: `\`${num(info.followers)}\``, inline: true });
-      if (info.friends != null) e.addFields({ name: '🤝 Friends', value: `\`${num(info.friends)}\``, inline: true });
-      if (info.created) e.addFields({ name: '📅 Bergabung', value: ts(info.created, 'D'), inline: true });
+      lines.push(`👤 **Username:** \`@${info.name}\``, `✨ **Display Name:** \`${info.displayName}\``);
+      if (info.followers != null) lines.push(`👥 **Followers:** \`${num(info.followers)}\``);
+      if (info.friends != null) lines.push(`🤝 **Friends:** \`${num(info.friends)}\``);
+      if (info.created) lines.push(`📅 **Bergabung:** ${ts(info.created, 'D')}`);
     }
-    if (info?.avatar) e.setThumbnail(info.avatar);
-    embeds.push(e);
-    buttons.push(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(r.button || 'Roblox').setEmoji('🎮').setURL(url));
+    boxes.push(
+      box({
+        accent: color(r.color, 0x00a2ff),
+        thumb: info?.avatar || null,
+        header: `## ${r.title || '🎮 Roblox'}\n${fill(r.description, guild)}`,
+        blocks: [lines.join('\n') || null],
+        button: link(r.button || 'Roblox', '🎮', url),
+      }),
+    );
   }
 
   if (cfg.tiktok?.url) {
     const t = cfg.tiktok;
     const user = String(t.username || (t.url.match(/@([^/?]+)/) || [])[1] || '').replace(/^@/, '');
-    const e = new EmbedBuilder()
-      .setColor(color(t.color, 0xfe2c55))
-      .setTitle(t.title || '🎵 TikTok')
-      .setURL(t.url)
-      .setDescription(fill(t.description, guild) || null);
-    if (user) e.addFields({ name: '👤 Username', value: `\`@${user}\``, inline: true });
-    e.addFields({ name: '🔔 Jangan Lupa', value: '`Follow • Like • Share`', inline: true });
-    if (t.thumbnail) e.setThumbnail(t.thumbnail);
-    embeds.push(e);
-    buttons.push(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(t.button || 'TikTok').setEmoji('🎵').setURL(t.url));
+    boxes.push(
+      box({
+        accent: color(t.color, 0xfe2c55),
+        thumb: t.thumbnail || null,
+        header: `## ${t.title || '🎵 TikTok'}\n${fill(t.description, guild)}`,
+        blocks: [[user ? `👤 **Username:** \`@${user}\`` : null, '🔔 **Jangan Lupa:** `Follow • Like • Share`'].filter(Boolean).join('\n')],
+        button: link(t.button || 'TikTok', '🎵', t.url),
+      }),
+    );
   }
 
   if (cfg.discord?.id || cfg.discord?.inviteUrl) {
     const d = cfg.discord;
     const info = await discordInfo(client, guild, d, st);
-    const e = new EmbedBuilder()
-      .setColor(color(d.color, 0x5865f2))
-      .setTitle(d.title || '💬 Discord')
-      .setURL(info.url)
-      .setDescription(fill(d.description, guild) || null);
+    const lines = [];
     if (info.kind === 'server') {
-      e.addFields(
-        { name: '🏠 Server', value: `\`${info.name}\``, inline: true },
-        { name: '👥 Member', value: `\`${num(info.members)}\``, inline: true },
-      );
-      if (info.boosts) e.addFields({ name: '🚀 Boost', value: `\`${num(info.boosts)}\``, inline: true });
-      e.addFields({ name: '📅 Dibuat', value: ts(info.created, 'D'), inline: true });
+      lines.push(`🏠 **Server:** \`${info.name}\``, `👥 **Member:** \`${num(info.members)}\``);
+      if (info.boosts) lines.push(`🚀 **Boost:** \`${num(info.boosts)}\``);
+      lines.push(`📅 **Dibuat:** ${ts(info.created, 'D')}`);
     } else if (info.name) {
-      e.addFields({ name: '👤 Akun', value: `\`${info.name}\`${info.username ? ` (@${info.username})` : ''}`, inline: true });
+      lines.push(`👤 **Akun:** \`${info.name}\`${info.username ? ` (@${info.username})` : ''}`);
+      if (info.created) lines.push(`📅 **Dibuat:** ${ts(info.created, 'D')}`);
     }
-    if (info.icon) e.setThumbnail(info.icon);
-    embeds.push(e);
-    buttons.push(
-      new ButtonBuilder()
-        .setStyle(ButtonStyle.Link)
-        .setLabel(d.button || (info.kind === 'server' ? 'Join Discord' : 'Discord'))
-        .setEmoji('💬')
-        .setURL(info.url),
+    boxes.push(
+      box({
+        accent: color(d.color, 0x5865f2),
+        thumb: info.icon || null,
+        header: `## ${d.title || '💬 Discord'}\n${fill(d.description, guild)}`,
+        blocks: [lines.join('\n') || null],
+        button: link(d.button || (info.kind === 'server' ? 'Join Discord' : 'Discord'), '💬', info.url),
+      }),
     );
   }
 
-  // Footer + waktu hanya di kartu paling bawah.
-  embeds.at(-1).setFooter({ text: fill(cfg.footer || '{server}', guild), iconURL: guild.iconURL({ size: 128 }) || undefined }).setTimestamp(new Date());
+  // Footer + waktu hanya di kotak paling bawah.
+  boxes.at(-1).addSeparatorComponents(line()).addTextDisplayComponents(text(`-# ${fill(cfg.footer || '{server}', guild)} • Diperbarui <t:${Math.floor(Date.now() / 1000)}:R>`));
   saveState({ ...loadState(), inviteUrl: st.inviteUrl });
-  return { embeds, components: buttons.length ? [new ActionRowBuilder().addComponents(buttons.slice(0, 5))] : [], allowedMentions: { parse: [] } };
+  return { components: boxes, flags: V2, allowedMentions: { parse: [] } };
 }
 
 // ───────────────────────── Command /social ─────────────────────────
@@ -226,7 +246,7 @@ const socialCommand = {
         .setDescription('Kirim / pindahkan embed Social Media (ter-update otomatis tiap 1 jam)')
         .addChannelOption((o) => o.setName('channel').setDescription('Default: channelId di social.json / channel ini').addChannelTypes(...TEXT)),
     )
-    .addSubcommand((s) => s.setName('refresh').setDescription('Perbarui embed Social Media sekarang (setelah mengubah social.json)')),
+    .addSubcommand((s) => s.setName('refresh').setDescription('Perbarui Social Media sekarang (setelah mengubah social.json)')),
 
   async execute(interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -272,8 +292,19 @@ async function refresh(client) {
       const s = loadState();
       delete s.message; // pesan dihapus manual → berhenti di-update
       saveState(s);
-    } else console.error('[social] refresh:', err.message);
-    return false;
+      return false;
+    }
+    // Pesan lama berformat embed tidak bisa diubah ke Components V2 → kirim baru & hapus yang lama.
+    try {
+      const msg = await channel.send(payload);
+      saveState({ ...loadState(), message: { ...loc, messageId: msg.id } });
+      await channel.messages.delete(loc.messageId).catch(() => {});
+      console.log('[social] pesan lama diganti ke tampilan Components V2.');
+      return true;
+    } catch (e) {
+      console.error('[social] refresh:', err.message, '|', e.message);
+      return false;
+    }
   }
 }
 
