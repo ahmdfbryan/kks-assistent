@@ -81,7 +81,23 @@ const refreshPanel = () => {
   debounce('catalog', refreshCatalog, 3500);
 };
 
-/** Update semua kartu di channel catalog (header + kartu tiap produk). */
+/** Kirim katalog lengkap (header + kotak tiap produk) berurutan, lalu hapus katalog lama. */
+async function postCatalog(channel, cfg) {
+  const guild = channel.guild;
+  const old = state.catalog;
+  const header = await channel.send(C.buildCatalogHeader(guild, cfg));
+  const cards = {};
+  for (const p of C.catalogProducts(cfg)) cards[p.id] = (await channel.send(C.buildCatalogCard(guild, cfg, p))).id;
+  state.catalog = { channelId: channel.id, headerId: header.id, cards };
+  save();
+  if (old) {
+    const oldCh = await guild.channels.fetch(old.channelId).catch(() => null);
+    for (const id of [old.headerId, ...Object.values(old.cards || {})]) if (id) await oldCh?.messages.delete(id).catch(() => {});
+  }
+  return cards;
+}
+
+/** Update semua kotak di channel catalog (header + kotak tiap produk). */
 async function refreshCatalog() {
   const loc = state.catalog;
   if (!client || !loc) return;
@@ -94,9 +110,15 @@ async function refreshCatalog() {
   }
   for (const [messageId, build] of jobs) {
     if (!messageId) continue;
-    await channel.messages.edit(messageId, build()).catch((err) => {
-      if (err.code !== RESTJSONErrorCodes.UnknownMessage) console.error('[store] refresh catalog:', err.message);
-    });
+    try {
+      await channel.messages.edit(messageId, build());
+    } catch (err) {
+      if (err.code === RESTJSONErrorCodes.UnknownMessage) continue;
+      // Katalog lama format embed tidak bisa diubah ke Components V2 → kirim ulang semuanya (urutan tetap).
+      console.log('[store] katalog lama (embed) diganti ke tampilan Components V2:', err.message);
+      await postCatalog(channel, cfg);
+      return;
+    }
   }
 }
 const refreshLeaderboard = () => debounce('leaderboard', () => editTracked('leaderboard', V.buildLeaderboard));
@@ -2072,6 +2094,7 @@ module.exports = {
   refreshPanel,
   refreshLeaderboard,
   refreshCatalog,
+  postCatalog,
   onDanaMasukCommand,
   migrateToV2,
 };
