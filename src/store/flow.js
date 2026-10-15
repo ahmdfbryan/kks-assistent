@@ -249,13 +249,14 @@ async function getTicketCategory(guild, cfg, base = cfg.ticket?.categoryName || 
 async function onProductInfo(interaction, productId) {
   const cfg = loadConfig();
   const product = getProduct(cfg, productId);
-  if (product?.type === 'rekber') return interaction.reply({ ...V.buildRekberInfo(interaction.guild, cfg, product), flags: EPH });
-  if (product?.type === 'gamepass') return interaction.reply({ ...V.buildGamepassInfo(interaction.guild, cfg, product), flags: EPH });
-  if (product?.type === 'canva') return interaction.reply({ ...V.buildCanvaInfo(interaction.guild, cfg, product), flags: EPH });
+  const eph = (p) => ({ ...p, flags: (p.flags || 0) | EPH });
+  if (product?.type === 'rekber') return interaction.reply(eph(V.buildRekberInfo(interaction.guild, cfg, product)));
+  if (product?.type === 'gamepass') return interaction.reply(eph(V.buildGamepassInfo(interaction.guild, cfg, product)));
+  if (product?.type === 'canva') return interaction.reply(eph(V.buildCanvaInfo(interaction.guild, cfg, product)));
   if (!product || product.type !== 'robux') {
     return interaction.reply({ content: '🔒 Produk ini **Coming Soon** — nantikan ya!', flags: EPH });
   }
-  return interaction.reply({ ...V.buildProductInfo(interaction.guild, cfg, product), flags: EPH });
+  return interaction.reply(eph(V.buildProductInfo(interaction.guild, cfg, product)));
 }
 
 /** Tombol "Syarat Pembelian" di info produk. */
@@ -263,7 +264,8 @@ async function onTerms(interaction, productId) {
   const cfg = loadConfig();
   const product = getProduct(cfg, productId);
   if (!product?.terms?.description) return interaction.reply({ content: 'Tidak ada syarat khusus untuk produk ini.', flags: EPH });
-  return interaction.reply({ ...V.buildProductTerms(interaction.guild, cfg, product), flags: EPH });
+  const p = V.buildProductTerms(interaction.guild, cfg, product);
+  return interaction.reply({ ...p, flags: (p.flags || 0) | EPH });
 }
 
 // ══════════════════════ Langkah 1b: klik "Beli Sekarang" → form username ══════════════════════
