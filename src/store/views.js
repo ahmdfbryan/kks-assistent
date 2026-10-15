@@ -4,6 +4,15 @@ const {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
+  ContainerBuilder,
+  SectionBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
+  MessageFlags,
 } = require('discord.js');
 const { color, rupiah, num, fill, ts, loadConfig } = require('./config');
 const SP = require('./spender');
@@ -1658,6 +1667,121 @@ function buildOrderLog(guild, cfg, t) {
   return { embeds: [e], components: [], allowedMentions: { parse: [] } };
 }
 
+// ═════════════════════════════ COMPONENTS V2 (testimoni & history order) ═════════════════════════════
+// Garis pemisah (separator) selalu pas sampai ujung kotak di HP & laptop.
+const v2Line = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+const v2Text = (content) => new TextDisplayBuilder().setContent(String(content).slice(0, 4000));
+const row = (label, value) => `» **${label} :** ${value}`;
+/** Isi komentar aman di dalam kotak code block. */
+const boxed = (s) => '```\n' + String(s || '-').replace(/`/g, 'ˋ').slice(0, 900) + '\n```';
+
+function v2Card({ color: accent, header, lines, thumb, after = [], image, footer }) {
+  const box = new ContainerBuilder().setAccentColor(accent);
+  box.addTextDisplayComponents(v2Text(header));
+  box.addSeparatorComponents(v2Line());
+  const body = lines.filter(Boolean).join('\n');
+  if (thumb) box.addSectionComponents(new SectionBuilder().addTextDisplayComponents(v2Text(body)).setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb)));
+  else box.addTextDisplayComponents(v2Text(body));
+  for (const block of after.filter(Boolean)) {
+    box.addSeparatorComponents(v2Line());
+    box.addTextDisplayComponents(v2Text(block));
+  }
+  if (image) box.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(image)));
+  if (footer) {
+    box.addSeparatorComponents(v2Line());
+    box.addTextDisplayComponents(v2Text(`-# ${footer}`));
+  }
+  return { components: [box], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } };
+}
+
+/** Testimoni (semua produk) — Components V2. */
+function buildTestimonyV2(guild, cfg, t, buyer) {
+  const r = t.testimony;
+  const k = kindOf(t);
+  const buyerId = k === 'rekber' ? t.buyerId : t.userId;
+  let lines;
+  if (k === 'rekber') {
+    lines = [
+      row('Layanan', '`🤝 Rekber`'),
+      row('Pembeli', `<@${t.buyerId}>`),
+      row('Penjual', `<@${t.sellerId}>`),
+      row('Objek', `\`${t.item.slice(0, 80)}\``),
+      row('Nominal', `\`${rupiah(t.nominal)}\``),
+    ];
+  } else if (k === 'canva') {
+    lines = [row('Pembeli', `<@${t.userId}>`), row('Produk', `\`${t.productLabel}\``), row('Paket', `\`${t.plan.label}\``), row('Harga', `\`${rupiah(t.price)}\``)];
+  } else {
+    lines = [
+      row('Pembeli', `<@${t.userId}>`),
+      row('Produk', `\`${t.productLabel}\``),
+      row(k === 'gamepass' ? 'Robux Diterima' : 'Jumlah', `\`${num(t.amount)} Robux\``),
+      row('Akun Roblox', `\`@${t.roblox?.name}\``),
+      row('Harga', `\`${rupiah(t.price)}\``),
+    ];
+  }
+  lines.push(row('Order ID', `\`${t.id}\``));
+  const after = [
+    r ? row('Rating', `${STARS(r.rating)}  **${r.rating}/5**`) : row('Status', '`✅ Transaksi Berhasil`'),
+    `**💬 Komentar**\n${boxed(r ? r.comment : 'Pembeli tidak memberikan ulasan.')}`,
+  ];
+  return v2Card({
+    color: color(cfg, 'brand', 0x3498db),
+    header: `## 🧾 Testimoni #${String(state.stats.testimonies).padStart(4, '0')}`,
+    lines,
+    thumb: buyer?.displayAvatarURL({ extension: 'png', size: 256 }) || t.roblox?.avatar || guild.iconURL({ extension: 'png', size: 256 }) || null,
+    after,
+    image: t.proofUrl || null,
+    footer: `🛒 ${storeName(cfg, guild)} • ${ts(Date.now(), 'f')}`,
+  });
+}
+
+/** History order publik — Components V2 (1 pesan per ticket, di-edit otomatis). */
+function buildOrderLogV2(guild, cfg, t) {
+  const k = kindOf(t);
+  const rekber = k === 'rekber';
+  const pl = { showBuyer: true, maskRoblox: true, showPrice: true, showRekberItem: false, ...(cfg.publicLog || {}) };
+  const statusColor = {
+    open: color(cfg, 'brand', 0x3498db),
+    completed: color(cfg, 'open', 0x2ecc71),
+    cancelled: color(cfg, 'closed', 0xe74c3c),
+    refund: color(cfg, 'refund', 0xe67e22),
+  }[t.status];
+  const pub = PUBLIC_STATUS[rekber ? 'rekber' : 'robux'][t.status];
+  const lines = [];
+  if (rekber) {
+    if (pl.showBuyer) lines.push(row('Pembeli', `<@${t.buyerId}>`), row('Penjual', `<@${t.sellerId}>`));
+    lines.push(row('Layanan', '`🤝 Rekber`'));
+    if (pl.showRekberItem) lines.push(row('Objek', `\`${t.item.slice(0, 80)}\``));
+    if (pl.showPrice) lines.push(row('Nominal', `\`${rupiah(t.nominal)}\``));
+  } else if (k === 'canva') {
+    if (pl.showBuyer) lines.push(row('Pembeli', `<@${t.userId}>`));
+    lines.push(row('Produk', `\`${t.productLabel}\``), row('Paket', `\`${t.plan.label}\``));
+    if (pl.showPrice) lines.push(row('Total', `\`${rupiah(t.price)}\``));
+    lines.push(row('Email', `\`${maskEmail(t.email)}\``));
+  } else {
+    if (pl.showBuyer) lines.push(row('Pembeli', `<@${t.userId}>`));
+    lines.push(row('Produk', `\`${t.productLabel}\``), row(k === 'gamepass' ? 'Robux Diterima' : 'Jumlah', `\`${num(t.amount)} Robux\``));
+    if (k === 'gamepass') lines.push(row('Harga Gamepass', `\`${num(t.before)} Robux\``));
+    lines.push(row('Rate', `\`${rupiah(t.rate)} / Robux\``));
+    if (pl.showPrice) lines.push(row('Total', `\`${rupiah(t.price)}\``));
+    lines.push(row('Akun Roblox', `\`@${pl.maskRoblox ? maskName(t.roblox?.name) : t.roblox?.name}\``));
+  }
+  const status = [row('Status', `**${pub}**`), row('Order Masuk', ts(t.createdAt, 'f'))];
+  if (t.closedAt) {
+    status.push(row(t.status === 'completed' ? 'Selesai Pada' : 'Ditutup Pada', ts(t.closedAt, 'f')), row('Waktu Proses', `\`${duration(t.closedAt - t.createdAt)}\``));
+  }
+  if (t.testimony) status.push(row('Rating', `${STARS(t.testimony.rating)}  **${t.testimony.rating}/5**`));
+  const timeline = (t.log || []).slice(-10).map((x) => `${ts(x.at, 't')} ┃ ${x.text}`).join('\n');
+  return v2Card({
+    color: statusColor,
+    header: `## ${rekber ? '🤝' : '🧾'} ${t.id} • ${pub}\n-# ${rekber ? 'Rekber Log' : 'Order Log'}`,
+    lines,
+    thumb: guild.iconURL({ extension: 'png', size: 256 }) || null,
+    after: [status.join('\n'), timeline ? `**🗂️ Progress**\n${timeline}` : null],
+    footer: `🛒 ${storeName(cfg, guild)} • ${ts(t.closedAt || t.createdAt, 'f')}`,
+  });
+}
+
 module.exports = {
   payAmount,
   isPaid,
@@ -1695,7 +1819,8 @@ module.exports = {
   buildRekberConfirm,
   buildRekberDmCreated,
   buildRekberStep,
-  buildOrderLog,
+  buildOrderLog: buildOrderLogV2,
+  buildOrderLogLegacy: buildOrderLog,
   buildTestimonyThanks,
   rateOf,
   buildPanel,
@@ -1709,6 +1834,7 @@ module.exports = {
   buildDmCreated,
   buildDmClosed,
   buildTestimonyPrompt,
-  buildTestimony,
+  buildTestimony: buildTestimonyV2,
+  buildTestimonyLegacy: buildTestimony,
   buildStoreAnnouncement,
 };
