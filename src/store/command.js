@@ -5,7 +5,7 @@ const V = require('./views');
 const SP = require('./spender');
 const H = require('./howto');
 const C = require('./catalog');
-const { setProductsOpen, reopenIfAutoClosed, closeIfSoldOut, announce, refreshPanel, onDanaMasukCommand, migrateToV2 } = require('./flow');
+const { setProductsOpen, reopenIfAutoClosed, closeIfSoldOut, announce, refreshPanel, onDanaMasukCommand, migrateToV2, postCatalog } = require('./flow');
 
 const TEXT = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -142,17 +142,7 @@ const storeCommand = {
     if (sub === 'catalog') {
       const channel = await resolveChannel(interaction, 'catalog');
       if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
-      const old = state.catalog;
-      const header = await channel.send(C.buildCatalogHeader(guild, cfg));
-      const cards = {};
-      for (const p of C.catalogProducts(cfg)) cards[p.id] = (await channel.send(C.buildCatalogCard(guild, cfg, p))).id;
-      state.catalog = { channelId: channel.id, headerId: header.id, cards };
-      save();
-      // Hapus katalog lama supaya tidak dobel.
-      if (old) {
-        const oldCh = await guild.channels.fetch(old.channelId).catch(() => null);
-        for (const id of [old.headerId, ...Object.values(old.cards || {})]) await oldCh?.messages.delete(id).catch(() => {});
-      }
+      const cards = await postCatalog(channel, cfg);
       return interaction.editReply(`✅ Katalog (${Object.keys(cards).length} produk) dikirim ke ${channel} dan akan ter-update otomatis.`);
     }
 
