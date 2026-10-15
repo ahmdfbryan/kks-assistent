@@ -17,7 +17,8 @@
     "How to Order: channels.howToOrder = channel panduan. Teks panel di howToOrder (title, description, flow, whyUs, pickText, paymentIntro, paymentMethods, faq, bannerImage). Panduan per produk di products[].howTo (intro, requirements, steps, tips, image). Kirim panel dengan /store how-to-order. Produk tanpa howTo tidak muncul di dropdown.",
     "Catalog: channels.catalog = channel katalog. Teks header di catalog (title, description, bannerImage). Kartu tiap produk di products[].catalog (tagline, highlights, priceList = daftar jumlah Robux di tabel harga, thumbnail, image = banner kartu). Kirim dengan /store catalog — kirim ulang setelah menambah / menghapus produk.",
     "Canva Pro (type canva): plans = paket (id, label, price, days). Stock = jumlah slot email, atur dengan /store stok-set produk:Canva Pro (habis → tutup otomatis, slot kembali → buka otomatis). remindDays = DM pengingat ke pembeli sebelum masa aktif habis; saat habis admin yang menutup ticket mendapat DM untuk mengeluarkan email dari team. ticket.idPrefix / categoryName = ID & kategori ticket Canva.",
-    "Pembayaran: payment.methods = daftar rekening (bank, number, emoji, holder opsional = atas nama per rekening). payment.accountName = atas nama untuk semua rekening (opsional). Tampil di semua ticket + tombol 💳 Konfirmasi Pembayaran & 📋 Salin No. Rekening. Admin konfirmasi dengan tombol ✅ Dana Masuk di bukti pembayaran atau /danamasuk [nominal] [catatan] di channel ticket."
+    "Pembayaran: payment.methods = daftar rekening (bank, number, emoji, holder opsional = atas nama per rekening). payment.accountName = atas nama untuk semua rekening (opsional). Tampil di semua ticket + tombol 💳 Konfirmasi Pembayaran & 📋 Salin No. Rekening. Admin konfirmasi dengan tombol ✅ Dana Masuk di bukti pembayaran atau /danamasuk [nominal] [catatan] di channel ticket.",
+    "Role Spender (spenderRoles): buyerRoleId = role order pertama. tiers = role berdasarkan total belanja (min dalam Rupiah, dari order Completed; rekber tidak dihitung). keepLowerTiers false = hanya tier tertinggi yang dipasang. announce = ucapan naik level di ticket + DM. Bot butuh izin Manage Roles & role bot harus di atas semua role ini. /store sinkron-role untuk memasang ulang ke semua pembeli."
   ],
   "storeName": "Noname Store",
   "channels": {
@@ -452,5 +453,61 @@
     ],
     "description": "`1` Transfer **tepat** sesuai nominal di atas ke salah satu rekening.\n`2` Klik **💳 Konfirmasi Pembayaran** & upload **bukti transfer**.\n`3` Tunggu admin memverifikasi — kamu akan dapat notifikasi **💰 Dana Masuk**.\n\n⚠️ Jangan melakukan pembayaran di luar ticket ini.",
     "image": ""
+  },
+  "spenderRoles": {
+    "enabled": true,
+    "buyerRoleId": "1560193067083112468",
+    "keepLowerTiers": false,
+    "announce": true,
+    "tiers": [
+      {
+        "name": "Bronze",
+        "emoji": "🥉",
+        "min": 100000,
+        "roleId": "1560193304308613130"
+      },
+      {
+        "name": "Silver",
+        "emoji": "🥈",
+        "min": 250000,
+        "roleId": "1560193535217631262"
+      },
+      {
+        "name": "Gold",
+        "emoji": "🥇",
+        "min": 500000,
+        "roleId": "1560193603060633611"
+      },
+      {
+        "name": "Elite",
+        "emoji": "💎",
+        "min": 1000000,
+        "roleId": "1560193751136342046"
+      },
+      {
+        "name": "Legendary",
+        "emoji": "🔥",
+        "min": 3000000,
+        "roleId": "1560193810569629826"
+      },
+      {
+        "name": "Royal",
+        "emoji": "👑",
+        "min": 5000000,
+        "roleId": "1560193816370085908"
+      },
+      {
+        "name": "Sultan",
+        "emoji": "🌟",
+        "min": 10000000,
+        "roleId": "1560193933667999854"
+      },
+      {
+        "name": "Emperor",
+        "emoji": "🏆",
+        "min": 20000000,
+        "roleId": "1560193985123848212"
+      }
+    ]
   }
 }
