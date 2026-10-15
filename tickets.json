@@ -5,12 +5,18 @@
     "staffRoleId = role staff yang bisa melihat & menangani ticket (kosong = hanya Administrator).",
     "logChannelId = channel log ticket + transcript (opsional, kosongkan kalau tidak perlu).",
     "types = pilihan di dropdown. comingSoon: true = muncul di dropdown tapi belum bisa dibuka. enabled: false = disembunyikan.",
-    "maxOpenPerUser = jumlah ticket aktif per member per jenis."
+    "maxOpenPerUser = jumlah ticket aktif per member per jenis.",
+    "historyChannelId = channel Tickets History (1 kartu per ticket, ter-update otomatis: dibuka → ditangani → ditutup). history.showTopic / showCloseReason = tampilkan topik & alasan tutup (false = sembunyikan, cocok kalau channel publik)."
   ],
   "panelChannelId": "1553814079293095986",
   "categoryId": "",
   "staffRoleId": "",
   "logChannelId": "",
+  "historyChannelId": "1560323170794213517",
+  "history": {
+    "showTopic": true,
+    "showCloseReason": true
+  },
   "maxOpenPerUser": 1,
   "deleteAfterSeconds": 10,
   "color": "#3498DB",
