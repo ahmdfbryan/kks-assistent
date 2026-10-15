@@ -158,6 +158,7 @@ function buildJoinLog(member, rec, cfg) {
 
 function buildLeaveLog(member, rec, cfg) {
   const guild = member.guild;
+  const joinedAt = member.joinedTimestamp || rec?.joinedAt || null;
   const s = rec?.inviterId && rec.inviterId !== 'vanity' ? statsOf(rec.inviterId) : null;
   const e = new EmbedBuilder()
     .setColor(color(cfg, 'leave', 0xe74c3c))
@@ -167,7 +168,7 @@ function buildLeaveLog(member, rec, cfg) {
     .addFields(
       { name: '👤 Member', value: `\`${member.user.globalName || member.user.username}\`\n┗ @${member.user.username}`, inline: true },
       { name: '🎫 Diundang Oleh', value: inviterText(rec), inline: true },
-      { name: '⏳ Lama di Server', value: member.joinedTimestamp ? `\`${stay(Date.now() - member.joinedTimestamp)}\`` : '`-`', inline: true },
+      { name: '⏳ Lama di Server', value: joinedAt ? `\`${stay(Date.now() - joinedAt)}\`` : '`-`', inline: true },
     );
   if (s) e.addFields({ name: '📊 Undangan Inviter', value: `\`✅ ${num(s.valid)} valid\` • \`📤 ${num(s.left)} keluar\``, inline: true });
   return { embeds: [e.setFooter(footer(guild)).setTimestamp(new Date())], allowedMentions: { parse: [] } };
@@ -236,15 +237,31 @@ function scheduleLeaderboard(client) {
 
 async function sendLog(guild, payload) {
   const cfg = loadConfig();
-  if (!isId(cfg.channelId)) return;
+  if (!isId(cfg.channelId)) return console.warn('[invites] channelId invite log belum diisi di invites.json');
   const channel = await guild.channels.fetch(cfg.channelId).catch(() => null);
-  if (channel?.isTextBased()) await channel.send(payload).catch((e) => console.error('[invites] gagal kirim log:', e.message));
+  if (!channel?.isTextBased()) return console.warn(`[invites] channel invite log ${cfg.channelId} tidak ditemukan / bot tidak bisa melihatnya`);
+  // Coba 2x (jaga-jaga koneksi VPS sedang bermasalah).
+  for (let i = 0; i < 2; i++) {
+    try {
+      await channel.send(payload);
+      return;
+    } catch (e) {
+      if (i === 1 || e.code === 50013 || e.code === 50001) {
+        return console.error(`[invites] gagal kirim log (${e.code || ''} ${e.message}) — cek izin bot di channel invite log: View Channel, Send Messages, Embed Links.`);
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
 }
 
 // ───────────────────────── Event ─────────────────────────
 function registerInviteTracker(client) {
   client.once(Events.ClientReady, async () => {
-    for (const guild of client.guilds.cache.values()) await refreshCache(guild);
+    for (const guild of client.guilds.cache.values()) {
+      await refreshCache(guild);
+      // Simpan semua member ke cache supaya data "lama di server" tersedia saat member keluar.
+      await guild.members?.fetch().catch((e) => console.warn('[invites] gagal memuat daftar member:', e.message));
+    }
     if (data.leaderboard) scheduleLeaderboard(client);
   });
   client.on(Events.InviteCreate, (inv) => {
@@ -288,7 +305,10 @@ function registerInviteTracker(client) {
   });
 
   client.on(Events.GuildMemberRemove, async (member) => {
-    if (member.user?.bot) return;
+    try {
+      if (member.partial) member = (await member.fetch().catch(() => null)) || member; // biasanya gagal (sudah keluar) → pakai data seadanya
+    } catch {}
+    if (!member.user || member.user.bot) return;
     const rec = data.members[member.id];
     if (rec) {
       rec.left = true;
