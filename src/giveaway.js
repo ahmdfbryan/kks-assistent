@@ -540,4 +540,12 @@ function registerGiveaway(c) {
   });
 }
 
-module.exports = { giveawayCommand, registerGiveaway, handleInteraction, parseDuration, pickWinners };
+/** Giveaway yang pernah dimenangkan user (untuk ticket Claim Giveaway). */
+function winsOf(userId) {
+  return Object.values(data.items)
+    .filter((g) => g.status === 'ended' && (g.allWinners || g.winners || []).includes(userId))
+    .sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0));
+}
+const getGiveaway = (id) => data.items[String(id || '').toUpperCase()] || null;
+
+module.exports = { giveawayCommand, registerGiveaway, handleInteraction, parseDuration, pickWinners, winsOf, getGiveaway };
