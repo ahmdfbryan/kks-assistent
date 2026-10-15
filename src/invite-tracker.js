@@ -7,13 +7,14 @@ const {
   ChannelType,
   MessageFlags,
   Events,
+  RESTJSONErrorCodes,
 } = require('discord.js');
 
 /**
- * Invite Log + Top 10 Inviter (sticky).
+ * Invite Log + Top 10 Inviter (channel terpisah, ter-update otomatis).
  * - Member masuk → log siapa yang mengundang (link siapa, kode, total undangan inviter).
  * - Member keluar → log + jumlah undangan inviter dikurangi.
- * - Leaderboard selalu dipindah ke pesan paling bawah setiap ada pesan baru di channel.
+ * - Top 10 Inviter di channel terpisah (leaderboardChannelId), 1 pesan yang di-edit otomatis.
  * Setiap member hanya dihitung 1x per inviter (keluar-masuk tidak menggandakan hitungan).
  */
 const FILE = path.join(__dirname, '..', 'invites.json');
@@ -23,7 +24,7 @@ const num = (n) => Math.round(Number(n) || 0).toLocaleString('id-ID');
 const ts = (ms, s = 'R') => `<t:${Math.floor(ms / 1000)}:${s}>`;
 
 // Pengaturan bawaan kalau invites.json belum ada / rusak (supaya bot tetap jalan).
-const DEFAULT_CONFIG = { channelId: '1559920442318258359', fakeDays: 7, stickyDelaySeconds: 4, colors: {}, leaderboard: {} };
+const DEFAULT_CONFIG = { channelId: '1559920442318258359', leaderboardChannelId: '1560212055074799696', fakeDays: 7, colors: {}, leaderboard: {} };
 let warned = false;
 function loadConfig() {
   try {
@@ -99,7 +100,7 @@ async function refreshCache(guild) {
 
 /** Cari undangan yang dipakai member baru: { inviterId, code } | { inviterId: 'vanity' } | null */
 async function detectInvite(guild) {
-  const before = cache.get(guild.id) || new Map();
+  const before = cache.get(guild.id);
   let after;
   try {
     after = await snapshot(guild);
@@ -107,6 +108,8 @@ async function detectInvite(guild) {
     return null;
   }
   cache.set(guild.id, after);
+  // Belum ada data pembanding (misal izin baru diberikan) → jangan menebak, cukup simpan data terbaru.
+  if (!before) return null;
   for (const [code, inv] of after) {
     const old = before.get(code);
     if (inv.uses > (old?.uses || 0)) return { inviterId: inv.inviterId, code };
@@ -117,9 +120,10 @@ async function detectInvite(guild) {
   }
   if (guild.vanityURLCode) {
     const v = await guild.fetchVanityData().catch(() => null);
+    const known = vanityUses.has(guild.id);
     const prev = vanityUses.get(guild.id) ?? 0;
     if (v) vanityUses.set(guild.id, v.uses);
-    if (v && v.uses > prev) return { inviterId: 'vanity', code: guild.vanityURLCode };
+    if (v && known && v.uses > prev) return { inviterId: 'vanity', code: guild.vanityURLCode };
   }
   return null;
 }
@@ -208,34 +212,26 @@ function buildLeaderboard(guild, cfg) {
   return { embeds: [e], allowedMentions: { parse: [] } };
 }
 
-// ───────────────────────── Sticky leaderboard ─────────────────────────
-let stickyTimer = null;
-let posting = false;
-const ownLeaderboards = new Set(); // ID pesan leaderboard yang dikirim bot sendiri
-async function repostLeaderboard(client) {
+// ───────────────────────── Leaderboard (1 pesan, di-edit otomatis) ─────────────────────────
+let lbTimer = null;
+async function updateLeaderboard(client) {
   const loc = data.leaderboard;
-  if (!loc || posting) return;
-  posting = true;
+  if (!loc) return;
+  const channel = await client.channels.fetch(loc.channelId).catch(() => null);
+  if (!channel) return;
   try {
-    const channel = await client.channels.fetch(loc.channelId).catch(() => null);
-    if (!channel) return;
-    const sent = await channel.send(buildLeaderboard(channel.guild, loadConfig()));
-    ownLeaderboards.add(sent.id);
-    if (ownLeaderboards.size > 20) ownLeaderboards.delete(ownLeaderboards.values().next().value);
-    const oldId = loc.messageId;
-    data.leaderboard = { channelId: channel.id, messageId: sent.id };
-    save();
-    if (oldId) await channel.messages.delete(oldId).catch(() => {});
+    await channel.messages.edit(loc.messageId, buildLeaderboard(channel.guild, loadConfig()));
   } catch (err) {
-    console.error('[invites] gagal memindahkan leaderboard:', err.message);
-  } finally {
-    posting = false;
+    if (err.code === RESTJSONErrorCodes.UnknownMessage) {
+      data.leaderboard = null; // pesan dihapus manual → berhenti di-update (kirim ulang dengan /invite-log leaderboard)
+      save();
+    } else console.error('[invites] gagal update leaderboard:', err.message);
   }
 }
-function scheduleSticky(client) {
-  const delay = Math.max(2, Number(loadConfig().stickyDelaySeconds) || 4) * 1000;
-  clearTimeout(stickyTimer);
-  stickyTimer = setTimeout(() => repostLeaderboard(client), delay);
+/** Jeda singkat supaya banyak member masuk bersamaan cukup 1x edit. */
+function scheduleLeaderboard(client) {
+  clearTimeout(lbTimer);
+  lbTimer = setTimeout(() => updateLeaderboard(client).catch(() => {}), 3000);
 }
 
 async function sendLog(guild, payload) {
@@ -249,7 +245,7 @@ async function sendLog(guild, payload) {
 function registerInviteTracker(client) {
   client.once(Events.ClientReady, async () => {
     for (const guild of client.guilds.cache.values()) await refreshCache(guild);
-    if (data.leaderboard) scheduleSticky(client);
+    if (data.leaderboard) scheduleLeaderboard(client);
   });
   client.on(Events.InviteCreate, (inv) => {
     const map = cache.get(inv.guild?.id);
@@ -285,6 +281,7 @@ function registerInviteTracker(client) {
           save();
         }
         await sendLog(member.guild, buildJoinLog(member, rec, cfg));
+        if (!member.user.bot) scheduleLeaderboard(client);
       })
       .catch((e) => console.error('[invites] join:', e.message));
     queues.set(member.guild.id, next);
@@ -299,16 +296,7 @@ function registerInviteTracker(client) {
       save();
     }
     await sendLog(member.guild, buildLeaveLog(member, rec, loadConfig())).catch(() => {});
-  });
-
-  // Sticky: setiap ada pesan baru di channel → leaderboard dipindah ke paling bawah.
-  client.on(Events.MessageCreate, (message) => {
-    const loc = data.leaderboard;
-    if (!loc || message.channelId !== loc.channelId || message.id === loc.messageId) return;
-    // Jangan bereaksi pada leaderboard yang dikirim bot sendiri (mencegah kirim ulang tanpa henti).
-    if (ownLeaderboards.has(message.id)) return;
-    if (message.author?.id === client.user?.id && (posting || message.embeds?.[0]?.title?.includes('Inviter'))) return;
-    scheduleSticky(client);
+    if (rec) scheduleLeaderboard(client);
   });
 }
 
@@ -347,7 +335,7 @@ const invitesCommand = {
   },
 };
 
-/** /invite-log leaderboard [channel] → kirim / pindahkan Top 10 Inviter (sticky). */
+/** /invite-log leaderboard [channel] → kirim / pindahkan Top 10 Inviter (ter-update otomatis). */
 const inviteLogCommand = {
   data: new SlashCommandBuilder()
     .setName('invite-log')
@@ -357,9 +345,9 @@ const inviteLogCommand = {
     .addSubcommand((s) =>
       s
         .setName('leaderboard')
-        .setDescription('Kirim / pindahkan Top 10 Inviter (sticky di channel invite log)')
+        .setDescription('Kirim / pindahkan Top 10 Inviter (ter-update otomatis)')
         .addChannelOption((o) =>
-          o.setName('channel').setDescription('Default: channelId di invites.json').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+          o.setName('channel').setDescription('Default: leaderboardChannelId di invites.json').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
         ),
     ),
   async execute(interaction) {
@@ -367,15 +355,11 @@ const inviteLogCommand = {
     const cfg = loadConfig();
     const channel =
       interaction.options.getChannel('channel') ||
-      (isId(cfg.channelId) ? await interaction.guild.channels.fetch(cfg.channelId).catch(() => null) : null) ||
+      (isId(cfg.leaderboardChannelId) ? await interaction.guild.channels.fetch(cfg.leaderboardChannelId).catch(() => null) : null) ||
       interaction.channel;
     if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
     const old = data.leaderboard;
-    posting = true;
-    const sent = await channel.send(buildLeaderboard(interaction.guild, cfg)).finally(() => {
-      posting = false;
-    });
-    ownLeaderboards.add(sent.id);
+    const sent = await channel.send(buildLeaderboard(interaction.guild, cfg));
     data.leaderboard = { channelId: channel.id, messageId: sent.id };
     save();
     if (old && old.messageId !== sent.id) {
@@ -385,7 +369,7 @@ const inviteLogCommand = {
     await refreshCache(interaction.guild);
     const canRead = cache.has(interaction.guild.id);
     return interaction.editReply(
-      `✅ Top 10 Inviter dikirim ke ${channel} dan akan selalu pindah ke pesan paling bawah.` +
+      `✅ Top 10 Inviter dikirim ke ${channel} dan akan ter-update otomatis setiap ada member masuk / keluar.` +
         (canRead ? '' : '\n⚠️ Bot belum bisa membaca daftar undangan — beri bot izin **Manage Server** supaya invite log berjalan.'),
     );
   },
