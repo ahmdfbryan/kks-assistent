@@ -43,6 +43,35 @@ function getSession(userId) {
   return s;
 }
 
+
+// ══════════════════════ Components V2 di dalam ticket ══════════════════════
+const isV2Msg = (m) => Boolean(m?.flags?.has?.(MessageFlags.IsComponentsV2));
+/** Pesan detail ticket: V2 untuk ticket baru, tampilan lama (embed) untuk ticket lama yang masih berjalan. */
+function ticketPayloadFor(msg, guild, cfg, t) {
+  const p = V.buildTicketMessage(guild, cfg, t);
+  return !msg || isV2Msg(msg) ? V.toV2(p) : p;
+}
+async function editTicketMsg(channel, guild, cfg, t) {
+  if (!channel || !t.messageId) return;
+  const msg = await channel.messages.fetch(t.messageId).catch(() => null);
+  if (msg) await msg.edit(ticketPayloadFor(msg, guild, cfg, t)).catch((e) => console.warn(`[store] edit ticket ${t.id}:`, e.message));
+}
+/** Hilangkan tombol dari pesan (V2: tombol di dalam kotak ikut dihapus, gambar tetap). */
+async function stripRows(msg) {
+  if (!msg) return;
+  if (!isV2Msg(msg)) return msg.edit({ components: [] }).catch(() => {});
+  const files = new Map([...msg.attachments.values()].map((a) => [String(a.url).split('?')[0], a.name]));
+  const clean = (arr) =>
+    arr
+      .filter((c) => c.type !== 1)
+      .map((c) => {
+        if (c.type === 12) return { ...c, items: c.items.map((it) => ({ ...it, media: { url: files.has(String(it.media.url).split('?')[0]) ? `attachment://${files.get(String(it.media.url).split('?')[0])}` : it.media.url } })) };
+        return c.components ? { ...c, components: clean(c.components) } : c;
+      });
+  return msg.edit({ components: clean(msg.components.map((c) => c.toJSON())) }).catch((e) => console.warn('[store] strip tombol:', e.message));
+}
+const v2 = (p) => V.toV2(p);
+
 // ══════════════════════ Refresh panel & leaderboard (otomatis) ══════════════════════
 const refreshTimers = {};
 function debounce(key, fn, ms = 1500) {
@@ -485,11 +514,13 @@ async function createOrder(interaction, productId, amount) {
     });
     ticket.channelId = channel.id;
 
-    const msg = await channel.send({
-      content: `<@${interaction.user.id}>${isId(cfg.ticket?.staffRoleId) ? ` <@&${cfg.ticket.staffRoleId}>` : ''}`,
-      ...V.buildTicketMessage(guild, cfg, ticket),
-      allowedMentions: { users: [interaction.user.id], roles: isId(cfg.ticket?.staffRoleId) ? [cfg.ticket.staffRoleId] : [] },
-    });
+    const msg = await channel.send(
+      v2({
+        content: `<@${interaction.user.id}>${isId(cfg.ticket?.staffRoleId) ? ` <@&${cfg.ticket.staffRoleId}>` : ''}`,
+        ...V.buildTicketMessage(guild, cfg, ticket),
+        allowedMentions: { users: [interaction.user.id], roles: isId(cfg.ticket?.staffRoleId) ? [cfg.ticket.staffRoleId] : [] },
+      }),
+    );
     await msg.pin().catch(() => {});
     ticket.messageId = msg.id;
     save();
@@ -719,17 +750,19 @@ async function onRekberConfirm(interaction, yes) {
     ticket.channelId = channel.id;
 
     const pings = [ticket.buyerId, ticket.sellerId];
-    const msg = await channel.send({
-      content: pings.map((u) => `<@${u}>`).join(' ') + (isId(cfg.ticket?.staffRoleId) ? ` <@&${cfg.ticket.staffRoleId}>` : ''),
-      ...V.buildTicketMessage(guild, cfg, ticket),
-      allowedMentions: { users: pings, roles: isId(cfg.ticket?.staffRoleId) ? [cfg.ticket.staffRoleId] : [] },
-    });
+    const msg = await channel.send(
+      v2({
+        content: pings.map((u) => `<@${u}>`).join(' ') + (isId(cfg.ticket?.staffRoleId) ? ` <@&${cfg.ticket.staffRoleId}>` : ''),
+        ...V.buildTicketMessage(guild, cfg, ticket),
+        allowedMentions: { users: pings, roles: isId(cfg.ticket?.staffRoleId) ? [cfg.ticket.staffRoleId] : [] },
+      }),
+    );
     await msg.pin().catch(() => {});
     ticket.messageId = msg.id;
     save();
     logOrder(guild, ticket, '🆕 Transaksi rekber dimulai');
 
-    await channel.send(V.buildRekberStep(guild, cfg, ticket, 'invite')).catch(() => {});
+    await channel.send(v2(V.buildRekberStep(guild, cfg, ticket, 'invite'))).catch(() => {});
 
     const url = channelUrl(guild.id, channel.id);
     for (const uid of pings) {
@@ -770,8 +803,8 @@ async function advanceRekber(interaction, t, step) {
   const cfg = loadConfig();
   save();
   logOrder(interaction.guild, t, STEP_LOG[step](t));
-  await interaction.update(V.buildTicketMessage(interaction.guild, cfg, t));
-  await interaction.channel.send(V.buildRekberStep(interaction.guild, cfg, t, step)).catch(() => {});
+  await interaction.update(ticketPayloadFor(interaction.message, interaction.guild, cfg, t));
+  await interaction.channel.send(v2(V.buildRekberStep(interaction.guild, cfg, t, step))).catch(() => {});
 }
 
 function rekberTicketFor(interaction, ticketId) {
@@ -1079,11 +1112,13 @@ async function onGamepassConfirm(interaction, yes) {
     });
     ticket.channelId = channel.id;
 
-    const msg = await channel.send({
-      content: `<@${interaction.user.id}>${staff ? ` <@&${staff}>` : ''}`,
-      ...V.buildTicketMessage(guild, cfg, ticket),
-      allowedMentions: { users: [interaction.user.id], roles: staff ? [staff] : [] },
-    });
+    const msg = await channel.send(
+      v2({
+        content: `<@${interaction.user.id}>${staff ? ` <@&${staff}>` : ''}`,
+        ...V.buildTicketMessage(guild, cfg, ticket),
+        allowedMentions: { users: [interaction.user.id], roles: staff ? [staff] : [] },
+      }),
+    );
     await msg.pin().catch(() => {});
     ticket.messageId = msg.id;
     save();
@@ -1274,11 +1309,13 @@ async function onCanvaConfirm(interaction, yes) {
     });
     ticket.channelId = channel.id;
 
-    const msg = await channel.send({
-      content: `<@${interaction.user.id}>${staff ? ` <@&${staff}>` : ''}`,
-      ...V.buildTicketMessage(guild, cfg, ticket),
-      allowedMentions: { users: [interaction.user.id], roles: staff ? [staff] : [] },
-    });
+    const msg = await channel.send(
+      v2({
+        content: `<@${interaction.user.id}>${staff ? ` <@&${staff}>` : ''}`,
+        ...V.buildTicketMessage(guild, cfg, ticket),
+        allowedMentions: { users: [interaction.user.id], roles: staff ? [staff] : [] },
+      }),
+    );
     await msg.pin().catch(() => {});
     ticket.messageId = msg.id;
     save();
@@ -1324,8 +1361,8 @@ async function advanceCanva(interaction, t, step, logText) {
   const cfg = loadConfig();
   save();
   logOrder(interaction.guild, t, logText);
-  await interaction.update(V.buildTicketMessage(interaction.guild, cfg, t));
-  await interaction.channel.send(V.buildCanvaStep(interaction.guild, cfg, t, step)).catch(() => {});
+  await interaction.update(ticketPayloadFor(interaction.message, interaction.guild, cfg, t));
+  await interaction.channel.send(v2(V.buildCanvaStep(interaction.guild, cfg, t, step))).catch(() => {});
 }
 
 /** Admin: undangan team sudah dikirim ke email pembeli. */
@@ -1356,7 +1393,7 @@ const buyerOf = (t) => (kindOf(t) === 'rekber' ? t.buyerId : t.userId);
 async function refreshTicketMessage(guild, t) {
   if (!t.channelId || !t.messageId) return;
   const ch = await guild.channels.fetch(t.channelId).catch(() => null);
-  await ch?.messages.edit(t.messageId, V.buildTicketMessage(guild, loadConfig(), t)).catch(() => {});
+  await editTicketMsg(ch, guild, loadConfig(), t);
 }
 
 function openTicketFor(interaction, ticketId) {
@@ -1436,8 +1473,8 @@ async function onPayModal(interaction, ticketId) {
   const base = V.buildPaymentProof(guild, cfg, t, t.payment, `attachment://${fileName}`);
   const extra = { content: staff ? `<@&${staff}>` : undefined, allowedMentions: { roles: staff ? [staff] : [] } };
   // Gambar diunggah ulang supaya tidak kedaluwarsa; kalau gagal (DNS VPS), pakai link aslinya.
-  await interaction.channel.send({ ...base, ...extra, files: [{ attachment: upload.url, name: fileName }] }).catch(async () => {
-    await interaction.channel.send({ ...V.buildPaymentProof(guild, cfg, t, t.payment, upload.url), ...extra }).catch(() => {});
+  await interaction.channel.send(v2({ ...base, ...extra, files: [{ attachment: upload.url, name: fileName }] })).catch(async () => {
+    await interaction.channel.send(v2({ ...V.buildPaymentProof(guild, cfg, t, t.payment, upload.url), ...extra })).catch(() => {});
   });
   logOrder(guild, t, '💳 Pembeli mengirim bukti pembayaran');
   await refreshTicketMessage(guild, t);
@@ -1447,7 +1484,8 @@ async function onPayModal(interaction, ticketId) {
 async function onCopyAccounts(interaction, ticketId) {
   const t = state.tickets[ticketId];
   if (!t) return interaction.reply({ content: 'Ticket tidak ditemukan.', flags: EPH });
-  return interaction.reply({ ...V.buildCopyAccounts(loadConfig(), t), flags: EPH });
+  const p = v2(V.buildCopyAccounts(loadConfig(), t));
+  return interaction.reply({ ...p, flags: (p.flags || 0) | EPH });
 }
 
 /**
@@ -1469,11 +1507,11 @@ async function markPaid(guild, channel, t, { by, amount, note }) {
   await refreshTicketMessage(guild, t);
   if (kindOf(t) === 'rekber') {
     logOrder(guild, t, STEP_LOG.funded(t));
-    await channel.send(V.buildRekberStep(guild, cfg, t, 'funded')).catch(() => {});
-    if (note || nominal !== V.payAmount(t)) await channel.send(V.buildDanaMasuk(guild, cfg, t, { amount: nominal, note, by })).catch(() => {});
+    await channel.send(v2(V.buildRekberStep(guild, cfg, t, 'funded'))).catch(() => {});
+    if (note || nominal !== V.payAmount(t)) await channel.send(v2(V.buildDanaMasuk(guild, cfg, t, { amount: nominal, note, by }))).catch(() => {});
   } else {
     logOrder(guild, t, '💰 Dana masuk — pesanan diproses');
-    await channel.send(V.buildDanaMasuk(guild, cfg, t, { amount: nominal, note, by })).catch(() => {});
+    await channel.send(v2(V.buildDanaMasuk(guild, cfg, t, { amount: nominal, note, by }))).catch(() => {});
   }
   // DM pembeli
   const buyer = await client.users.fetch(buyerOf(t)).catch(() => null);
@@ -1499,7 +1537,7 @@ async function onPaidButton(interaction, ticketId) {
   await interaction.deferUpdate();
   const err = await markPaid(interaction.guild, interaction.channel, t, { by: interaction.user.id });
   if (err) return interaction.followUp({ content: err, flags: EPH });
-  await interaction.message.edit({ components: [] }).catch(() => {});
+  await stripRows(interaction.message);
 }
 
 /** Tombol "Tolak (Admin)" → form alasan. */
@@ -1533,8 +1571,8 @@ async function onPayRejectModal(interaction, ticketId) {
   const reason = interaction.fields.getTextInputValue('reason').trim();
   t.payment = { ...(t.payment || {}), status: 'rejected', rejectedAt: Date.now(), rejectReason: reason };
   save();
-  await interaction.message?.edit({ components: [] }).catch(() => {});
-  await interaction.channel.send(V.buildPayRejected(interaction.guild, loadConfig(), t, reason, interaction.user.id)).catch(() => {});
+  await stripRows(interaction.message);
+  await interaction.channel.send(v2(V.buildPayRejected(interaction.guild, loadConfig(), t, reason, interaction.user.id))).catch(() => {});
   await refreshTicketMessage(interaction.guild, t);
 }
 
@@ -1713,17 +1751,17 @@ async function onCloseModal(interaction, ticketId) {
     const levelUp = tierNow && tierNow !== spenderBefore.tier && tierNow.min !== spenderBefore.tier?.min;
     if (res && (levelUp || spenderBefore.firstOrder) && cfg.spenderRoles?.announce !== false) {
       const card = SP.buildTierUp(guild, cfg, t.userId, { prevTier: spenderBefore.tier, tier: levelUp ? tierNow : null, firstOrder: spenderBefore.firstOrder });
-      await channel.send(card).catch(() => {});
+      await channel.send(v2(card)).catch(() => {});
       const u = await client.users.fetch(t.userId).catch(() => null);
       await u?.send({ embeds: card.embeds }).catch(() => {});
     }
   }
 
   // Refresh pesan detail ticket (status berubah, tombol hilang).
-  if (t.messageId) channel.messages.edit(t.messageId, V.buildTicketMessage(guild, cfg, t)).catch(() => {});
+  if (t.messageId) editTicketMsg(channel, guild, cfg, t).catch(() => {});
 
   if (status === 'completed') {
-    await channel.send({ ...V.buildTestimonyPrompt(guild, cfg, t), files: proof.files });
+    await channel.send(v2({ ...V.buildTestimonyPrompt(guild, cfg, t), files: proof.files }));
   } else {
     const secs = Number(cfg.ticket?.deleteAfterSeconds) || 15;
     const closedEmbed = V.buildDmClosed(guild, cfg, t).embeds[0].setDescription(
@@ -1731,12 +1769,14 @@ async function onCloseModal(interaction, ticketId) {
     );
     if (proof.url) closedEmbed.setImage(proof.url);
     const mentionIds = rekber ? [t.buyerId, t.sellerId] : [t.userId];
-    await channel.send({
-      content: mentionIds.map((id) => `<@${id}>`).join(' '),
-      embeds: [closedEmbed],
-      files: proof.files,
-      allowedMentions: { users: mentionIds },
-    });
+    await channel.send(
+      v2({
+        content: mentionIds.map((id) => `<@${id}>`).join(' '),
+        embeds: [closedEmbed],
+        files: proof.files,
+        allowedMentions: { users: mentionIds },
+      }),
+    );
     if (kindOf(t) === 'robux' || kindOf(t) === 'canva') {
       await announce(guild, 'returned', { ticket: t });
       await reopenIfAutoClosed(guild);
@@ -1839,9 +1879,9 @@ async function onTestimonyModal(interaction, ticketId) {
 
   await postTestimony(interaction.guild, t);
   logOrder(interaction.guild, t, `⭐ Pembeli memberi rating ${rating}/5`);
-  await interaction.message?.edit({ components: [] }).catch(() => {});
+  await stripRows(interaction.message);
   await interaction.channel
-    .send(V.buildTestimonyThanks(interaction.guild, cfg, t, rating, Number(cfg.ticket?.deleteAfterSeconds) || 15))
+    .send(V.toV2(V.buildTestimonyThanks(interaction.guild, cfg, t, rating, Number(cfg.ticket?.deleteAfterSeconds) || 15)))
     .catch(() => {});
   refreshPanel();
 }
