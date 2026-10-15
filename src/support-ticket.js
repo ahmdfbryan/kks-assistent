@@ -126,7 +126,6 @@ function buildPanel(guild, cfg) {
       })),
     );
   box.addActionRowComponents(new ActionRowBuilder().addComponents(select));
-  box.addTextDisplayComponents(text(`-# ${guild.name} • NCS Ticket Center`));
   return { components: [box], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } };
 }
 
