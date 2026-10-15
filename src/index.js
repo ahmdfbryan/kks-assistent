@@ -12,6 +12,7 @@ const store = require('./store');
 const { registerSocial } = require('./social');
 const { registerInviteTracker } = require('./invite-tracker');
 const giveaway = require('./giveaway');
+const { registerServerStats } = require('./server-stats');
 
 const byName = new Map(commands.map((c) => [c.data.name, c]));
 // GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
@@ -33,6 +34,7 @@ store.registerStore(client);
 registerSocial(client);
 registerInviteTracker(client);
 giveaway.registerGiveaway(client);
+registerServerStats(client);
 
 client.once(Events.ClientReady, (c) => {
   console.log(`🤖 Login sebagai ${c.user.tag}`);
