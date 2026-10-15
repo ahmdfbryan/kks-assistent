@@ -96,6 +96,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  // Cari voice: tombol "Lihat Semua Voice"
+  if (interaction.isButton() && interaction.customId === voiceFinder.ALL_ID) {
+    await voiceFinder.handleAll(interaction).catch((err) => console.error('[voice-finder] error:', err));
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
   const command = byName.get(interaction.commandName);
   if (!command) return;
