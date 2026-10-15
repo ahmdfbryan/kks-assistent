@@ -1695,7 +1695,9 @@ function v2Card({ color: accent, header, lines, thumb, after = [], image, footer
 }
 
 /** Testimoni (semua produk) — Components V2. */
-function buildTestimonyV2(guild, cfg, t, buyer) {
+function buildTestimonyV2(guild, cfg, t, buyer, opts = {}) {
+  const no = opts.number || t.testimonyNo || state.stats.testimonies;
+  const at = opts.at || t.testimonyAt || Date.now();
   const r = t.testimony;
   const k = kindOf(t);
   const buyerId = k === 'rekber' ? t.buyerId : t.userId;
@@ -1726,12 +1728,12 @@ function buildTestimonyV2(guild, cfg, t, buyer) {
   ];
   return v2Card({
     color: color(cfg, 'brand', 0x3498db),
-    header: `## 🧾 Testimoni #${String(state.stats.testimonies).padStart(4, '0')}`,
+    header: `## 🧾 Testimoni #${String(no).padStart(4, '0')}`,
     lines,
     thumb: buyer?.displayAvatarURL({ extension: 'png', size: 256 }) || t.roblox?.avatar || guild.iconURL({ extension: 'png', size: 256 }) || null,
     after,
     image: t.proofUrl || null,
-    footer: `🛒 ${storeName(cfg, guild)} • ${ts(Date.now(), 'f')}`,
+    footer: `🛒 ${storeName(cfg, guild)} • ${ts(at, 'f')}`,
   });
 }
 
