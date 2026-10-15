@@ -5,7 +5,7 @@
     "deleteResultAfterMinutes: hasil pencarian publik dihapus otomatis setelah X menit supaya channel tetap rapi (0 = tidak dihapus).",
     "Voice yang private (tidak bisa dilihat member biasa) tidak diumumkan ke publik — hasilnya hanya terlihat oleh yang mencari.",
     "topVoices = jumlah voice teramai yang tampil di panel (0 = sembunyikan). liveUpdateSeconds = jeda update angka Live Voice saat member masuk/keluar voice (min. 10).",
-    "panel.subtitle / panel.steps / panel.allButton = teks kecil di bawah judul, langkah cara pakai, dan teks tombol daftar semua voice."
+    "panel.subtitle / panel.allButton = teks kecil di bawah judul, dan teks tombol daftar semua voice."
   ],
   "color": "#3498DB",
   "foundColor": "#43B581",
@@ -18,11 +18,6 @@
     "footer": "Noname Studios Creative",
     "placeholder": "🔍 Ketik username / nama member...",
     "subtitle": "Noname Studios Creative • Voice Finder",
-    "steps": [
-      "Klik kotak **pencarian** di bawah",
-      "Ketik **username / nama** temanmu, lalu pilih orangnya",
-      "Lihat dia di voice mana & klik **🔊 Join** untuk menyusul"
-    ],
     "allButton": "Lihat Semua Voice"
   },
   "topVoices": 3,
