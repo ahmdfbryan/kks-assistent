@@ -1,14 +1,14 @@
 {
   "_petunjuk": [
     "File ini dibaca ulang setiap dipakai — tidak perlu restart setelah mengubah teks.",
-    "channelId = channel log invite + leaderboard (sticky, selalu dipindah ke pesan paling bawah / terbaru).",
+    "channelId = channel LOG invite (member masuk / keluar).",
+    "leaderboardChannelId = channel Top 10 Inviter (1 pesan yang ter-update otomatis). Kirim dengan /invite-log leaderboard.",
     "fakeDays = akun Discord yang umurnya kurang dari X hari dianggap 'fake' & tidak dihitung di leaderboard (0 = matikan).",
-    "stickyDelaySeconds = jeda sebelum leaderboard dipindah ke bawah setelah ada pesan baru.",
     "Bot butuh izin Manage Server (untuk membaca daftar undangan) di server ini."
   ],
   "channelId": "1559920442318258359",
+  "leaderboardChannelId": "1560212055074799696",
   "fakeDays": 7,
-  "stickyDelaySeconds": 4,
   "colors": {
     "brand": "#3498DB",
     "join": "#2ECC71",
