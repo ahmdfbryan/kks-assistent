@@ -1786,10 +1786,13 @@ async function postTestimony(guild, t) {
   const channel = await guild.channels.fetch(cfg.channels.testimoni).catch(() => null);
   if (!channel?.isTextBased()) return;
   state.stats.testimonies += 1;
+  t.testimonyNo = state.stats.testimonies; // disimpan supaya bisa dibuat ulang dengan nomor yang sama
+  t.testimonyAt = Date.now();
   const buyer = await guild.members.fetch(V.testimonyUserId(t)).catch(() => null);
   const proof = proofAttachment(t);
   t.proofUrl = proof.url;
-  await channel.send({ ...V.buildTestimony(guild, cfg, t, buyer), files: proof.files });
+  const msg = await channel.send({ ...V.buildTestimony(guild, cfg, t, buyer), files: proof.files });
+  t.testimonyMessageId = msg?.id || null;
   t.testimonyPosted = true;
   save();
 }
@@ -1902,6 +1905,94 @@ async function onHowTo(interaction) {
   interaction.message?.edit(H.buildHowToPanel(interaction.guild, cfg)).catch(() => {});
 }
 
+// ══════════════════════ Perbarui tampilan lama → Components V2 ══════════════════════
+async function fetchAll(channel, max = 2000) {
+  const out = [];
+  let before;
+  while (out.length < max) {
+    const batch = await channel.messages.fetch({ limit: 100, before }).catch(() => null);
+    if (!batch?.size) break;
+    out.push(...batch.values());
+    before = batch.last().id;
+    if (batch.size < 100) break;
+  }
+  return out;
+}
+const isV2 = (m) => Boolean(m.flags?.has?.(MessageFlags.IsComponentsV2));
+
+/**
+ * Buat ulang history order & testimoni lama (format embed) ke Components V2.
+ * Dikirim sesuai urutan aslinya, lalu pesan lama dihapus. Return ringkasan.
+ */
+async function migrateToV2(guild) {
+  const cfg = loadConfig();
+  const res = { logs: 0, testi: 0, testiSkipped: 0, logSkipped: 0 };
+
+  // 1) History order
+  const logCh = isId(cfg?.channels?.log) ? await guild.channels.fetch(cfg.channels.log).catch(() => null) : null;
+  if (logCh?.isTextBased()) {
+    const known = new Set();
+    const tickets = Object.values(state.tickets)
+      .filter((t) => t.logMessageId)
+      .sort((a, b) => a.createdAt - b.createdAt);
+    for (const t of tickets) {
+      known.add(t.logMessageId);
+      const old = await logCh.messages.fetch(t.logMessageId).catch(() => null);
+      if (old && isV2(old)) continue; // sudah format baru
+      await (logQueues.get(t.id) || Promise.resolve());
+      const sent = await logCh.send(V.buildOrderLog(guild, cfg, t)).catch(() => null);
+      if (!sent) continue;
+      if (old) await old.delete().catch(() => {});
+      t.logMessageId = sent.id;
+      res.logs += 1;
+    }
+    save();
+    // Log lama tanpa data ticket (misal pesanan percobaan yang sudah di-reset) → dihitung saja.
+    const msgs = await fetchAll(logCh);
+    res.logSkipped = msgs.filter((m) => m.author?.id === client.user.id && !isV2(m) && !known.has(m.id) && m.embeds?.length).length;
+  }
+
+  // 2) Testimoni
+  const tCh = isId(cfg?.channels?.testimoni) ? await guild.channels.fetch(cfg.channels.testimoni).catch(() => null) : null;
+  if (tCh?.isTextBased()) {
+    const msgs = (await fetchAll(tCh)).filter((m) => m.author?.id === client.user.id && !isV2(m) && m.embeds?.length);
+    const items = [];
+    for (const m of msgs) {
+      const e = m.embeds[0];
+      const no = Number((e.title || '').match(/#(\d+)/)?.[1]);
+      const field = (e.fields || []).find((f) => /Ticket/i.test(f.name));
+      const id = field?.value?.replace(/[`\s]/g, '');
+      const t = id && state.tickets[id];
+      if (!no || !t) {
+        res.testiSkipped += 1;
+        continue;
+      }
+      items.push({ m, no, t, image: e.image?.url || null });
+    }
+    items.sort((a, b) => a.no - b.no);
+    for (const { m, no, t, image } of items) {
+      const buyer = await guild.members.fetch(V.testimonyUserId(t)).catch(() => null);
+      const name = `bukti-${t.id}.png`;
+      t.proofUrl = image ? `attachment://${name}` : null;
+      const payload = V.buildTestimony(guild, cfg, t, buyer, { number: no, at: m.createdTimestamp });
+      let sent = await tCh.send({ ...payload, files: image ? [{ attachment: image, name }] : [] }).catch(() => null);
+      if (!sent && image) {
+        // Gambar gagal diunggah ulang → pakai link aslinya.
+        t.proofUrl = image;
+        sent = await tCh.send(V.buildTestimony(guild, cfg, t, buyer, { number: no, at: m.createdTimestamp })).catch(() => null);
+      }
+      if (!sent) continue;
+      await m.delete().catch(() => {});
+      t.testimonyNo = no;
+      t.testimonyAt = m.createdTimestamp;
+      t.testimonyMessageId = sent.id;
+      res.testi += 1;
+    }
+    save();
+  }
+  return res;
+}
+
 // ══════════════════════ Router interaksi ══════════════════════
 async function handleInteraction(interaction) {
   const id = interaction.customId;
@@ -1982,4 +2073,5 @@ module.exports = {
   refreshLeaderboard,
   refreshCatalog,
   onDanaMasukCommand,
+  migrateToV2,
 };
