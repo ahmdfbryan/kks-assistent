@@ -1,10 +1,23 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ContainerBuilder,
+  SectionBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  MediaGalleryBuilder,
+  MediaGalleryItemBuilder,
+  MessageFlags,
+} = require('discord.js');
 const { color, rupiah, num, fill } = require('./config');
 const { state, isProductOpen, productStatsOf, stockOf, stockUnit } = require('./state');
 const V = require('./views');
 
 /**
- * Channel Catalog: 1 kartu header + 1 kartu per produk (masing-masing dengan tombolnya sendiri).
+ * Channel Catalog (Components V2): 1 kotak header + 1 kotak per produk (masing-masing dengan tombolnya sendiri).
  * Semua kartu ter-update otomatis (status, harga, stock, terjual, rating).
  * Teks diatur di store.json → catalog & products[].catalog
  */
@@ -15,9 +28,28 @@ const STARS = (avg) => {
 const bullets = (list) => (list || []).map((x) => `▸ ${x}`).join('\n');
 const catalogProducts = (cfg) => (cfg.products || []).slice(0, 9);
 
-function footer(guild, cfg) {
-  return { text: V.storeName(cfg, guild), iconURL: guild.iconURL({ extension: 'png', size: 128 }) || undefined };
+const V2 = MessageFlags.IsComponentsV2;
+const text = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000));
+const line = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+
+/** Kotak V2: header (+ thumbnail) → blok dipisah garis → gambar → footer → tombol. */
+function card({ accent, header, thumb, blocks = [], image, footer, rows = [] }) {
+  const box = new ContainerBuilder().setAccentColor(accent);
+  if (thumb) box.addSectionComponents(new SectionBuilder().addTextDisplayComponents(text(header)).setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb)));
+  else box.addTextDisplayComponents(text(header));
+  for (const b of blocks.filter(Boolean)) {
+    box.addSeparatorComponents(line());
+    box.addTextDisplayComponents(text(b));
+  }
+  if (image) box.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(image)));
+  if (footer) {
+    box.addSeparatorComponents(line());
+    box.addTextDisplayComponents(text(`-# ${footer}`));
+  }
+  for (const r of rows.filter(Boolean)) box.addActionRowComponents(r);
+  return { components: [box], flags: V2, allowedMentions: { parse: [] } };
 }
+const footerText = (guild, cfg) => `${V.storeName(cfg, guild)} • <t:${Math.floor(Date.now() / 1000)}:f>`;
 
 /** Rating rata-rata khusus satu produk (dari testimoni ticket produk tersebut). */
 function productRating(productId) {
@@ -38,7 +70,7 @@ function statusBadge(p) {
   return isProductOpen(p) ? '`🟢 BUKA`' : '`🔴 TUTUP`';
 }
 
-// ───────────────────────── Kartu header ─────────────────────────
+// ───────────────────────── Kotak header ─────────────────────────
 function buildCatalogHeader(guild, cfg) {
   const c = cfg.catalog || {};
   const name = { name: V.storeName(cfg, guild) };
@@ -46,22 +78,23 @@ function buildCatalogHeader(guild, cfg) {
   const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
   const sellable = (cfg.products || []).filter((p) => p.type !== 'soon');
   const open = sellable.filter((p) => isProductOpen(p)).length;
-
-  const embed = new EmbedBuilder()
-    .setColor(color(cfg, 'brand', 0x3498db))
-    .setTitle(fill(c.title || '🛍️ Katalog Produk | {server}', name))
-    .setDescription(fill(c.description || '', name).slice(0, 4096) || null)
-    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
-    .addFields(
-      { name: '🛒 Produk Buka', value: `\`${open} / ${sellable.length} produk\``, inline: true },
-      { name: '🧾 Total Transaksi', value: `\`${num((s.transactions || 0) + (s.rekber || 0))} transaksi\``, inline: true },
-      { name: '⭐ Rating Pembeli', value: `\`${avg} / 5 (${num(s.ratingCount)} ulasan)\``, inline: true },
-    );
-  if (c.bannerImage) embed.setImage(c.bannerImage);
-  return { embeds: [embed], components: [] };
+  return card({
+    accent: color(cfg, 'brand', 0x3498db),
+    thumb: guild.iconURL({ extension: 'png', size: 256 }),
+    header: `# ${fill(c.title || '🛍️ Katalog Produk | {server}', name)}\n-# ${fill(c.subtitle || 'Official Catalog • {server}', name)}`,
+    blocks: [
+      fill(c.description || '', name) || null,
+      [
+        `🛒 **Produk Buka:** \`${open} / ${sellable.length} produk\``,
+        `🧾 **Total Transaksi:** \`${num((s.transactions || 0) + (s.rekber || 0))} transaksi\``,
+        `⭐ **Rating Pembeli:** \`${avg} / 5 (${num(s.ratingCount)} ulasan)\``,
+      ].join('\n'),
+    ],
+    image: c.bannerImage || null,
+  });
 }
 
-// ───────────────────────── Kartu produk ─────────────────────────
+// ───────────────────────── Kotak produk ─────────────────────────
 function buildCatalogCard(guild, cfg, p) {
   const cc = p.catalog || {};
   const name = { name: V.storeName(cfg, guild) };
@@ -69,88 +102,49 @@ function buildCatalogCard(guild, cfg, p) {
   const ps = productStatsOf(p.id);
   const rating = productRating(p.id);
   const soon = p.type === 'soon';
+  const tagline = fill(cc.tagline || (soon ? 'Produk baru sedang kami siapkan. **Nantikan kejutannya!** 👀' : ''), name);
 
-  const embed = new EmbedBuilder()
-    .setColor(color(cfg, 'brand', 0x3498db))
-    .setTitle(`${p.emoji || '🛒'} ${p.label}`)
-    .setDescription(
-      fill(cc.tagline || (soon ? 'Produk baru sedang kami siapkan. **Nantikan kejutannya!** 👀' : ''), name).slice(0, 4096) || null,
-    )
-    .setThumbnail(cc.thumbnail || guild.iconURL({ extension: 'png', size: 256 }) || null);
-  // Footer (Noname Store + waktu) hanya di kartu paling bawah.
-  if (catalogProducts(cfg).at(-1)?.id === p.id) embed.setFooter(footer(guild, cfg)).setTimestamp(new Date());
-
+  let info = [];
+  let table = null;
+  let tableTitle = '';
   if (p.type === 'robux') {
     const rate = V.rateOf(cfg, p);
     const list = (cc.priceList || (p.presets || []).filter((a) => [100, 500, 1000].includes(a))).slice(0, 8);
-    embed.addFields(
-      { name: '💱 Harga', value: `\`${rupiah(rate)} / Robux\``, inline: true },
-      { name: '📦 Stock', value: `\`${num(state.stock)} Robux\``, inline: true },
-      { name: '🏪 Status', value: statusBadge(p), inline: true },
-    );
-    const table = priceTable(list.map((a) => [`${num(a)} Robux`, rupiah(a * rate)]));
-    if (table) embed.addFields({ name: '📊 Daftar Harga', value: table });
+    info = [`💱 **Harga:** \`${rupiah(rate)} / Robux\``, `📦 **Stock:** \`${num(state.stock)} Robux\``];
+    table = priceTable(list.map((a) => [`${num(a)} Robux`, rupiah(a * rate)]));
+    tableTitle = '📊 Daftar Harga';
   } else if (p.type === 'gamepass') {
     const list = (cc.priceList || p.examples || []).slice(0, 8);
-    embed.addFields(
-      { name: '💱 Harga', value: `\`${rupiah(V.rateOf(cfg, p))} / Robux\``, inline: true },
-      { name: '⏱️ Estimasi', value: `\`± ${num(p.pendingDays || 5)} hari\``, inline: true },
-      { name: '🏪 Status', value: statusBadge(p), inline: true },
-    );
-    const table = priceTable(list.map((a) => [`${num(a)} Robux`, rupiah(V.gpQuote(cfg, p, V.gpBeforeTax(p, a)).price)]));
-    if (table) embed.addFields({ name: '📊 Daftar Harga (After Tax)', value: table });
+    info = [`💱 **Harga:** \`${rupiah(V.rateOf(cfg, p))} / Robux\``, `⏱️ **Estimasi:** \`± ${num(p.pendingDays || 5)} hari\``];
+    table = priceTable(list.map((a) => [`${num(a)} Robux`, rupiah(V.gpQuote(cfg, p, V.gpBeforeTax(p, a)).price)]));
+    tableTitle = '📊 Daftar Harga (After Tax)';
   } else if (p.type === 'canva') {
-    embed.addFields(
-      { name: '💱 Harga', value: `\`Mulai ${rupiah(V.minPlanPrice(p))}\``, inline: true },
-      { name: '🎟️ Sisa Slot', value: `\`${num(stockOf(p))} ${stockUnit(p)}\``, inline: true },
-      { name: '🏪 Status', value: statusBadge(p), inline: true },
-    );
-    const table = V.planTable(p);
-    if (table) embed.addFields({ name: '🗓️ Pilihan Paket', value: table });
+    info = [`💱 **Harga:** \`Mulai ${rupiah(V.minPlanPrice(p))}\``, `🎟️ **Sisa Slot:** \`${num(stockOf(p))} ${stockUnit(p)}\``];
+    table = V.planTable(p);
+    tableTitle = '🗓️ Pilihan Paket';
   } else if (p.type === 'rekber') {
-    embed.addFields(
-      { name: '💵 Nominal', value: `\`${rupiah(p.minNominal || 0)} – ${rupiah(p.maxNominal || 0)}\``, inline: true },
-      { name: '💳 Fee', value: `\`Ditanggung ${(p.feePaidBy || 'pembeli') === 'penjual' ? 'penjual' : 'pembeli'}\``, inline: true },
-      { name: '🏪 Status', value: statusBadge(p), inline: true },
-    );
-    const table = priceTable(
-      (p.feeTiers || []).map((x) => [
-        x.upTo == null ? 'Di atas itu' : `≤ ${rupiah(x.upTo)}`,
-        x.percent != null ? `${x.percent}%` : rupiah(x.fee),
-      ]),
-    );
-    if (table) embed.addFields({ name: '🧾 Fee Rekber', value: table });
-  } else {
-    embed.addFields({ name: '🏪 Status', value: statusBadge(p), inline: true });
+    info = [
+      `💵 **Nominal:** \`${rupiah(p.minNominal || 0)} – ${rupiah(p.maxNominal || 0)}\``,
+      `💳 **Fee:** \`Ditanggung ${(p.feePaidBy || 'pembeli') === 'penjual' ? 'penjual' : 'pembeli'}\``,
+    ];
+    table = priceTable((p.feeTiers || []).map((x) => [x.upTo == null ? 'Di atas itu' : `≤ ${rupiah(x.upTo)}`, x.percent != null ? `${x.percent}%` : rupiah(x.fee)]));
+    tableTitle = '🧾 Fee Rekber';
   }
+  info.push(`🏪 **Status:** ${statusBadge(p)}`);
 
-  if (cc.highlights?.length) embed.addFields({ name: '✨ Keunggulan', value: bullets(cc.highlights).slice(0, 1024) });
-
+  let stats = null;
   if (!soon) {
     const sold =
       p.type === 'rekber'
-        ? [
-            { name: '🤝 Rekber Sukses', value: `\`${num(state.stats.rekber)} transaksi\``, inline: true },
-            { name: '🛡️ Dana Diamankan', value: `\`${rupiah(state.stats.rekberVolume)}\``, inline: true },
-          ]
+        ? [`🤝 **Rekber Sukses:** \`${num(state.stats.rekber)} transaksi\``, `🛡️ **Dana Diamankan:** \`${rupiah(state.stats.rekberVolume)}\``]
         : p.type === 'canva'
-          ? [
-              { name: '✅ Order Selesai', value: `\`${num(ps.orders)} order\``, inline: true },
-              { name: '👥 Member Aktif', value: `\`${num(V.canvaActiveCount(p.id))} member\``, inline: true },
-            ]
-          : [
-              { name: '✅ Order Selesai', value: `\`${num(ps.orders)} order\``, inline: true },
-              { name: '💎 Robux Terjual', value: `\`${num(ps.robux)} Robux\``, inline: true },
-            ];
-    embed.addFields(...sold, {
-      name: '⭐ Rating',
-      value: rating ? `${STARS(rating.avg)} \`${rating.avg.toFixed(1)}\` (${num(rating.count)})` : '`Belum ada ulasan`',
-      inline: true,
-    });
+          ? [`✅ **Order Selesai:** \`${num(ps.orders)} order\``, `👥 **Member Aktif:** \`${num(V.canvaActiveCount(p.id))} member\``]
+          : [`✅ **Order Selesai:** \`${num(ps.orders)} order\``, `💎 **Robux Terjual:** \`${num(ps.robux)} Robux\``];
+    sold.push(`⭐ **Rating:** ${rating ? `${STARS(rating.avg)} \`${rating.avg.toFixed(1)}\` (${num(rating.count)} ulasan)` : '`Belum ada ulasan`'}`);
+    stats = sold.join('\n');
   }
-  if (cc.image) embed.setImage(cc.image);
 
-  // Tombol kartu
+  // Tombol kotak
   const buttons = [];
   if (soon) {
     buttons.push(new ButtonBuilder().setCustomId(`store:buy:${p.id}`).setLabel('Segera Hadir').setEmoji('🔒').setStyle(ButtonStyle.Secondary).setDisabled(true));
@@ -168,12 +162,25 @@ function buildCatalogCard(guild, cfg, p) {
       buttons.push(new ButtonBuilder().setCustomId(`store:gptax:${p.id}`).setLabel('Tax Calculator').setEmoji('🧮').setStyle(ButtonStyle.Primary));
     }
     if (p.terms?.description) {
-      buttons.push(
-        new ButtonBuilder().setCustomId(`store:terms:${p.id}`).setLabel(p.terms.button || 'Syarat').setEmoji('📌').setStyle(ButtonStyle.Secondary),
-      );
+      buttons.push(new ButtonBuilder().setCustomId(`store:terms:${p.id}`).setLabel(p.terms.button || 'Syarat').setEmoji('📌').setStyle(ButtonStyle.Secondary));
     }
   }
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(buttons.slice(0, 5))] };
+
+  return card({
+    accent: color(cfg, 'brand', 0x3498db),
+    thumb: cc.thumbnail || guild.iconURL({ extension: 'png', size: 256 }),
+    header: `## ${p.emoji || '🛒'} ${p.label}${tagline ? `\n${tagline}` : ''}`,
+    blocks: [
+      info.join('\n'),
+      table ? `### ${tableTitle}\n${table}` : null,
+      cc.highlights?.length ? `### ✨ Keunggulan\n${bullets(cc.highlights)}` : null,
+      stats,
+    ],
+    image: cc.image || null,
+    // Footer (Noname Store + waktu) hanya di kotak paling bawah.
+    footer: catalogProducts(cfg).at(-1)?.id === p.id ? footerText(guild, cfg) : null,
+    rows: [new ActionRowBuilder().addComponents(buttons.slice(0, 5))],
+  });
 }
 
 module.exports = { buildCatalogHeader, buildCatalogCard, catalogProducts };
