@@ -1977,7 +1977,93 @@ function buildProductTermsV2(guild, cfg, product) {
   });
 }
 
+// ══════════════════════ Konversi embed → Components V2 (pesan di dalam ticket) ══════════════════════
+/**
+ * Ubah payload format embed (content + embeds + tombol) menjadi Components V2:
+ * tiap embed = 1 kotak berwarna (judul + thumbnail, blok dipisah garis sampai ujung, gambar, footer),
+ * tombol masuk ke dalam kotak terakhir, content (mention) tampil di atas kotak.
+ */
+function toV2(payload) {
+  if (!payload) return payload;
+  if ((payload.flags || 0) & MessageFlags.IsComponentsV2) return payload;
+  const { content, embeds = [], components = [], ...rest } = payload;
+  const clean = (v) => String(v ?? '').trim();
+  const blank = (v) => !clean(v) || clean(v) === '​';
+
+  // 1) Susun isi tiap embed jadi blok teks.
+  const parts = [];
+  for (const raw of embeds) {
+    const e = raw?.toJSON ? raw.toJSON() : raw;
+    if (!e) continue;
+    const head = [];
+    if (e.author?.name) head.push(`-# ${e.author.name}`);
+    if (e.title) head.push(`## ${e.url ? `[${e.title}](${e.url})` : e.title}`);
+    if (e.description) head.push(e.description);
+    const blocks = [];
+    let inline = [];
+    const flush = () => {
+      if (inline.length) blocks.push(inline.join('\n'));
+      inline = [];
+    };
+    for (const f of e.fields || []) {
+      if (blank(f.name) && blank(f.value)) continue;
+      if (f.inline && !/^#/.test(clean(f.value))) {
+        const v = clean(f.value).replace(/\n┗\s*/g, ' • ').replace(/\n+/g, ' • ');
+        inline.push(blank(f.name) ? v : `**${f.name}:** ${v}`);
+      } else {
+        flush();
+        blocks.push(blank(f.name) ? clean(f.value) : `### ${f.name}\n${clean(f.value)}`);
+      }
+    }
+    flush();
+    const foot = [e.footer?.text, e.timestamp ? `<t:${Math.floor(Date.parse(e.timestamp) / 1000)}:f>` : null].filter(Boolean).join(' • ');
+    parts.push({ e, head: head.join('\n').slice(0, 3900) || '​', blocks, foot });
+  }
+
+  // 2) Batas Discord: maksimal 40 komponen per pesan → gabungkan blok terpendek kalau perlu.
+  const rowCount = (components || []).reduce((n, r) => n + 1 + ((r.toJSON ? r.toJSON() : r).components?.length || 0), 0);
+  const count = () =>
+    (content && parts.length ? 1 : 0) +
+    rowCount +
+    parts.reduce((n, p) => n + 1 + (p.e.thumbnail?.url ? 3 : 1) + p.blocks.length * 2 + (p.e.image?.url ? 2 : 0) + (p.foot ? 2 : 0), 0);
+  while (count() > 40) {
+    const p = parts.filter((x) => x.blocks.length > 1).sort((x, y) => y.blocks.length - x.blocks.length)[0];
+    if (!p) break;
+    let best = 0;
+    for (let i = 1; i < p.blocks.length - 1; i++) if (p.blocks[i].length + p.blocks[i + 1].length < p.blocks[best].length + p.blocks[best + 1].length) best = i;
+    p.blocks.splice(best, 2, `${p.blocks[best]}\n\n${p.blocks[best + 1]}`);
+  }
+
+  // 3) Bangun kotak V2.
+  const boxes = parts.map(({ e, head, blocks, foot }) => {
+    const box = new ContainerBuilder();
+    if (e.color != null) box.setAccentColor(e.color);
+    if (e.thumbnail?.url) {
+      box.addSectionComponents(new SectionBuilder().addTextDisplayComponents(v2Text(head)).setThumbnailAccessory(new ThumbnailBuilder().setURL(e.thumbnail.url)));
+    } else box.addTextDisplayComponents(v2Text(head));
+    for (const b of blocks) {
+      box.addSeparatorComponents(v2Line());
+      box.addTextDisplayComponents(v2Text(b));
+    }
+    if (e.image?.url) box.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(e.image.url)));
+    if (foot) {
+      box.addSeparatorComponents(v2Line());
+      box.addTextDisplayComponents(v2Text(`-# ${foot}`));
+    }
+    return box;
+  });
+  const out = [];
+  if (!boxes.length) {
+    const box = new ContainerBuilder().setAccentColor(color(loadConfig() || {}, 'brand', 0x3498db));
+    box.addTextDisplayComponents(v2Text(content || '​'));
+    boxes.push(box);
+  } else if (content) out.push(v2Text(content));
+  for (const r of components || []) boxes.at(-1).addActionRowComponents(r);
+  return { ...rest, components: [...out, ...boxes], flags: (payload.flags || 0) | MessageFlags.IsComponentsV2 };
+}
+
 module.exports = {
+  toV2,
   payAmount,
   isPaid,
   payMethods,
