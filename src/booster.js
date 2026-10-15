@@ -114,7 +114,6 @@ function activeBoosters(guild) {
 
 /** Kartu ucapan terima kasih di channel booster. */
 function buildThanks(guild, cfg, member, rec) {
-  const perks = (cfg.perks || []).map((x) => `▸ ${fill(x, guild, member)}`).join('\n');
   const since = member.premiumSinceTimestamp || rec.at;
   const userBoosts = Object.values(data.records).filter((r) => r.userId === member.id && !r.test && r.id <= rec.id).length;
   const info = [
@@ -131,8 +130,7 @@ function buildThanks(guild, cfg, member, rec) {
     image: cfg.bannerImage || null,
     blocks: [
       info.join('\n'),
-      levelBlock(guild, rec.tierUp),
-      perks ? `### 🎁 Benefit Booster\n${perks}` : null,
+      rec.tierUp ? `🎉 **Server naik ke Level ${Number(guild.premiumTier) || 0}!** Terima kasih atas dukunganmu! 💜` : null,
       `💖 **${num(thanks)} member** berterima kasih kepada <@${member.id}>`,
     ],
     footer: `💎 ${guild.name} • Server Booster • ${ts(rec.at, 'f')}`,
@@ -149,12 +147,10 @@ function buildThanks(guild, cfg, member, rec) {
 }
 
 function buildDM(guild, cfg, member) {
-  const perks = (cfg.perks || []).map((x) => `▸ ${fill(x, guild, member)}`).join('\n');
   return card({
     color: hex(cfg.color, 0xf47fff),
     thumb: guild.iconURL({ extension: 'png', size: 256 }),
     header: `# ${fill(cfg.dmTitle || '💎 Terima Kasih, Booster!', guild, member)}\n${fill(cfg.dmMessage || 'Terima kasih sudah mem-boost **{server}**! 💖', guild, member)}`,
-    blocks: [levelBlock(guild), perks ? `### 🎁 Benefit Kamu\n${perks}` : null],
     footer: `💎 ${guild.name} • Server Booster • ${ts(Date.now(), 'f')}`,
   });
 }
