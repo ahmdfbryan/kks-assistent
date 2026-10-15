@@ -3,19 +3,28 @@
     "File ini dibaca ulang setiap dipakai — tidak perlu restart bot.",
     "Panel bersifat sticky: setiap ada pesan baru di channel panel, panel otomatis dipindah ke paling bawah setelah stickyDelaySeconds detik.",
     "deleteResultAfterMinutes: hasil pencarian publik dihapus otomatis setelah X menit supaya channel tetap rapi (0 = tidak dihapus).",
-    "Voice yang private (tidak bisa dilihat member biasa) tidak diumumkan ke publik — hasilnya hanya terlihat oleh yang mencari."
+    "Voice yang private (tidak bisa dilihat member biasa) tidak diumumkan ke publik — hasilnya hanya terlihat oleh yang mencari.",
+    "topVoices = jumlah voice teramai yang tampil di panel (0 = sembunyikan). liveUpdateSeconds = jeda update angka Live Voice saat member masuk/keluar voice (min. 10).",
+    "panel.subtitle / panel.steps / panel.allButton = teks kecil di bawah judul, langkah cara pakai, dan teks tombol daftar semua voice."
   ],
-
-  "color": "#5865F2",
+  "color": "#3498DB",
   "foundColor": "#43B581",
   "notFoundColor": "#ED4245",
   "stickyDelaySeconds": 5,
   "deleteResultAfterMinutes": 0,
-
   "panel": {
     "title": "🔎 Cari Teman di Voice",
     "description": "Mau nyusul temanmu yang lagi di voice?\n\nKlik kotak di bawah, ketik username atau nama temanmu, lalu pilih orangnya dari daftar. Bot akan menunjukkan dia sedang berada di voice channel mana — lengkap dengan tombol untuk langsung join.",
     "footer": "Noname Studios Creative",
-    "placeholder": "🔍 Ketik username / nama member..."
-  }
+    "placeholder": "🔍 Ketik username / nama member...",
+    "subtitle": "Noname Studios Creative • Voice Finder",
+    "steps": [
+      "Klik kotak **pencarian** di bawah",
+      "Ketik **username / nama** temanmu, lalu pilih orangnya",
+      "Lihat dia di voice mana & klik **🔊 Join** untuk menyusul"
+    ],
+    "allButton": "Lihat Semua Voice"
+  },
+  "topVoices": 3,
+  "liveUpdateSeconds": 15
 }
