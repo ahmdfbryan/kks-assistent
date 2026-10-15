@@ -21,6 +21,7 @@ const { loadConfig, isId, rupiah, num, getProduct } = require('./config');
 const { state, save, productState, productStatsOf, hasStock, stockOf, setStock, stockUnit, isProductOpen, kindOf, activeTicketOf, nextTicketId } = require('./state');
 const { lookupRobloxUser, lookupGamepass, parseGamepassId } = require('./roblox');
 const V = require('./views');
+const SP = require('./spender');
 const H = require('./howto');
 const C = require('./catalog');
 
@@ -1629,6 +1630,7 @@ async function onCloseModal(interaction, ticketId) {
     t.proofRemoteUrl = upload?.url || null;
   }
 
+  let spenderBefore = null; // diisi saat order Completed (untuk role spender)
   t.status = status;
   t.closedAt = Date.now();
   t.closedBy = interaction.user.id;
@@ -1652,6 +1654,7 @@ async function onCloseModal(interaction, ticketId) {
     state.stats.robux += t.amount;
     state.stats.revenue += t.price;
     const sp = state.spenders[t.userId] || { robux: 0, revenue: 0, orders: 0 };
+    spenderBefore = { tier: SP.tierFor(sp.revenue, cfg), firstOrder: sp.orders === 0 };
     sp.robux += t.amount;
     sp.revenue += t.price;
     sp.orders += 1;
@@ -1668,6 +1671,19 @@ async function onCloseModal(interaction, ticketId) {
     t.deleteAt = Date.now() + (Number(cfg.ticket?.deleteAfterSeconds) || 15) * 1000;
   }
   save();
+
+  // Role spender: Buyer (order pertama) + tier sesuai total belanja.
+  if (spenderBefore) {
+    const res = await SP.applySpenderRoles(guild, t.userId, cfg).catch((e) => console.warn('[spender]', e.message));
+    const tierNow = SP.tierFor(state.spenders[t.userId]?.revenue || 0, cfg);
+    const levelUp = tierNow && tierNow !== spenderBefore.tier && tierNow.min !== spenderBefore.tier?.min;
+    if (res && (levelUp || spenderBefore.firstOrder) && cfg.spenderRoles?.announce !== false) {
+      const card = SP.buildTierUp(guild, cfg, t.userId, { prevTier: spenderBefore.tier, tier: levelUp ? tierNow : null, firstOrder: spenderBefore.firstOrder });
+      await channel.send(card).catch(() => {});
+      const u = await client.users.fetch(t.userId).catch(() => null);
+      await u?.send({ embeds: card.embeds }).catch(() => {});
+    }
+  }
 
   // Refresh pesan detail ticket (status berubah, tombol hilang).
   if (t.messageId) channel.messages.edit(t.messageId, V.buildTicketMessage(guild, cfg, t)).catch(() => {});
