@@ -1808,15 +1808,9 @@ function buildOrderLogV2(guild, cfg, t) {
 }
 
 // ═════════════════════════════════════ SERVER BOOST ═════════════════════════════════════
-/** 1 akun Nitro = 2 boost → akun booster diberikan untuk jumlah boost genap. */
 /** Teks masa aktif paket boost (store.json → plans[].duration, contoh "25–31 hari"). */
 const planDuration = (plan) => plan?.duration || `${num(plan?.days || 30)} hari`;
-const boostAccounts = (qty) => (Number(qty) % 2 === 0 ? Number(qty) / 2 : 0);
 const boostPrice = (plan, qty) => Number(plan.price) * Number(qty);
-function boostAccountText(qty) {
-  const n = boostAccounts(qty);
-  return n ? `✅ Termasuk **${num(n)} akun booster**` : '▫️ Tidak termasuk *(jumlah boost ganjil)*';
-}
 /** Stock per paket: "🗓️ 1 Bulan: `5 boost` • 💎 3 Bulan: `0 boost` (Habis)". */
 function boostStockLines(product) {
   return canvaPlans(product)
@@ -1857,7 +1851,7 @@ function buildBoostInfo(guild, cfg, product) {
     thumb: product.thumbnail || icon256(guild),
     header: `## ${product.emoji || '🚀'} ${product.label}\n${fill(product.description || '', name)}`,
     blocks: [
-      table ? `### 🗓️ Pilihan Paket\n${table}\n-# 💡 ${product.priceNote || 'Harga per 1 boost'} • akun booster termasuk untuk jumlah **genap**` : null,
+      table ? `### 🗓️ Pilihan Paket\n${table}\n-# 💡 ${product.priceNote || 'Harga per 1 boost'} • tanpa minimum order` : null,
       canvaPlans(product).some((x) => x.notes?.length)
         ? canvaPlans(product)
             .map((x) => `**${x.emoji || '🗓️'} ${x.label.toUpperCase()}**\n${(x.notes || []).map((n) => `▸ ${n}`).join('\n')}`)
@@ -1913,7 +1907,6 @@ function buildBoostConfirm(guild, cfg, product, d) {
       { name: '📦 Sisa Stock Paket', value: `\`${num(planStockOf(product, d.plan.id))} boost\``, inline: true },
       { name: '🏠 Server', value: serverLine(d.server) },
       { name: '🔗 Link Server', value: d.invite },
-      { name: '🎁 Akun Booster', value: boostAccountText(d.qty) },
       { name: '💰 Total Bayar', value: `## ${rupiah(d.price)}\n-# ${num(d.qty)} boost × ${rupiah(d.plan.price)}` },
     )
     .setThumbnail(d.server?.icon || product.thumbnail || guild.iconURL({ extension: 'png', size: 256 }) || null);
@@ -1957,7 +1950,6 @@ function buildBoostTicket(guild, cfg, t) {
       { name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true },
       { name: '🗓️ Paket', value: `\`${t.plan.label}\` • ${planDuration(t.plan)}`, inline: true },
       { name: '🚀 Jumlah Boost', value: `\`${num(t.qty)} boost\``, inline: true },
-      { name: '🎁 Akun Booster', value: boostAccountText(t.qty), inline: true },
       { name: '⏱️ Estimasi', value: `\`${t.estimate || '1x24 jam'}\``, inline: true },
       { name: '🏠 Server Tujuan', value: `${serverLine(t.server)}\n🔗 ${t.invite}` },
       { name: '💰 Total Bayar', value: `## ${rupiah(t.price)}\n-# ${num(t.qty)} boost × ${rupiah(t.plan.price)}` },
@@ -2018,12 +2010,6 @@ function buildBoostStep(guild, cfg, t, step) {
       .setDescription(`<@${t.userId}>, admin telah mem-boost server **${t.server?.name || 'kamu'}** dengan **${num(t.qty)} boost**. 🎉`)
       .addFields(
         { name: '📍 Progress', value: '`✅ Boost Dikirim` ➜ `⏳ Konfirmasi Pembeli` ➜ `▫️ Boost Aktif`' },
-        {
-          name: '🎁 Akun Booster',
-          value: boostAccounts(t.qty)
-            ? `Kamu mendapatkan **${num(boostAccounts(t.qty))} akun booster**. Data akun akan dikirim admin **di ticket ini**. Simpan baik-baik ya! 🔐`
-            : 'Jumlah boost **ganjil** — tidak termasuk akun booster.',
-        },
         {
           name: '🪄 Cara Cek Boost',
           value: [
@@ -2390,7 +2376,6 @@ function toV2(payload) {
 
 module.exports = {
   toV2,
-  boostAccounts,
   boostPrice,
   boostTable,
   boostStockLines,
