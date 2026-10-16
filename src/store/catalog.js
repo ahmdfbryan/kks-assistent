@@ -158,13 +158,21 @@ function buildCatalogCard(guild, cfg, p) {
   if (soon) {
     buttons.push(new ButtonBuilder().setCustomId(`store:buy:${p.id}`).setLabel('Segera Hadir').setEmoji('🔒').setStyle(ButtonStyle.Secondary).setDisabled(true));
   } else {
+    // Order Sekarang → langsung ke panel tempat produk ini dijual (Store Utama / Produk Digital).
+    const panelUrl = open ? V.panelUrlFor(guild, groupOf(p)) : null;
     buttons.push(
-      new ButtonBuilder()
-        .setCustomId(`store:buy:${p.id}`)
-        .setLabel(open ? (p.type === 'rekber' ? 'Mulai Rekber' : 'Order Sekarang') : p.type === 'canva' && stockOf(p) <= 0 ? 'Slot Habis' : p.type === 'boost' && stockOf(p) <= 0 ? 'Stock Habis' : 'Sedang Tutup')
-        .setEmoji(open ? '🛒' : '🔴')
-        .setStyle(open ? ButtonStyle.Success : ButtonStyle.Secondary)
-        .setDisabled(!open),
+      panelUrl
+        ? new ButtonBuilder()
+            .setStyle(ButtonStyle.Link)
+            .setURL(panelUrl)
+            .setLabel(p.type === 'rekber' ? 'Mulai Rekber' : 'Order Sekarang')
+            .setEmoji('🛒')
+        : new ButtonBuilder()
+            .setCustomId(`store:buy:${p.id}`)
+            .setLabel(open ? (p.type === 'rekber' ? 'Mulai Rekber' : 'Order Sekarang') : p.type === 'canva' && stockOf(p) <= 0 ? 'Slot Habis' : p.type === 'boost' && stockOf(p) <= 0 ? 'Stock Habis' : 'Sedang Tutup')
+            .setEmoji(open ? '🛒' : '🔴')
+            .setStyle(open ? ButtonStyle.Success : ButtonStyle.Secondary)
+            .setDisabled(!open),
     );
     if (p.howTo) buttons.push(new ButtonBuilder().setCustomId(`store:howtobtn:${p.id}`).setLabel('Cara Order').setEmoji('📖').setStyle(ButtonStyle.Primary));
     if (p.type === 'gamepass') {
