@@ -1977,6 +1977,34 @@ function buildProductTermsV2(guild, cfg, product) {
   });
 }
 
+/** Top 10 Spender (V2): podium 3 besar + peringkat 4–10 + statistik. */
+function buildLeaderboardV2(guild, cfg) {
+  const medals = ['🥇', '🥈', '🥉'];
+  const top = Object.entries(state.spenders)
+    .sort((a, b) => b[1].revenue - a[1].revenue || b[1].orders - a[1].orders)
+    .slice(0, 10);
+  const tierOf = (d) => {
+    const tier = SP.tierFor(d.revenue, cfg);
+    return tier ? ` • ${SP.tierLabel(tier)}` : '';
+  };
+  const podium = top
+    .slice(0, 3)
+    .map(([id, d], i) => `${medals[i]} <@${id}>\n┗ 💰 **${rupiah(d.revenue)}** • 🧾 ${num(d.orders)} order${tierOf(d)}`);
+  const rest = top.slice(3).map(([id, d], i) => `\`#${i + 4}\` <@${id}> • 💰 **${rupiah(d.revenue)}** • ${num(d.orders)} order${tierOf(d)}`);
+  const name = storeName(cfg, guild);
+  return pcard({
+    accent: color(cfg, 'brand', 0x3498db),
+    thumb: icon256(guild),
+    header: `# 🏆 Top 10 Spender\n-# ${name} • Spender Leaderboard`,
+    blocks: [
+      top.length ? `### 👑 Podium Sultan\n${podium.join('\n\n')}` : '_Belum ada transaksi. Jadilah spender pertama!_ 🚀',
+      rest.length ? `### 📋 Peringkat 4 – 10\n${rest.join('\n')}` : null,
+      [`🧾 **Total Transaksi:** \`${num(state.stats.transactions)} transaksi\``, `👥 **Total Pembeli:** \`${num(Object.keys(state.spenders).length)} pembeli\``].join('\n'),
+    ],
+    footer: `💡 Cek total belanja & tier kamu dengan \`/spender\`\n-# ${name} • Diperbarui <t:${Math.floor(Date.now() / 1000)}:R>`,
+  });
+}
+
 // ══════════════════════ Konversi embed → Components V2 (pesan di dalam ticket) ══════════════════════
 /**
  * Ubah payload format embed (content + embeds + tombol) menjadi Components V2:
@@ -2108,7 +2136,8 @@ module.exports = {
   buildProductInfo: buildProductInfoV2,
   buildProductTerms: buildProductTermsV2,
   storeName,
-  buildLeaderboard,
+  buildLeaderboard: buildLeaderboardV2,
+  buildLeaderboardLegacy: buildLeaderboard,
   buildConfirmAccount,
   buildAmountPicker,
   buildTicketMessage,
