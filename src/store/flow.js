@@ -18,7 +18,7 @@ const {
   Events,
 } = require('discord.js');
 const { loadConfig, isId, rupiah, num, getProduct, GROUPS, productsOf } = require('./config');
-const { state, save, productState, productStatsOf, hasStock, stockOf, setStock, stockUnit, isProductOpen, kindOf, activeTicketOf, nextTicketId } = require('./state');
+const { state, save, productState, productStatsOf, hasStock, stockOf, setStock, stockUnit, isProductOpen, kindOf, activeTicketOf, nextTicketId, planStockOf, setPlanStock } = require('./state');
 const { lookupRobloxUser, lookupGamepass, parseGamepassId } = require('./roblox');
 const V = require('./views');
 const SP = require('./spender');
@@ -1178,7 +1178,10 @@ const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[a-z]{2,}$/i;
 
 function returnSlot(cfg, t) {
   const product = getProduct(cfg, t.productId);
-  if (product) setStock(product, stockOf(product) + (kindOf(t) === 'boost' ? Number(t.qty) || 1 : 1));
+  if (!product) return;
+  // Server Boost: stock dikembalikan ke paket yang dipesan.
+  if (kindOf(t) === 'boost') setPlanStock(product, t.plan?.id, planStockOf(product, t.plan?.id) + (Number(t.qty) || 1));
+  else setStock(product, stockOf(product) + 1);
 }
 
 /** "Order Sekarang" → form pilih paket + email. */
@@ -1428,8 +1431,10 @@ async function onBoostStart(interaction, product) {
   if (active) {
     return interaction.reply({ content: `⚠️ Kamu masih punya ticket ${product.label} yang sedang berjalan: <#${active.channelId}> (\`${active.id}\`).`, flags: EPH });
   }
-  const plans = V.canvaPlans(product).slice(0, 25);
-  const max = Math.min(Number(product.maxBoost) || 30, stockOf(product));
+  // Hanya paket yang masih ada stock-nya.
+  const plans = V.canvaPlans(product).filter((x) => planStockOf(product, x.id) > 0).slice(0, 25);
+  if (!plans.length) return interaction.reply({ content: `🔴 Stock **${product.label}** sedang **HABIS**.`, flags: EPH });
+  const max = Math.min(Number(product.maxBoost) || 30, Math.max(...plans.map((x) => planStockOf(product, x.id))));
   const modal = new ModalBuilder()
     .setCustomId(`store:bsmodal:${product.id}`)
     .setTitle(`Order ${product.label}`.slice(0, 45))
@@ -1444,7 +1449,7 @@ async function onBoostStart(interaction, product) {
             .addOptions(
               plans.map((x) => ({
                 label: `${x.label} — ${rupiah(x.price)} / boost`.slice(0, 100),
-                description: `Masa aktif ${x.duration || `${num(x.days)} hari`} • garansi penuh`.slice(0, 100),
+                description: `Masa aktif ${x.duration || `${num(x.days)} hari`} • stock ${num(planStockOf(product, x.id))} boost`.slice(0, 100),
                 value: x.id,
                 emoji: x.emoji || '🗓️',
               })),
@@ -1452,7 +1457,7 @@ async function onBoostStart(interaction, product) {
         ),
       new LabelBuilder()
         .setLabel('Jumlah Boost')
-        .setDescription(`Minimal ${num(product.minBoost || 1)}, maksimal ${num(max)} boost. Jumlah genap = dapat akun booster.`)
+        .setDescription(`Minimal ${num(product.minBoost || 1)} boost, maksimal sesuai stock paket (maks. ${num(max)}). Genap = dapat akun booster.`.slice(0, 100))
         .setTextInputComponent(textInput('qty', { placeholder: 'contoh: 2, 4, 6, 8, 14', min: 1, max: 3 })),
       new LabelBuilder()
         .setLabel('Link Server Discord')
@@ -1472,9 +1477,11 @@ async function onBoostModal(interaction, productId) {
   if (!plan) return interaction.editReply('❌ Pilih paket terlebih dahulu.');
   const qty = Number(String(interaction.fields.getTextInputValue('qty')).replace(/[^\d]/g, ''));
   const min = Number(product.minBoost) || 1;
-  const max = Math.min(Number(product.maxBoost) || 30, stockOf(product));
+  const left = planStockOf(product, plan.id);
+  const max = Math.min(Number(product.maxBoost) || 30, left);
+  if (!left) return interaction.editReply(`🔴 Stock paket **${plan.label}** sedang **HABIS**. Pilih paket lain ya.`);
   if (!qty || qty < min) return interaction.editReply(`❌ Jumlah boost minimal **${num(min)}**.`);
-  if (qty > max) return interaction.editReply(`❌ Jumlah boost maksimal **${num(max)}** (sisa stock **${num(stockOf(product))} boost**).`);
+  if (qty > max) return interaction.editReply(`❌ Jumlah boost maksimal **${num(max)}** untuk paket **${plan.label}** (sisa stock **${num(left)} boost**).`);
   const raw = interaction.fields.getTextInputValue('invite').trim();
   const m = raw.match(INVITE_RE) || raw.match(/^([a-z0-9-]{2,32})$/i); // link lengkap atau kode undangan saja
   if (!m) return interaction.editReply('❌ Link server tidak valid. Contoh: `https://discord.gg/namaserver`');
@@ -1504,15 +1511,15 @@ async function onBoostConfirm(interaction, yes) {
   const guild = interaction.guild;
   const d = sess.draft;
   const product = getProduct(cfg, d.productId);
-  if (!isProductOpen(product) || stockOf(product) < d.qty) {
+  if (!isProductOpen(product) || planStockOf(product, d.plan.id) < d.qty) {
     return interaction.update({ content: `🔴 Maaf, stock **${product?.label || 'produk ini'}** tidak cukup / baru saja **TUTUP**.`, embeds: [], components: [] });
   }
   if (activeTicketOf({ userId: interaction.user.id, kind: 'boost' })) {
     return interaction.update({ content: '⚠️ Kamu masih punya ticket Server Boost yang sedang berjalan.', embeds: [], components: [] });
   }
 
-  // Kunci stock boost SEKARANG supaya tidak terjual melebihi stock.
-  setStock(product, stockOf(product) - d.qty);
+  // Kunci stock paket SEKARANG supaya tidak terjual melebihi stock.
+  setPlanStock(product, d.plan.id, planStockOf(product, d.plan.id) - d.qty);
   const tc = product.ticket || {};
   const id = nextTicketId(tc.idPrefix || 'SB', 'boostSeq');
   const ticket = {
@@ -1588,7 +1595,7 @@ async function onBoostConfirm(interaction, yes) {
     });
   } catch (err) {
     console.error('[store] gagal membuat ticket boost:', err);
-    setStock(product, stockOf(product) + d.qty);
+    setPlanStock(product, d.plan.id, planStockOf(product, d.plan.id) + d.qty);
     delete state.tickets[id];
     save();
     await interaction.editReply('❌ Gagal membuat ticket. Pastikan bot punya izin **Manage Channels** & **Manage Roles**, lalu coba lagi.').catch(() => {});
