@@ -1444,7 +1444,7 @@ async function onBoostStart(interaction, product) {
             .addOptions(
               plans.map((x) => ({
                 label: `${x.label} — ${rupiah(x.price)} / boost`.slice(0, 100),
-                description: `Aktif & bergaransi ${num(x.days)} hari`.slice(0, 100),
+                description: `Masa aktif ${x.duration || `${num(x.days)} hari`} • garansi penuh`.slice(0, 100),
                 value: x.id,
                 emoji: x.emoji || '🗓️',
               })),
@@ -1483,7 +1483,7 @@ async function onBoostModal(interaction, productId) {
   if (!server) return interaction.editReply('❌ Link server **tidak bisa dibuka** (kedaluwarsa / salah). Buat link undangan baru dengan **Never Expire**, lalu coba lagi.');
   const draft = {
     productId: product.id,
-    plan: { id: plan.id, label: plan.label, days: Number(plan.days) || 30, price: Number(plan.price) },
+    plan: { id: plan.id, label: plan.label, days: Number(plan.days) || 30, duration: plan.duration || null, price: Number(plan.price) },
     qty,
     price: V.boostPrice(plan, qty),
     invite,
