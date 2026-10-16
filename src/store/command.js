@@ -299,6 +299,8 @@ const storeCommand = {
             .map((t) =>
               t.kind === 'canva'
                 ? `\`${t.id}\` <#${t.channelId}> • 🎨 ${t.plan.label} • <@${t.userId}>`
+                : t.kind === 'boost'
+                ? `\`${t.id}\` <#${t.channelId}> • 🚀 ${num(t.qty)} boost ${t.plan.label} • <@${t.userId}>`
                 : t.kind === 'gamepass'
                 ? `\`${t.id}\` <#${t.channelId}> • 🎟️ ${num(t.amount)} Robux (gamepass ${num(t.before)}) • <@${t.userId}>`
                 : t.kind === 'rekber'
