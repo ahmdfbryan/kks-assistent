@@ -223,6 +223,7 @@ function buildTicketMessage(guild, cfg, t) {
   if (kindOf(t) === 'rekber') return buildRekberTicket(guild, cfg, t);
   if (kindOf(t) === 'gamepass') return buildGamepassTicket(guild, cfg, t);
   if (kindOf(t) === 'canva') return buildCanvaTicket(guild, cfg, t);
+  if (kindOf(t) === 'boost') return buildBoostTicket(guild, cfg, t);
   const statusColor = {
     open: color(cfg, 'brand', 0x3498db),
     completed: color(cfg, 'open', 0x2ecc71),
@@ -305,8 +306,13 @@ function buildDmClosed(guild, cfg, t) {
   };
   const gp = kindOf(t) === 'gamepass';
   const canva = kindOf(t) === 'canva';
+  const boost = kindOf(t) === 'boost';
   const desc = {
-    completed: canva
+    completed: boost
+      ? `**${num(t.qty)} Server Boost (${t.plan.label})** untuk server **${t.server?.name || '-'}** sudah **AKTIF**! 🚀\n` +
+        `Bergaransi hingga **${ts(t.expiresAt || Date.now(), 'D')}**.\n\n` +
+        `Terima kasih sudah berbelanja di **${storeName(cfg, guild)}**! 💜 Jangan lupa beri testimoni di ticket kamu ya ⭐`
+      : canva
       ? `**${t.productLabel} (${t.plan.label})** kamu sudah **AKTIF**! 🎉\n` +
         `Berlaku hingga **${ts(t.expiresAt || Date.now(), 'D')}** untuk email \`${t.email}\`.\n\n` +
         `Terima kasih sudah berbelanja di **${storeName(cfg, guild)}**! 💜 Jangan lupa beri testimoni di ticket kamu ya ⭐`
@@ -449,7 +455,7 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
     const t = extra.ticket;
     const sp = (cfg.products || []).find((x) => x.id === t.productId) || robux;
     const unit = stockUnit(sp);
-    const qty = kindOf(t) === 'robux' ? t.amount : 1;
+    const qty = kindOf(t) === 'robux' ? t.amount : Number(t.qty) || 1;
     e.setColor(color(cfg, 'refund', 0xe67e22))
       .setTitle(t.status === 'refund' ? '💸 Pesanan Di-refund — Stock Dikembalikan' : '❌ Pesanan Dibatalkan — Stock Dikembalikan')
       .setDescription(`Ticket **${t.id}** (${sp?.label || t.productLabel}) ditutup dengan status **${STATUS_LABEL[t.status]}**.`)
@@ -1146,6 +1152,7 @@ function buildGamepassCheck(cfg, t, live, problems) {
 /** Teks item di DM / status: paket Canva atau jumlah Robux. */
 function itemText(t) {
   if (kindOf(t) === 'canva') return t.plan?.label || '-';
+  if (kindOf(t) === 'boost') return `${num(t.qty)} Boost • ${t.plan?.label || '-'}`;
   return `${num(t.amount)} Robux`;
 }
 
@@ -1525,6 +1532,7 @@ function nextStepText(t) {
     return `Admin akan segera **membeli gamepass** [${t.gamepass?.name || t.gamepass?.id}](${gpUrl(t.gamepass?.id)}). Robux masuk ke akunmu setelah masa pending Roblox (± **${num(t.pendingDays || 5)} hari**).`;
   }
   if (k === 'canva') return `Admin akan segera mengirim **undangan Team Canva Pro** ke \`${t.email}\`. Pantau inbox email kamu ya! 📨`;
+  if (k === 'boost') return `Admin akan segera mem-boost server **${t.server?.name || 'kamu'}** dengan **${num(t.qty)} boost** 🚀 (estimasi ${t.estimate || '1x24 jam'}).`;
   if (k === 'rekber') return `<@${t.sellerId}>, silakan kirim barang / jasa ke pembeli. Pembeli klik **📦 Barang Sudah Diterima** setelah barang sesuai.`;
   return `Admin sedang memproses pengiriman **${num(t.amount)} Robux** ke akun Roblox \`@${t.roblox?.name}\`. 🚀`;
 }
@@ -1714,6 +1722,14 @@ function buildTestimonyV2(guild, cfg, t, buyer, opts = {}) {
     ];
   } else if (k === 'canva') {
     lines = [row('Pembeli', `<@${t.userId}>`), row('Produk', `\`${t.productLabel}\``), row('Paket', `\`${t.plan.label}\``), row('Harga', `\`${rupiah(t.price)}\``)];
+  } else if (k === 'boost') {
+    lines = [
+      row('Pembeli', `<@${t.userId}>`),
+      row('Produk', `\`${t.productLabel}\``),
+      row('Paket', `\`${num(t.qty)} Boost • ${t.plan.label}\``),
+      row('Server', `\`${t.server?.name || '-'}\``),
+      row('Harga', `\`${rupiah(t.price)}\``),
+    ];
   } else {
     lines = [
       row('Pembeli', `<@${t.userId}>`),
@@ -1762,6 +1778,10 @@ function buildOrderLogV2(guild, cfg, t) {
     lines.push(row('Produk', `\`${t.productLabel}\``), row('Paket', `\`${t.plan.label}\``));
     if (pl.showPrice) lines.push(row('Total', `\`${rupiah(t.price)}\``));
     lines.push(row('Email', `\`${maskEmail(t.email)}\``));
+  } else if (k === 'boost') {
+    if (pl.showBuyer) lines.push(row('Pembeli', `<@${t.userId}>`));
+    lines.push(row('Produk', `\`${t.productLabel}\``), row('Paket', `\`${num(t.qty)} Boost • ${t.plan.label}\``));
+    if (pl.showPrice) lines.push(row('Total', `\`${rupiah(t.price)}\``));
   } else {
     if (pl.showBuyer) lines.push(row('Pembeli', `<@${t.userId}>`));
     lines.push(row('Produk', `\`${t.productLabel}\``), row(k === 'gamepass' ? 'Robux Diterima' : 'Jumlah', `\`${num(t.amount)} Robux\``));
@@ -1784,6 +1804,255 @@ function buildOrderLogV2(guild, cfg, t) {
     after: [status.join('\n'), timeline ? `**🗂️ Progress**\n${timeline}` : null],
     footer: `🛒 ${storeName(cfg, guild)} • ${ts(t.closedAt || t.createdAt, 'f')}`,
   });
+}
+
+// ═════════════════════════════════════ SERVER BOOST ═════════════════════════════════════
+/** 1 akun Nitro = 2 boost → akun booster diberikan untuk jumlah boost genap. */
+const boostAccounts = (qty) => (Number(qty) % 2 === 0 ? Number(qty) / 2 : 0);
+const boostPrice = (plan, qty) => Number(plan.price) * Number(qty);
+function boostAccountText(qty) {
+  const n = boostAccounts(qty);
+  return n ? `✅ Termasuk **${num(n)} akun booster**` : '▫️ Tidak termasuk *(jumlah boost ganjil)*';
+}
+/** Tabel harga per boost tiap paket. */
+function boostTable(product) {
+  const plans = canvaPlans(product);
+  if (!plans.length) return null;
+  const w = Math.max(...plans.map((x) => x.label.length));
+  const pw = Math.max(...plans.map((x) => rupiah(x.price).length));
+  const base = plans[0];
+  return (
+    '```\n' +
+    plans
+      .map((x) => {
+        const perMonth = Number(x.price) / (Number(x.months) || 1);
+        const save = base && x !== base && perMonth < Number(base.price) / (Number(base.months) || 1) ? Math.round((1 - perMonth / (Number(base.price) / (Number(base.months) || 1))) * 100) : 0;
+        return `${x.label.padEnd(w)}  ➜  ${rupiah(x.price).padStart(pw)} / boost${save ? `  (Hemat ${save}%)` : ''}`;
+      })
+      .join('\n') +
+    '\n```'
+  );
+}
+
+/** Info Server Boost (V2, hanya terlihat pembeli). */
+function buildBoostInfo(guild, cfg, product) {
+  const open = isProductOpen(product);
+  const name = { name: storeName(cfg, guild) };
+  const ps = productStatsOf(product.id);
+  const table = boostTable(product);
+  return pcard({
+    accent: color(cfg, 'brand', 0x3498db),
+    thumb: product.thumbnail || icon256(guild),
+    header: `## ${product.emoji || '🚀'} ${product.label}\n${fill(product.description || '', name)}`,
+    blocks: [
+      table ? `### 🗓️ Pilihan Paket\n${table}\n-# 💡 ${product.priceNote || 'Harga per 1 boost'} • akun booster termasuk untuk jumlah **genap**` : null,
+      [
+        `🚀 **Stock Boost:** \`${num(stockOf(product))} ${stockUnit(product)}\``,
+        `⏱️ **Estimasi Proses:** \`${product.estimate || '1x24 jam'}\``,
+        `🏪 **Status:** ${openBadge(open)}`,
+        '🔗 **Yang Dibutuhkan:** `Link server Discord`',
+      ].join('\n'),
+      product.features?.length ? `### ✨ Keunggulan Produk\n${product.features.map((x) => `▸ ${x}`).join('\n')}` : null,
+      product.howItWorks?.length ? `### 🔄 Cara Kerja\n${product.howItWorks.map((x, i) => `${KEYCAPS[i] || `\`${i + 1}\``} ${x}`).join('\n')}` : null,
+      [`✅ **Order Selesai:** \`${num(ps.orders)} order\``, `🚀 **Boost Aktif:** \`${num(boostActiveCount(product.id))} boost\``, ratingLine()].join('\n'),
+    ],
+    footer: `${name.name} • ${nowTs()}`,
+    rows: [
+      btnRow([
+        new ButtonBuilder()
+          .setCustomId(`store:order:${product.id}`)
+          .setLabel(open ? 'Order Sekarang' : stockOf(product) <= 0 ? 'Stock Habis' : 'Sedang Tutup')
+          .setEmoji('🛒')
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(!open),
+        product.howTo ? new ButtonBuilder().setCustomId(`store:howtobtn:${product.id}`).setLabel('Cara Order').setEmoji('📖').setStyle(ButtonStyle.Primary) : null,
+        termsButton(product, 'Syarat & Ketentuan'),
+      ]),
+    ],
+  });
+}
+
+/** Jumlah boost yang sedang aktif (masa aktif belum habis). */
+function boostActiveCount(productId) {
+  const now = Date.now();
+  return Object.values(state.tickets)
+    .filter((t) => kindOf(t) === 'boost' && t.productId === productId && t.status === 'completed' && t.expiresAt > now)
+    .reduce((a, t) => a + (Number(t.qty) || 0), 0);
+}
+
+const serverLine = (s) =>
+  s?.name ? `**${s.name}**${s.members ? ` • 👥 ${num(s.members)} member` : ''}${s.boosts != null ? ` • 🚀 ${num(s.boosts)} boost saat ini` : ''}` : '`Tidak bisa dibaca — admin akan cek manual`';
+
+/** Ringkasan sebelum ticket Server Boost dibuat. */
+function buildBoostConfirm(guild, cfg, product, d) {
+  const e = new EmbedBuilder()
+    .setColor(color(cfg, 'brand', 0x3498db))
+    .setTitle(`🔍 Konfirmasi Order ${product.label}`)
+    .setDescription('Periksa kembali detail di bawah. Pastikan **link server** sudah benar & **tidak kedaluwarsa**.')
+    .addFields(
+      { name: '🗓️ Paket', value: `\`${d.plan.label}\``, inline: true },
+      { name: '🚀 Jumlah Boost', value: `\`${num(d.qty)} boost\``, inline: true },
+      { name: '⏳ Masa Aktif', value: `\`${num(d.plan.days)} hari\``, inline: true },
+      { name: '🏠 Server', value: serverLine(d.server) },
+      { name: '🔗 Link Server', value: d.invite },
+      { name: '🎁 Akun Booster', value: boostAccountText(d.qty) },
+      { name: '💰 Total Bayar', value: `## ${rupiah(d.price)}\n-# ${num(d.qty)} boost × ${rupiah(d.plan.price)}` },
+    )
+    .setThumbnail(d.server?.icon || product.thumbnail || guild.iconURL({ extension: 'png', size: 256 }) || null);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('store:bsconfirm:yes').setLabel('Ya, Buat Ticket').setEmoji('✅').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('store:bsconfirm:no').setLabel('Batalkan').setEmoji('✖️').setStyle(ButtonStyle.Danger),
+  );
+  return { embeds: [e], components: [row] };
+}
+
+function boostSteps(t) {
+  const st = t.stage || {};
+  const done = t.status === 'completed';
+  const rows = [
+    [isPaid(t), `Pembayaran **${rupiah(t.price)}** terverifikasi`],
+    [st.sent, `Admin mem-boost server **${t.server?.name || '-'}** (${num(t.qty)} boost)`],
+    [st.received, 'Pembeli konfirmasi **boost sudah masuk**'],
+    [done, `**Boost aktif & bergaransi** selama ${num(t.plan.days)} hari ✨`],
+  ];
+  const cur = rows.findIndex((r) => !r[0]);
+  return rows.map((r, i) => `${r[0] ? '✅' : t.status === 'open' && i === cur ? '⏳' : '▫️'} \`${i + 1}\` ${r[1]}`).join('\n');
+}
+
+/** Isi ticket Server Boost (dikonversi ke Components V2 saat dikirim). */
+function buildBoostTicket(guild, cfg, t) {
+  const name = storeName(cfg, guild);
+  const product = (cfg.products || []).find((p) => p.id === t.productId) || {};
+  const st = t.stage || {};
+  const statusColor = {
+    open: color(cfg, 'brand', 0x3498db),
+    completed: color(cfg, 'open', 0x2ecc71),
+    cancelled: color(cfg, 'closed', 0xe74c3c),
+    refund: color(cfg, 'refund', 0xe67e22),
+  }[t.status];
+  const info = new EmbedBuilder()
+    .setColor(statusColor)
+    .setAuthor({ name: `${name} • ${t.productLabel}`, iconURL: guild.iconURL({ size: 128 }) || undefined })
+    .setTitle(`🧾 Detail Pesanan • ${t.id}`)
+    .setDescription(`Halo <@${t.userId}>, terima kasih sudah berbelanja di **${name}**! 💜`)
+    .addFields(
+      { name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true },
+      { name: '🗓️ Paket', value: `\`${t.plan.label}\` • ${num(t.plan.days)} hari`, inline: true },
+      { name: '🚀 Jumlah Boost', value: `\`${num(t.qty)} boost\``, inline: true },
+      { name: '🎁 Akun Booster', value: boostAccountText(t.qty), inline: true },
+      { name: '⏱️ Estimasi', value: `\`${t.estimate || '1x24 jam'}\``, inline: true },
+      { name: '🏠 Server Tujuan', value: `${serverLine(t.server)}\n🔗 ${t.invite}` },
+      { name: '💰 Total Bayar', value: `## ${rupiah(t.price)}\n-# ${num(t.qty)} boost × ${rupiah(t.plan.price)}` },
+      { name: '📍 Progress Boost', value: boostSteps(t) },
+      { name: '📌 Status', value: `**${ticketStatusText(t)}**`, inline: true },
+      { name: '💳 Pembayaran', value: payStatusText(t), inline: true },
+      { name: '🕒 Dibuat', value: ts(t.createdAt, 'f'), inline: true },
+    )
+    .setThumbnail(t.server?.icon || product.thumbnail || guild.iconURL({ extension: 'png', size: 256 }) || null)
+    .setFooter(serverFooter(guild, `${name} • Ticket ${t.id}`))
+    .setTimestamp(t.closedAt || t.createdAt);
+  if (t.closedAt) info.addFields({ name: '🔒 Ditutup', value: `${ts(t.closedAt, 'f')} oleh <@${t.closedBy}>`, inline: true });
+  if (t.status === 'completed' && t.expiresAt) info.addFields({ name: '🛡️ Garansi Hingga', value: ts(t.expiresAt, 'D'), inline: true });
+
+  const embeds = [info];
+  if (t.status === 'open') {
+    embeds.push(...paymentEmbeds(guild, cfg, t));
+    if (product.ticketNote) {
+      embeds.push(new EmbedBuilder().setColor(color(cfg, 'refund', 0xe67e22)).setTitle(product.ticketNoteTitle || '📌 Penting').setDescription(fill(product.ticketNote, { name }).slice(0, 4096)));
+    }
+  }
+  const components =
+    t.status === 'open'
+      ? [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`store:bssent:${t.id}`)
+              .setLabel(st.sent ? 'Boost Terkirim' : 'Boost Terkirim (Admin)')
+              .setEmoji('🚀')
+              .setStyle(ButtonStyle.Primary)
+              .setDisabled(Boolean(st.sent)),
+            new ButtonBuilder()
+              .setCustomId(`store:bsdone:${t.id}`)
+              .setLabel(st.received ? 'Boost Sudah Masuk' : 'Boost Sudah Masuk')
+              .setEmoji('✅')
+              .setStyle(ButtonStyle.Success)
+              .setDisabled(!st.sent || Boolean(st.received)),
+            new ButtonBuilder().setCustomId(`store:close:${t.id}`).setLabel('Tutup Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+          ),
+          ...paymentRows(t),
+        ]
+      : [];
+  return { embeds, components };
+}
+
+/** Pemberitahuan langkah Server Boost di dalam ticket. step: 'sent' | 'received' */
+function buildBoostStep(guild, cfg, t, step) {
+  const name = storeName(cfg, guild);
+  const e = new EmbedBuilder()
+    .setColor(color(cfg, step === 'received' ? 'open' : 'brand', step === 'received' ? 0x2ecc71 : 0x3498db))
+    .setFooter(serverFooter(guild, `${name} • Ticket ${t.id}`))
+    .setTimestamp(new Date())
+    .setThumbnail(t.server?.icon || null);
+  let ping = [];
+  if (step === 'sent') {
+    ping = [t.userId];
+    e.setTitle('🚀 Server Kamu Sudah Di-Boost!')
+      .setDescription(`<@${t.userId}>, admin telah mem-boost server **${t.server?.name || 'kamu'}** dengan **${num(t.qty)} boost**. 🎉`)
+      .addFields(
+        { name: '📍 Progress', value: '`✅ Boost Dikirim` ➜ `⏳ Konfirmasi Pembeli` ➜ `▫️ Boost Aktif`' },
+        {
+          name: '🎁 Akun Booster',
+          value: boostAccounts(t.qty)
+            ? `Kamu mendapatkan **${num(boostAccounts(t.qty))} akun booster**. Data akun akan dikirim admin **di ticket ini**. Simpan baik-baik ya! 🔐`
+            : 'Jumlah boost **ganjil** — tidak termasuk akun booster.',
+        },
+        {
+          name: '🪄 Cara Cek Boost',
+          value: [
+            'Buka server kamu ➜ klik **nama server** di kiri atas',
+            'Lihat bilah **Server Boost** & level server',
+            'Pastikan jumlah boost bertambah sesuai pesanan',
+            'Klik **✅ Boost Sudah Masuk** di ticket ini',
+          ]
+            .map((x, i) => `${KEYCAPS[i]} ${x}`)
+            .join('\n'),
+        },
+      );
+  } else if (step === 'received') {
+    e.setTitle('🎉 Boost Sudah Masuk!')
+      .setDescription(`<@${t.userId}> mengonfirmasi **${num(t.qty)} boost** sudah masuk ke server **${t.server?.name || '-'}**. ✨`)
+      .addFields(
+        { name: '📍 Progress', value: '`✅ Boost Dikirim` ➜ `✅ Konfirmasi Pembeli` ➜ `⏳ Boost Aktif`' },
+        { name: '🔒 Langkah Terakhir — Admin', value: 'Admin akan menutup ticket ini sebagai **Completed**. Setelah itu kamu bisa memberi **testimoni** ⭐\n🛡️ Garansi berlaku selama masa aktif boost.' },
+      );
+  }
+  return { content: ping.map((id) => `<@${id}>`).join(' ') || undefined, embeds: [e], allowedMentions: { users: ping } };
+}
+
+/** Pengingat masa aktif boost hampir habis (DM pembeli) / sudah habis (DM admin). */
+function buildBoostExpiry(guild, cfg, t, who) {
+  const name = storeName(cfg, guild);
+  const e = new EmbedBuilder().setFooter(serverFooter(guild, name)).setTimestamp(new Date());
+  if (who === 'buyer') {
+    const url = panelUrlFor(guild, 'digital') || panelUrlFor(guild, 'main');
+    e.setColor(color(cfg, 'refund', 0xe67e22))
+      .setTitle('⏰ Server Boost Kamu Segera Berakhir')
+      .setDescription(
+        `Masa aktif **${num(t.qty)} Server Boost (${t.plan.label})** untuk server **${t.server?.name || '-'}** akan berakhir **${ts(t.expiresAt, 'R')}** (${ts(t.expiresAt, 'D')}).\n\n` +
+          `Perpanjang sekarang di **${name}** supaya level server kamu tidak turun! 🚀` +
+          (url ? `\n\n🛒 ${url}` : ''),
+      );
+  } else {
+    e.setColor(color(cfg, 'closed', 0xe74c3c))
+      .setTitle('⌛ Masa Aktif Server Boost Habis')
+      .setDescription(`Masa aktif ticket **${t.id}** sudah berakhir.`)
+      .addFields(
+        { name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true },
+        { name: '🚀 Paket', value: `\`${num(t.qty)} Boost • ${t.plan.label}\``, inline: true },
+        { name: '🏠 Server', value: `${t.server?.name || '-'}\n${t.invite}` },
+      );
+  }
+  return { embeds: [e] };
 }
 
 // ══════════════════════ Panel & info produk (Components V2) ══════════════════════
@@ -2103,6 +2372,15 @@ function toV2(payload) {
 
 module.exports = {
   toV2,
+  boostAccounts,
+  boostPrice,
+  boostTable,
+  boostActiveCount,
+  buildBoostInfo,
+  buildBoostConfirm,
+  buildBoostTicket,
+  buildBoostStep,
+  buildBoostExpiry,
   panelUrlFor,
   payAmount,
   isPaid,
