@@ -12,7 +12,7 @@ const {
   MediaGalleryItemBuilder,
   MessageFlags,
 } = require('discord.js');
-const { color, rupiah, num, fill } = require('./config');
+const { color, rupiah, num, fill, productsOf, groupOf, groupText } = require('./config');
 const { state, isProductOpen, productStatsOf, stockOf, stockUnit } = require('./state');
 const V = require('./views');
 
@@ -26,7 +26,8 @@ const STARS = (avg) => {
   return '⭐'.repeat(full) + '☆'.repeat(5 - full);
 };
 const bullets = (list) => (list || []).map((x) => `▸ ${x}`).join('\n');
-const catalogProducts = (cfg) => (cfg.products || []).slice(0, 9);
+/** Produk yang tampil di katalog sesuai grup (main = store utama, digital = produk digital). */
+const catalogProducts = (cfg, group = 'main') => productsOf(cfg, group).slice(0, 9);
 
 const V2 = MessageFlags.IsComponentsV2;
 const text = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000));
@@ -71,22 +72,24 @@ function statusBadge(p) {
 }
 
 // ───────────────────────── Kotak header ─────────────────────────
-function buildCatalogHeader(guild, cfg) {
-  const c = cfg.catalog || {};
+function buildCatalogHeader(guild, cfg, group = 'main') {
+  const c = groupText(cfg, group, 'catalog');
   const name = { name: V.storeName(cfg, guild) };
   const s = state.stats;
   const avg = s.ratingCount ? (s.ratingSum / s.ratingCount).toFixed(1) : '-';
-  const sellable = (cfg.products || []).filter((p) => p.type !== 'soon');
+  const sellable = productsOf(cfg, group).filter((p) => p.type !== 'soon');
   const open = sellable.filter((p) => isProductOpen(p)).length;
   return card({
     accent: color(cfg, 'brand', 0x3498db),
     thumb: guild.iconURL({ extension: 'png', size: 256 }),
-    header: `# ${fill(c.title || '🛍️ Katalog Produk | {server}', name)}\n-# ${fill(c.subtitle || 'Official Catalog • {server}', name)}`,
+    header: `# ${fill(c.title || '🛍️ Katalog Produk | {server}', name)}\n-# ${fill(c.subtitle || (group === 'digital' ? 'Digital Catalog • {server}' : 'Official Catalog • {server}'), name)}`,
     blocks: [
       fill(c.description || '', name) || null,
       [
         `🛒 **Produk Buka:** \`${open} / ${sellable.length} produk\``,
-        `🧾 **Total Transaksi:** \`${num((s.transactions || 0) + (s.rekber || 0))} transaksi\``,
+        group === 'digital'
+          ? `🧾 **Order Produk Digital:** \`${num(sellable.reduce((a, p) => a + (productStatsOf(p.id).orders || 0), 0))} order\``
+          : `🧾 **Total Transaksi:** \`${num((s.transactions || 0) + (s.rekber || 0))} transaksi\``,
         `⭐ **Rating Pembeli:** \`${avg} / 5 (${num(s.ratingCount)} ulasan)\``,
       ].join('\n'),
     ],
@@ -178,7 +181,7 @@ function buildCatalogCard(guild, cfg, p) {
     ],
     image: cc.image || null,
     // Footer (Noname Store + waktu) hanya di kotak paling bawah.
-    footer: catalogProducts(cfg).at(-1)?.id === p.id ? footerText(guild, cfg) : null,
+    footer: catalogProducts(cfg, groupOf(p)).at(-1)?.id === p.id ? footerText(guild, cfg) : null,
     rows: [new ActionRowBuilder().addComponents(buttons.slice(0, 5))],
   });
 }
