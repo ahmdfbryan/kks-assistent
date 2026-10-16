@@ -374,18 +374,30 @@
         {
           "id": "1m",
           "label": "1 Bulan",
-          "price": 15000,
-          "days": 30,
+          "price": 10000,
+          "days": 31,
+          "duration": "25–31 hari",
           "months": 1,
-          "emoji": "🗓️"
+          "emoji": "🗓️",
+          "notes": [
+            "Harga yang tertera berlaku untuk **1 Server Boost**",
+            "Masa aktif sekitar **25–31 hari**",
+            "**Garansi penuh** selama masa aktif boost"
+          ]
         },
         {
           "id": "3m",
           "label": "3 Bulan",
-          "price": 40000,
+          "price": 15000,
           "days": 90,
+          "duration": "85–90 hari",
           "months": 3,
-          "emoji": "💎"
+          "emoji": "💎",
+          "notes": [
+            "Harga yang tertera berlaku untuk **1 Server Boost**",
+            "Masa aktif sekitar **85–90 hari**",
+            "**Garansi penuh** selama masa aktif boost"
+          ]
         }
       ],
       "priceNote": "Harga per 1 boost",
@@ -393,7 +405,7 @@
       "maxBoost": 30,
       "estimate": "1x24 jam",
       "stockUnit": "boost",
-      "remindDays": 3,
+      "remindDays": 0,
       "features": [
         "**Akun Booster Termasuk** — dapatkan akun yang dipakai untuk mem-boost server kamu *(khusus jumlah boost genap)*",
         "**Kualitas Terjamin** — boost stabil & terjaga kualitasnya",
