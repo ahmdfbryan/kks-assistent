@@ -17,7 +17,7 @@ const {
   RESTJSONErrorCodes,
   Events,
 } = require('discord.js');
-const { loadConfig, isId, rupiah, num, getProduct } = require('./config');
+const { loadConfig, isId, rupiah, num, getProduct, GROUPS, productsOf } = require('./config');
 const { state, save, productState, productStatsOf, hasStock, stockOf, setStock, stockUnit, isProductOpen, kindOf, activeTicketOf, nextTicketId } = require('./state');
 const { lookupRobloxUser, lookupGamepass, parseGamepassId } = require('./roblox');
 const V = require('./views');
@@ -105,19 +105,22 @@ async function editTracked(key, build) {
 
 // Panel How to Order ikut di-update (status buka/tutup, rate, stock).
 const refreshPanel = () => {
-  debounce('panel', () => editTracked('panel', V.buildPanel));
+  debounce('panel', () => editTracked('panel', (g, c) => V.buildPanel(g, c, 'main')));
+  debounce('digitalPanel', () => editTracked('digitalPanel', (g, c) => V.buildPanel(g, c, 'digital')), 2000);
   debounce('howto', () => editTracked('howto', H.buildHowToPanel), 2500);
-  debounce('catalog', refreshCatalog, 3500);
+  debounce('catalog', () => refreshCatalog('main'), 3500);
+  debounce('digitalCatalog', () => refreshCatalog('digital'), 4500);
 };
 
-/** Kirim katalog lengkap (header + kotak tiap produk) berurutan, lalu hapus katalog lama. */
-async function postCatalog(channel, cfg) {
+/** Kirim katalog lengkap (header + kotak tiap produk) berurutan, lalu hapus katalog lama. group = main | digital. */
+async function postCatalog(channel, cfg, group = 'main') {
+  const key = GROUPS[group].catalogKey;
   const guild = channel.guild;
-  const old = state.catalog;
-  const header = await channel.send(C.buildCatalogHeader(guild, cfg));
+  const old = state[key];
+  const header = await channel.send(C.buildCatalogHeader(guild, cfg, group));
   const cards = {};
-  for (const p of C.catalogProducts(cfg)) cards[p.id] = (await channel.send(C.buildCatalogCard(guild, cfg, p))).id;
-  state.catalog = { channelId: channel.id, headerId: header.id, cards };
+  for (const p of C.catalogProducts(cfg, group)) cards[p.id] = (await channel.send(C.buildCatalogCard(guild, cfg, p))).id;
+  state[key] = { channelId: channel.id, headerId: header.id, cards };
   save();
   if (old) {
     const oldCh = await guild.channels.fetch(old.channelId).catch(() => null);
@@ -127,16 +130,23 @@ async function postCatalog(channel, cfg) {
 }
 
 /** Update semua kotak di channel catalog (header + kotak tiap produk). */
-async function refreshCatalog() {
-  const loc = state.catalog;
+async function refreshCatalog(group = 'main') {
+  const loc = state[GROUPS[group].catalogKey];
   if (!client || !loc) return;
   const channel = await client.channels.fetch(loc.channelId).catch(() => null);
   const cfg = loadConfig();
   if (!channel || !cfg) return;
-  const jobs = [[loc.headerId, () => C.buildCatalogHeader(channel.guild, cfg)]];
-  for (const p of C.catalogProducts(cfg)) {
-    if (loc.cards?.[p.id]) jobs.push([loc.cards[p.id], () => C.buildCatalogCard(channel.guild, cfg, p)]);
+  const products = C.catalogProducts(cfg, group);
+  // Daftar produk berubah (misal Canva Pro pindah ke katalog Produk Digital) → kirim ulang katalog supaya rapi.
+  const want = products.map((p) => p.id).join(',');
+  const have = Object.keys(loc.cards || {}).join(',');
+  if (want !== have) {
+    console.log(`[store] daftar produk katalog ${group} berubah → katalog dikirim ulang.`);
+    await postCatalog(channel, cfg, group);
+    return;
   }
+  const jobs = [[loc.headerId, () => C.buildCatalogHeader(channel.guild, cfg, group)]];
+  for (const p of products) jobs.push([loc.cards[p.id], () => C.buildCatalogCard(channel.guild, cfg, p)]);
   for (const [messageId, build] of jobs) {
     if (!messageId) continue;
     try {
@@ -145,7 +155,7 @@ async function refreshCatalog() {
       if (err.code === RESTJSONErrorCodes.UnknownMessage) continue;
       // Katalog lama format embed tidak bisa diubah ke Components V2 → kirim ulang semuanya (urutan tetap).
       console.log('[store] katalog lama (embed) diganti ke tampilan Components V2:', err.message);
-      await postCatalog(channel, cfg);
+      await postCatalog(channel, cfg, group);
       return;
     }
   }
