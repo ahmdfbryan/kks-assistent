@@ -42,8 +42,20 @@ function save() {
 }
 
 /** Angka terkini untuk setiap channel. */
-function values(guild, cfg) {
-  const members = cfg.countBots ? guild.memberCount : guild.members.cache.filter((m) => !m.user.bot).size || guild.memberCount;
+/**
+ * Jumlah member tanpa bot. Cache member bisa belum lengkap (misal tepat setelah bot restart),
+ * jadi daftar member diambil dulu; kalau tetap belum lengkap, pakai total member dari Discord
+ * supaya angkanya tidak salah (misal tiba-tiba jadi 1).
+ */
+async function memberCount(guild, cfg) {
+  if (cfg.countBots) return guild.memberCount;
+  if (guild.members.cache.size < guild.memberCount) await guild.members.fetch({ time: 20000 }).catch(() => {});
+  if (guild.members.cache.size >= guild.memberCount * 0.95) return guild.members.cache.filter((m) => !m.user.bot).size;
+  return guild.memberCount;
+}
+
+async function values(guild, cfg) {
+  const members = await memberCount(guild, cfg);
   const tickets = Object.values(storeState.tickets || {}).filter((t) => t.status === 'open').length;
   const orders = (storeState.stats?.transactions || 0) + (storeState.stats?.rekber || 0);
   return { members, tickets, orders };
@@ -70,7 +82,7 @@ async function update(client, { force = false } = {}) {
     const guild = client.guilds.cache.get(data.guildId);
     if (!guild) return { ok: false, reason: 'server tidak ditemukan' };
     const cfg = loadConfig();
-    const v = values(guild, cfg);
+    const v = await values(guild, cfg);
     let changed = 0;
     if (data.categoryId) {
       const cat = guild.channels.cache.get(data.categoryId) || (await guild.channels.fetch(data.categoryId).catch(() => null));
@@ -117,7 +129,7 @@ const serverStatsCommand = {
     if (sub === 'setup') {
       // Hapus yang lama dulu kalau ada (supaya tidak dobel).
       await removeAll(guild);
-      const v = values(guild, cfg);
+      const v = await values(guild, cfg);
       const category = await guild.channels.create({
         name: cfg.categoryName,
         type: ChannelType.GuildCategory,
@@ -195,4 +207,4 @@ function registerServerStats(client) {
   });
 }
 
-module.exports = { serverStatsCommand, registerServerStats, update };
+module.exports = { serverStatsCommand, registerServerStats, update, memberCount };
