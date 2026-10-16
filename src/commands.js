@@ -11,6 +11,7 @@ const { serverStatsCommand } = require('./server-stats');
 const { ticketCommand } = require('./support-ticket');
 const { suggestionCommand } = require('./suggestions');
 const { boosterCommand } = require('./booster');
+const { systemCommand } = require('./system');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -40,6 +41,6 @@ const welcomeCommand = {
   },
 };
 
-const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, danaMasukCommand, spenderCommand, socialCommand, invitesCommand, inviteLogCommand, giveawayCommand, serverStatsCommand, ticketCommand, suggestionCommand, boosterCommand];
+const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, danaMasukCommand, spenderCommand, socialCommand, invitesCommand, inviteLogCommand, giveawayCommand, serverStatsCommand, ticketCommand, suggestionCommand, boosterCommand, systemCommand];
 
 module.exports = { commands };
