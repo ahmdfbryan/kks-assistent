@@ -121,6 +121,10 @@ function buildCatalogCard(guild, cfg, p) {
     info = [`💱 **Harga:** \`${rupiah(V.rateOf(cfg, p))} / Robux\``, `⏱️ **Estimasi:** \`± ${num(p.pendingDays || 5)} hari\``];
     table = priceTable(list.map((a) => [`${num(a)} Robux`, rupiah(V.gpQuote(cfg, p, V.gpBeforeTax(p, a)).price)]));
     tableTitle = '📊 Daftar Harga (After Tax)';
+  } else if (p.type === 'boost') {
+    info = [`💱 **Harga:** \`Mulai ${rupiah(V.minPlanPrice(p))} / boost\``, `🚀 **Stock:** \`${num(stockOf(p))} ${stockUnit(p)}\``, `⏱️ **Estimasi:** \`${p.estimate || '1x24 jam'}\``];
+    table = V.boostTable(p);
+    tableTitle = '🗓️ Pilihan Paket (per boost)';
   } else if (p.type === 'canva') {
     info = [`💱 **Harga:** \`Mulai ${rupiah(V.minPlanPrice(p))}\``, `🎟️ **Sisa Slot:** \`${num(stockOf(p))} ${stockUnit(p)}\``];
     table = V.planTable(p);
@@ -142,6 +146,8 @@ function buildCatalogCard(guild, cfg, p) {
         ? [`🤝 **Rekber Sukses:** \`${num(state.stats.rekber)} transaksi\``, `🛡️ **Dana Diamankan:** \`${rupiah(state.stats.rekberVolume)}\``]
         : p.type === 'canva'
           ? [`✅ **Order Selesai:** \`${num(ps.orders)} order\``, `👥 **Member Aktif:** \`${num(V.canvaActiveCount(p.id))} member\``]
+          : p.type === 'boost'
+          ? [`✅ **Order Selesai:** \`${num(ps.orders)} order\``, `🚀 **Boost Aktif:** \`${num(V.boostActiveCount(p.id))} boost\``]
           : [`✅ **Order Selesai:** \`${num(ps.orders)} order\``, `💎 **Robux Terjual:** \`${num(ps.robux)} Robux\``];
     sold.push(`⭐ **Rating:** ${rating ? `${STARS(rating.avg)} \`${rating.avg.toFixed(1)}\` (${num(rating.count)} ulasan)` : '`Belum ada ulasan`'}`);
     stats = sold.join('\n');
@@ -155,7 +161,7 @@ function buildCatalogCard(guild, cfg, p) {
     buttons.push(
       new ButtonBuilder()
         .setCustomId(`store:buy:${p.id}`)
-        .setLabel(open ? (p.type === 'rekber' ? 'Mulai Rekber' : 'Order Sekarang') : p.type === 'canva' && stockOf(p) <= 0 ? 'Slot Habis' : 'Sedang Tutup')
+        .setLabel(open ? (p.type === 'rekber' ? 'Mulai Rekber' : 'Order Sekarang') : p.type === 'canva' && stockOf(p) <= 0 ? 'Slot Habis' : p.type === 'boost' && stockOf(p) <= 0 ? 'Stock Habis' : 'Sedang Tutup')
         .setEmoji(open ? '🛒' : '🔴')
         .setStyle(open ? ButtonStyle.Success : ButtonStyle.Secondary)
         .setDisabled(!open),
