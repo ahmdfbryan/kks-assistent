@@ -64,7 +64,7 @@ function productSummary(cfg, p) {
   if (p.type === 'gamepass') return `${rupiah(V.rateOf(cfg, p))}/Robux • ± ${num(p.pendingDays || 5)} hari`;
   if (p.type === 'rekber') return `Mulai ${rupiah(p.minNominal || 0)} • Dana aman`;
   if (p.type === 'canva') return `Mulai ${rupiah(V.minPlanPrice(p))} • Slot ${num(stockOf(p))}`;
-  if (p.type === 'boost') return `Mulai ${rupiah(V.minPlanPrice(p))}/boost • Stock ${num(stockOf(p))}`;
+  if (p.type === 'boost') return `Mulai ${rupiah(V.minPlanPrice(p))}/boost • Stock ${num(stockOf(p))} boost`;
   return p.howTo?.short || '';
 }
 
@@ -140,7 +140,7 @@ function buildHowToGuide(guild, cfg, value) {
   const info = [`🏪 **Status:** ${open ? '`🟢 BUKA`' : '`🔴 TUTUP`'}`];
   if (p.type === 'robux') info.push(`💱 **Rate:** \`${rupiah(V.rateOf(cfg, p))} / Robux\``, `📦 **Stock:** \`${num(state.stock)} Robux\``);
   else if (p.type === 'gamepass') info.push(`💱 **Rate:** \`${rupiah(V.rateOf(cfg, p))} / Robux\``, `⏱️ **Estimasi:** \`± ${num(p.pendingDays || 5)} hari\``);
-  else if (p.type === 'boost') info.push(`💱 **Harga:** \`Mulai ${rupiah(V.minPlanPrice(p))} / boost\``, `🚀 **Stock:** \`${num(stockOf(p))} ${stockUnit(p)}\``, `⏱️ **Estimasi:** \`${p.estimate || '1x24 jam'}\``);
+  else if (p.type === 'boost') info.push(`💱 **Harga:** \`Mulai ${rupiah(V.minPlanPrice(p))} / boost\``, `⏱️ **Estimasi:** \`${p.estimate || '1x24 jam'}\``, `🚀 **Stock per Paket:**\n${V.boostStockLines(p)}`);
   else if (p.type === 'canva') info.push(`💱 **Harga:** \`Mulai ${rupiah(V.minPlanPrice(p))}\``, `🎟️ **Sisa Slot:** \`${num(stockOf(p))} ${stockUnit(p)}\``);
   else if (p.type === 'rekber') {
     info.push(
