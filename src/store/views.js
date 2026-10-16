@@ -14,7 +14,7 @@ const {
   MediaGalleryItemBuilder,
   MessageFlags,
 } = require('discord.js');
-const { color, rupiah, num, fill, ts, loadConfig } = require('./config');
+const { color, rupiah, num, fill, ts, loadConfig, GROUPS, groupOf, productsOf, groupText } = require('./config');
 const SP = require('./spender');
 const { state, productState, productStatsOf, hasStock, stockOf, stockUnit, isProductOpen, kindOf } = require('./state');
 
@@ -387,7 +387,9 @@ function buildTestimony(guild, cfg, t, buyer) {
  *       'stock' | 'returned' → khusus Robux.
  */
 function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
-  const panelLink = state.panel ? `https://discord.com/channels/${guild.id}/${state.panel.channelId}` : null;
+  // Semua produk yang diumumkan dari panel Produk Digital → tombol mengarah ke panel digital.
+  const onlyDigital = (extra.products || []).length && (extra.products || []).every((x) => groupOf(x) === 'digital');
+  const panelLink = panelUrlFor(guild, onlyDigital ? 'digital' : 'main');
   const robux = (cfg.products || []).find((x) => x.type === 'robux');
   const rate = robux ? rateOf(cfg, robux) : 0;
   const name = storeName(cfg, guild);
@@ -1403,7 +1405,7 @@ function buildCanvaExpiry(guild, cfg, t, who) {
   const name = storeName(cfg, guild);
   const e = new EmbedBuilder().setFooter(serverFooter(guild, name)).setTimestamp(new Date());
   if (who === 'buyer') {
-    const url = state.panel ? `https://discord.com/channels/${guild.id}/${state.panel.channelId}` : null;
+    const url = panelUrlFor(guild, 'digital') || panelUrlFor(guild, 'main');
     e.setColor(color(cfg, 'refund', 0xe67e22))
       .setTitle(`⏰ ${t.productLabel} Kamu Segera Berakhir`)
       .setDescription(
@@ -1816,13 +1818,20 @@ const termsButton = (product, label) =>
     : null;
 const btnRow = (buttons) => new ActionRowBuilder().addComponents(buttons.filter(Boolean).slice(0, 5));
 
-/** Panel utama store (V2): judul, keterangan, total transaksi, rating, tombol produk. */
-function buildPanelV2(guild, cfg) {
-  const p = cfg.panel || {};
+/** Link ke panel tempat produk berada (store utama / produk digital). */
+function panelUrlFor(guild, group = 'main') {
+  const loc = state[GROUPS[group]?.panelKey || 'panel'] || state.panel;
+  return loc ? `https://discord.com/channels/${guild.id}/${loc.channelId}/${loc.messageId}` : null;
+}
+
+/** Panel store (V2): judul, keterangan, total transaksi, rating, tombol produk. group = main | digital. */
+function buildPanelV2(guild, cfg, group = 'main') {
+  const p = groupText(cfg, group, 'panel');
   const name = { name: storeName(cfg, guild) };
   const s = state.stats;
+  const products = productsOf(cfg, group);
   const styles = { robux: ButtonStyle.Success, gamepass: ButtonStyle.Success, canva: ButtonStyle.Primary, rekber: ButtonStyle.Primary };
-  const buttons = (cfg.products || []).slice(0, 5).map((prod) =>
+  const buttons = products.slice(0, 5).map((prod) =>
     new ButtonBuilder()
       .setCustomId(`store:buy:${prod.id}`)
       .setLabel(prod.label)
@@ -1830,15 +1839,17 @@ function buildPanelV2(guild, cfg) {
       .setStyle(styles[prod.type] || ButtonStyle.Secondary)
       .setDisabled(!isProductOpen(prod)),
   );
+  const digital = group === 'digital';
+  const orders = products.reduce((a, x) => a + (productStatsOf(x.id).orders || 0), 0);
+  const stats = digital
+    ? [`🧾 **Order Produk Digital:** \`${num(orders)} order\``, `🛒 **Produk Tersedia:** \`${products.filter((x) => x.type !== 'soon').length} produk\``, ratingLine()]
+    : [`🧾 **Total Transaksi:** \`${num((s.transactions || 0) + (s.rekber || 0))} transaksi\``, ratingLine()];
   return pcard({
     accent: color(cfg, 'brand', 0x3498db),
     thumb: icon256(guild),
-    header: `# ${fill(p.title || '🛒 {server}', name)}\n-# ${fill(p.subtitle || 'Official Store • {server}', name)}`,
+    header: `# ${fill(p.title || '🛒 {server}', name)}\n-# ${fill(p.subtitle || (digital ? 'Digital Store • {server}' : 'Official Store • {server}'), name)}`,
     image: p.bannerImage || null,
-    blocks: [
-      fill(p.description, name) || null,
-      [`🧾 **Total Transaksi:** \`${num((s.transactions || 0) + (s.rekber || 0))} transaksi\``, ratingLine()].join('\n'),
-    ],
+    blocks: [fill(p.description, name) || null, stats.join('\n')],
     footer: `${name.name} • Diperbarui <t:${Math.floor(Date.now() / 1000)}:R>`,
     rows: buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [],
   });
@@ -2092,6 +2103,7 @@ function toV2(payload) {
 
 module.exports = {
   toV2,
+  panelUrlFor,
   payAmount,
   isPaid,
   payMethods,
