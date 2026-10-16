@@ -76,7 +76,20 @@ const hasStock = (product) => ['robux', 'canva', 'boost'].includes(product?.type
 const stockUnit = (product) => (product?.type === 'robux' ? 'Robux' : product?.stockUnit || 'slot');
 function stockOf(product) {
   if (product?.type === 'robux') return state.stock;
+  // Server Boost: stock terpisah per paket (1 Bulan / 3 Bulan) → total = jumlah semua paket.
+  if (product?.type === 'boost') return (product.plans || []).reduce((a, x) => a + planStockOf(product, x.id), 0);
   return Number(state.stocks?.[product?.id]) || 0;
+}
+/** Stock satu paket (khusus produk dengan stock per paket, misal Server Boost). */
+const planKey = (product, planId) => `${product.id}:${planId}`;
+function planStockOf(product, planId) {
+  return Number(state.stocks?.[planKey(product, planId)]) || 0;
+}
+function setPlanStock(product, planId, n) {
+  const v = Math.max(0, Math.floor(n));
+  state.stocks = state.stocks || {};
+  state.stocks[planKey(product, planId)] = v;
+  return v;
 }
 function setStock(product, n) {
   const v = Math.max(0, Math.floor(n));
@@ -122,4 +135,4 @@ function nextTicketId(prefix, key = 'seq') {
   return `${prefix || 'NCS'}-${String(state[key]).padStart(4, '0')}`;
 }
 
-module.exports = { state, save, productState, productStatsOf, hasStock, stockUnit, stockOf, setStock, isProductOpen, kindOf, activeTicketOf, nextTicketId };
+module.exports = { state, save, productState, productStatsOf, hasStock, stockUnit, stockOf, setStock, planStockOf, setPlanStock, isProductOpen, kindOf, activeTicketOf, nextTicketId };
