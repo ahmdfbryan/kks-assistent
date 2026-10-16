@@ -16,7 +16,7 @@ const {
 } = require('discord.js');
 const { color, rupiah, num, fill, ts, loadConfig, GROUPS, groupOf, productsOf, groupText } = require('./config');
 const SP = require('./spender');
-const { state, productState, productStatsOf, hasStock, stockOf, stockUnit, isProductOpen, kindOf } = require('./state');
+const { state, productState, productStatsOf, hasStock, stockOf, stockUnit, isProductOpen, kindOf, planStockOf } = require('./state');
 
 const STATUS_LABEL = {
   open: '⏳ Menunggu Pembayaran / Proses',
@@ -448,9 +448,10 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
       .setTitle(`📦 Update Stock ${sp?.label || 'Robux'}`)
       .setDescription(extra.text || `Stock ${sp?.label || 'Robux'} telah diperbarui.`)
       .addFields(
-        { name: '📦 Stock Sekarang', value: `\`${num(stockOf(sp))} ${unit}\``, inline: true },
+        { name: sp?.type === 'boost' ? '📦 Total Stock' : '📦 Stock Sekarang', value: `\`${num(stockOf(sp))} ${unit}\``, inline: true },
         { name: '🏪 Status', value: sp && isProductOpen(sp) ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
       );
+    if (sp?.type === 'boost') e.addFields({ name: '🚀 Stock per Paket', value: boostStockLines(sp) || '-' });
   } else if (kind === 'returned') {
     const t = extra.ticket;
     const sp = (cfg.products || []).find((x) => x.id === t.productId) || robux;
@@ -460,7 +461,7 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
       .setTitle(t.status === 'refund' ? '💸 Pesanan Di-refund — Stock Dikembalikan' : '❌ Pesanan Dibatalkan — Stock Dikembalikan')
       .setDescription(`Ticket **${t.id}** (${sp?.label || t.productLabel}) ditutup dengan status **${STATUS_LABEL[t.status]}**.`)
       .addFields(
-        { name: '♻️ Stock Kembali', value: `\`+${num(qty)} ${unit}\``, inline: true },
+        { name: '♻️ Stock Kembali', value: `\`+${num(qty)} ${unit}\`${kindOf(t) === 'boost' && t.plan ? ` • ${t.plan.label}` : ''}`, inline: true },
         { name: '📦 Stock Sekarang', value: `\`${num(stockOf(sp))} ${unit}\``, inline: true },
         { name: '🏪 Status', value: sp && isProductOpen(sp) ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
       );
@@ -1816,6 +1817,15 @@ function boostAccountText(qty) {
   const n = boostAccounts(qty);
   return n ? `✅ Termasuk **${num(n)} akun booster**` : '▫️ Tidak termasuk *(jumlah boost ganjil)*';
 }
+/** Stock per paket: "🗓️ 1 Bulan: `5 boost` • 💎 3 Bulan: `0 boost` (Habis)". */
+function boostStockLines(product) {
+  return canvaPlans(product)
+    .map((x) => {
+      const n = planStockOf(product, x.id);
+      return `${x.emoji || '🗓️'} **${x.label}:** \`${num(n)} ${stockUnit(product)}\`${n ? '' : ' • `🔴 Habis`'}`;
+    })
+    .join('\n');
+}
 /** Tabel harga per boost tiap paket. */
 function boostTable(product) {
   const plans = canvaPlans(product);
@@ -1853,8 +1863,8 @@ function buildBoostInfo(guild, cfg, product) {
             .map((x) => `**${x.emoji || '🗓️'} ${x.label.toUpperCase()}**\n${(x.notes || []).map((n) => `▸ ${n}`).join('\n')}`)
             .join('\n\n')
         : null,
+      `### 🚀 Stock Boost\n${boostStockLines(product)}`,
       [
-        `🚀 **Stock Boost:** \`${num(stockOf(product))} ${stockUnit(product)}\``,
         `⏱️ **Estimasi Proses:** \`${product.estimate || '1x24 jam'}\``,
         `🏪 **Status:** ${openBadge(open)}`,
         '🔗 **Yang Dibutuhkan:** `Link server Discord`',
@@ -1900,6 +1910,7 @@ function buildBoostConfirm(guild, cfg, product, d) {
       { name: '🗓️ Paket', value: `\`${d.plan.label}\``, inline: true },
       { name: '🚀 Jumlah Boost', value: `\`${num(d.qty)} boost\``, inline: true },
       { name: '⏳ Masa Aktif', value: `\`${planDuration(d.plan)}\``, inline: true },
+      { name: '📦 Sisa Stock Paket', value: `\`${num(planStockOf(product, d.plan.id))} boost\``, inline: true },
       { name: '🏠 Server', value: serverLine(d.server) },
       { name: '🔗 Link Server', value: d.invite },
       { name: '🎁 Akun Booster', value: boostAccountText(d.qty) },
@@ -2382,6 +2393,7 @@ module.exports = {
   boostAccounts,
   boostPrice,
   boostTable,
+  boostStockLines,
   boostActiveCount,
   buildBoostInfo,
   buildBoostConfirm,
