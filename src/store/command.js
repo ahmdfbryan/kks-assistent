@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, EmbedBuilder } = require('discord.js');
-const { loadConfig, isId, rupiah, num, color } = require('./config');
+const { loadConfig, isId, rupiah, num, color, channelOf, GROUPS } = require('./config');
 const { state, save, productState, isProductOpen, hasStock, stockOf, setStock, stockUnit } = require('./state');
 const V = require('./views');
 const SP = require('./spender');
@@ -53,7 +53,7 @@ async function placeTracked(interaction, key, channel, build) {
 async function resolveChannel(interaction, configKey) {
   const picked = interaction.options.getChannel('channel');
   if (picked) return picked;
-  const id = loadConfig()?.channels?.[configKey];
+  const id = channelOf(loadConfig(), configKey);
   return isId(id) ? interaction.guild.channels.fetch(id).catch(() => null) : interaction.channel;
 }
 
@@ -66,7 +66,13 @@ const storeCommand = {
     .addSubcommand((s) =>
       s
         .setName('panel')
-        .setDescription('Kirim / pindahkan panel store (otomatis ter-update)')
+        .setDescription('Kirim / pindahkan panel store / produk digital (otomatis ter-update)')
+        .addStringOption((o) =>
+          o
+            .setName('jenis')
+            .setDescription('Store utama (default) atau Produk Digital')
+            .addChoices({ name: '🛒 Store Utama', value: 'main' }, { name: '🎨 Produk Digital', value: 'digital' }),
+        )
         .addChannelOption((o) => o.setName('channel').setDescription('Default: channel panel di store.json').addChannelTypes(...TEXT)),
     )
     .addSubcommand((s) =>
@@ -78,7 +84,13 @@ const storeCommand = {
     .addSubcommand((s) =>
       s
         .setName('catalog')
-        .setDescription('Kirim / pindahkan katalog produk (kartu tiap produk, ter-update otomatis)')
+        .setDescription('Kirim / pindahkan katalog store / produk digital (ter-update otomatis)')
+        .addStringOption((o) =>
+          o
+            .setName('jenis')
+            .setDescription('Store utama (default) atau Produk Digital')
+            .addChoices({ name: '🛒 Store Utama', value: 'main' }, { name: '🎨 Produk Digital', value: 'digital' }),
+        )
         .addChannelOption((o) => o.setName('channel').setDescription('Default: channel catalog di store.json').addChannelTypes(...TEXT)),
     )
     .addSubcommand((s) =>
@@ -132,18 +144,27 @@ const storeCommand = {
     const sub = interaction.options.getSubcommand();
     const product = (cfg.products || []).find((p) => p.type === 'robux');
 
-    if (sub === 'panel' || sub === 'leaderboard') {
+    if (sub === 'panel') {
+      const group = interaction.options.getString('jenis') || 'main';
+      const key = GROUPS[group].panelKey;
+      const channel = await resolveChannel(interaction, key);
+      if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
+      await placeTracked(interaction, key, channel, (g, c) => V.buildPanel(g, c, group));
+      return interaction.editReply(`✅ Panel ${group === 'digital' ? '**Produk Digital**' : '**Store Utama**'} dikirim ke ${channel} dan akan ter-update otomatis.`);
+    }
+    if (sub === 'leaderboard') {
       const channel = await resolveChannel(interaction, sub);
       if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
-      await placeTracked(interaction, sub, channel, sub === 'panel' ? V.buildPanel : V.buildLeaderboard);
-      return interaction.editReply(`✅ ${sub === 'panel' ? 'Panel store' : 'Leaderboard'} dikirim ke ${channel} dan akan ter-update otomatis.`);
+      await placeTracked(interaction, sub, channel, V.buildLeaderboard);
+      return interaction.editReply(`✅ Leaderboard dikirim ke ${channel} dan akan ter-update otomatis.`);
     }
 
     if (sub === 'catalog') {
-      const channel = await resolveChannel(interaction, 'catalog');
+      const group = interaction.options.getString('jenis') || 'main';
+      const channel = await resolveChannel(interaction, GROUPS[group].catalogKey);
       if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
-      const cards = await postCatalog(channel, cfg);
-      return interaction.editReply(`✅ Katalog (${Object.keys(cards).length} produk) dikirim ke ${channel} dan akan ter-update otomatis.`);
+      const cards = await postCatalog(channel, cfg, group);
+      return interaction.editReply(`✅ Katalog ${group === 'digital' ? '**Produk Digital**' : '**Store Utama**'} (${Object.keys(cards).length} produk) dikirim ke ${channel} dan akan ter-update otomatis.`);
     }
 
     if (sub === 'how-to-order') {
@@ -266,8 +287,8 @@ const storeCommand = {
           { name: '💰 Omzet', value: rupiah(s.revenue), inline: true },
           { name: '🤝 Rekber Sukses', value: `${num(s.rekber)} (${rupiah(s.rekberVolume)})`, inline: true },
           {
-            name: '📍 Panel / Leaderboard',
-            value: `${state.panel ? `<#${state.panel.channelId}>` : '❌ belum dikirim'} / ${state.leaderboard ? `<#${state.leaderboard.channelId}>` : '❌ belum dikirim'}`,
+            name: '📍 Panel / Panel Digital / Leaderboard',
+            value: `${state.panel ? `<#${state.panel.channelId}>` : '❌ belum dikirim'} / ${state.digitalPanel ? `<#${state.digitalPanel.channelId}>` : '❌ belum dikirim'} / ${state.leaderboard ? `<#${state.leaderboard.channelId}>` : '❌ belum dikirim'}`,
           },
         );
       if (active.length) {
