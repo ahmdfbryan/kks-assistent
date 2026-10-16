@@ -22,6 +22,7 @@ const DEFAULT = {
   rekberSeq: 0,
   gamepassSeq: 0,
   canvaSeq: 0,
+  boostSeq: 0,
   tickets: {},
   stats: { transactions: 0, robux: 0, revenue: 0, ratingSum: 0, ratingCount: 0, testimonies: 0, rekber: 0, rekberVolume: 0 },
   spenders: {}, // { userId: { robux, revenue, orders } }
@@ -71,7 +72,7 @@ function productState(productId) {
 }
 
 /** Produk yang memakai stock: Robux Visend (Robux) & Canva Pro (slot). */
-const hasStock = (product) => product?.type === 'robux' || product?.type === 'canva';
+const hasStock = (product) => ['robux', 'canva', 'boost'].includes(product?.type);
 const stockUnit = (product) => (product?.type === 'robux' ? 'Robux' : product?.stockUnit || 'slot');
 function stockOf(product) {
   if (product?.type === 'robux') return state.stock;
@@ -109,6 +110,7 @@ function activeTicketOf({ userId, robloxId, gamepassId, email, kind = 'robux' })
       if (t.status !== 'open' || kindOf(t) !== kind) return false;
       if (kind === 'rekber') return userId && (t.userId === userId || t.partnerId === userId);
       if (kind === 'canva') return (userId && t.userId === userId) || (email && t.email === email);
+      if (kind === 'boost') return userId && t.userId === userId;
       if (kind === 'gamepass' && gamepassId && t.gamepass?.id === gamepassId) return true;
       return (userId && t.userId === userId) || (robloxId && t.roblox?.id === robloxId);
     }) || null
