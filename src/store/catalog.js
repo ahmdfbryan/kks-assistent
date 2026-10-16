@@ -122,7 +122,7 @@ function buildCatalogCard(guild, cfg, p) {
     table = priceTable(list.map((a) => [`${num(a)} Robux`, rupiah(V.gpQuote(cfg, p, V.gpBeforeTax(p, a)).price)]));
     tableTitle = '📊 Daftar Harga (After Tax)';
   } else if (p.type === 'boost') {
-    info = [`💱 **Harga:** \`Mulai ${rupiah(V.minPlanPrice(p))} / boost\``, `🚀 **Stock:** \`${num(stockOf(p))} ${stockUnit(p)}\``, `⏱️ **Estimasi:** \`${p.estimate || '1x24 jam'}\``];
+    info = [`💱 **Harga:** \`Mulai ${rupiah(V.minPlanPrice(p))} / boost\``, `⏱️ **Estimasi:** \`${p.estimate || '1x24 jam'}\``, `🚀 **Stock per Paket:**`, V.boostStockLines(p)];
     table = V.boostTable(p);
     tableTitle = '🗓️ Pilihan Paket (per boost)';
   } else if (p.type === 'canva') {
