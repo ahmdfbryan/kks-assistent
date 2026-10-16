@@ -211,7 +211,8 @@ async function buildDashboard(guild) {
   const load = os.loadavg()[0];
   const cpuPct = Math.min(100, (load / Math.max(1, os.cpus().length)) * 100);
   const pkg = readJson('package.json', {});
-  const humans = guild.members.cache.filter((m) => !m.user.bot).size || guild.memberCount;
+  // Cache member belum lengkap (misal baru restart) → pakai total member dari Discord.
+  const humans = guild.members.cache.size >= guild.memberCount * 0.95 ? guild.members.cache.filter((m) => !m.user.bot).size : guild.memberCount;
 
   const box = new ContainerBuilder().setAccentColor(hex(cfg.colors?.[all.state], colors[all.state]));
   const header = `# ${cfg.title}\n-# ${name(cfg.subtitle)}`;
