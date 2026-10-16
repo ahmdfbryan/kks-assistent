@@ -1457,7 +1457,7 @@ async function onBoostStart(interaction, product) {
         ),
       new LabelBuilder()
         .setLabel('Jumlah Boost')
-        .setDescription(`Minimal ${num(product.minBoost || 1)} boost, maksimal sesuai stock paket (maks. ${num(max)}). Genap = dapat akun booster.`.slice(0, 100))
+        .setDescription(`Minimal ${num(product.minBoost || 1)} boost, maksimal sesuai stock paket (maks. ${num(max)}).`.slice(0, 100))
         .setTextInputComponent(textInput('qty', { placeholder: 'contoh: 2, 4, 6, 8, 14', min: 1, max: 3 })),
       new LabelBuilder()
         .setLabel('Link Server Discord')
