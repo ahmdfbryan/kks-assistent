@@ -310,7 +310,7 @@ function buildDmClosed(guild, cfg, t) {
   const desc = {
     completed: boost
       ? `**${num(t.qty)} Server Boost (${t.plan.label})** untuk server **${t.server?.name || '-'}** sudah **AKTIF**! 🚀\n` +
-        `Bergaransi hingga **${ts(t.expiresAt || Date.now(), 'D')}**.\n\n` +
+        `Masa aktif sekitar **${t.plan.duration || `${num(t.plan.days)} hari`}** dengan **garansi penuh** selama masa aktif boost. 🛡️\n\n` +
         `Terima kasih sudah berbelanja di **${storeName(cfg, guild)}**! 💜 Jangan lupa beri testimoni di ticket kamu ya ⭐`
       : canva
       ? `**${t.productLabel} (${t.plan.label})** kamu sudah **AKTIF**! 🎉\n` +
@@ -1808,6 +1808,8 @@ function buildOrderLogV2(guild, cfg, t) {
 
 // ═════════════════════════════════════ SERVER BOOST ═════════════════════════════════════
 /** 1 akun Nitro = 2 boost → akun booster diberikan untuk jumlah boost genap. */
+/** Teks masa aktif paket boost (store.json → plans[].duration, contoh "25–31 hari"). */
+const planDuration = (plan) => plan?.duration || `${num(plan?.days || 30)} hari`;
 const boostAccounts = (qty) => (Number(qty) % 2 === 0 ? Number(qty) / 2 : 0);
 const boostPrice = (plan, qty) => Number(plan.price) * Number(qty);
 function boostAccountText(qty) {
@@ -1846,6 +1848,11 @@ function buildBoostInfo(guild, cfg, product) {
     header: `## ${product.emoji || '🚀'} ${product.label}\n${fill(product.description || '', name)}`,
     blocks: [
       table ? `### 🗓️ Pilihan Paket\n${table}\n-# 💡 ${product.priceNote || 'Harga per 1 boost'} • akun booster termasuk untuk jumlah **genap**` : null,
+      canvaPlans(product).some((x) => x.notes?.length)
+        ? canvaPlans(product)
+            .map((x) => `**${x.emoji || '🗓️'} ${x.label.toUpperCase()}**\n${(x.notes || []).map((n) => `▸ ${n}`).join('\n')}`)
+            .join('\n\n')
+        : null,
       [
         `🚀 **Stock Boost:** \`${num(stockOf(product))} ${stockUnit(product)}\``,
         `⏱️ **Estimasi Proses:** \`${product.estimate || '1x24 jam'}\``,
@@ -1892,7 +1899,7 @@ function buildBoostConfirm(guild, cfg, product, d) {
     .addFields(
       { name: '🗓️ Paket', value: `\`${d.plan.label}\``, inline: true },
       { name: '🚀 Jumlah Boost', value: `\`${num(d.qty)} boost\``, inline: true },
-      { name: '⏳ Masa Aktif', value: `\`${num(d.plan.days)} hari\``, inline: true },
+      { name: '⏳ Masa Aktif', value: `\`${planDuration(d.plan)}\``, inline: true },
       { name: '🏠 Server', value: serverLine(d.server) },
       { name: '🔗 Link Server', value: d.invite },
       { name: '🎁 Akun Booster', value: boostAccountText(d.qty) },
@@ -1913,7 +1920,7 @@ function boostSteps(t) {
     [isPaid(t), `Pembayaran **${rupiah(t.price)}** terverifikasi`],
     [st.sent, `Admin mem-boost server **${t.server?.name || '-'}** (${num(t.qty)} boost)`],
     [st.received, 'Pembeli konfirmasi **boost sudah masuk**'],
-    [done, `**Boost aktif & bergaransi** selama ${num(t.plan.days)} hari ✨`],
+    [done, `**Boost aktif & bergaransi** selama ${planDuration(t.plan)} ✨`],
   ];
   const cur = rows.findIndex((r) => !r[0]);
   return rows.map((r, i) => `${r[0] ? '✅' : t.status === 'open' && i === cur ? '⏳' : '▫️'} \`${i + 1}\` ${r[1]}`).join('\n');
@@ -1937,7 +1944,7 @@ function buildBoostTicket(guild, cfg, t) {
     .setDescription(`Halo <@${t.userId}>, terima kasih sudah berbelanja di **${name}**! 💜`)
     .addFields(
       { name: '👤 Pembeli', value: `<@${t.userId}>`, inline: true },
-      { name: '🗓️ Paket', value: `\`${t.plan.label}\` • ${num(t.plan.days)} hari`, inline: true },
+      { name: '🗓️ Paket', value: `\`${t.plan.label}\` • ${planDuration(t.plan)}`, inline: true },
       { name: '🚀 Jumlah Boost', value: `\`${num(t.qty)} boost\``, inline: true },
       { name: '🎁 Akun Booster', value: boostAccountText(t.qty), inline: true },
       { name: '⏱️ Estimasi', value: `\`${t.estimate || '1x24 jam'}\``, inline: true },
@@ -1952,7 +1959,7 @@ function buildBoostTicket(guild, cfg, t) {
     .setFooter(serverFooter(guild, `${name} • Ticket ${t.id}`))
     .setTimestamp(t.closedAt || t.createdAt);
   if (t.closedAt) info.addFields({ name: '🔒 Ditutup', value: `${ts(t.closedAt, 'f')} oleh <@${t.closedBy}>`, inline: true });
-  if (t.status === 'completed' && t.expiresAt) info.addFields({ name: '🛡️ Garansi Hingga', value: ts(t.expiresAt, 'D'), inline: true });
+  if (t.status === 'completed') info.addFields({ name: '🛡️ Garansi', value: `Selama masa aktif boost (${planDuration(t.plan)})`, inline: true });
 
   const embeds = [info];
   if (t.status === 'open') {
