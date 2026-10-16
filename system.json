@@ -1,0 +1,16 @@
+{
+  "_petunjuk": [
+    "Dashboard System Operational = 1 pesan status bot yang ter-update otomatis. Kirim dengan /system panel.",
+    "channelId = channel system. updateSeconds = jeda update otomatis (minimal 30 detik).",
+    "Placeholder: {server} = nama server. colors: ok / warn / down = warna kotak sesuai status keseluruhan."
+  ],
+  "channelId": "1560498592429379655",
+  "updateSeconds": 60,
+  "title": "🛰️ System Operational",
+  "subtitle": "{server} • Bot Status",
+  "colors": {
+    "ok": "#2ECC71",
+    "warn": "#F1C40F",
+    "down": "#E74C3C"
+  }
+}
