@@ -71,7 +71,7 @@ const storeCommand = {
           o
             .setName('jenis')
             .setDescription('Store utama (default) atau Produk Digital')
-            .addChoices({ name: '🛒 Store Utama', value: 'main' }, { name: '🎨 Produk Digital', value: 'digital' }),
+            .addChoices({ name: 'Store Utama', value: 'main' }, { name: 'Produk Digital', value: 'digital' }),
         )
         .addChannelOption((o) => o.setName('channel').setDescription('Default: channel panel di store.json').addChannelTypes(...TEXT)),
     )
@@ -89,7 +89,7 @@ const storeCommand = {
           o
             .setName('jenis')
             .setDescription('Store utama (default) atau Produk Digital')
-            .addChoices({ name: '🛒 Store Utama', value: 'main' }, { name: '🎨 Produk Digital', value: 'digital' }),
+            .addChoices({ name: 'Store Utama', value: 'main' }, { name: 'Produk Digital', value: 'digital' }),
         )
         .addChannelOption((o) => o.setName('channel').setDescription('Default: channel catalog di store.json').addChannelTypes(...TEXT)),
     )
