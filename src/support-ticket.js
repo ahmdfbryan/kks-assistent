@@ -137,6 +137,28 @@ async function refreshPanel() {
   await ch.messages.edit(loc.messageId, buildPanel(ch.guild, loadConfig())).catch(() => {});
 }
 
+// ───────────────────────── Jenis hadiah (claim giveaway) ─────────────────────────
+const DEFAULT_REWARDS = [
+  { id: 'robux', label: 'Robux', emoji: '💎', description: 'Robux Roblox — dikirim ke akun Roblox', keywords: ['robux', 'rbx', 'gamepass', 'roblox'] },
+  { id: 'ewallet', label: 'E-Wallet', emoji: '📱', description: 'DANA, OVO, GoPay, ShopeePay, dll.', keywords: ['dana', 'ovo', 'gopay', 'shopee', 'e-wallet', 'ewallet', 'linkaja', 'saldo'] },
+  { id: 'cash', label: 'Uang Tunai (Transfer Bank)', emoji: '💵', description: 'Transfer ke rekening bank', keywords: ['rp', 'uang', 'cash', 'tunai', 'transfer', 'bank', 'rupiah'] },
+  { id: 'pulsa', label: 'Pulsa / Kuota', emoji: '📶', description: 'Pulsa atau paket data ke nomor HP', keywords: ['pulsa', 'kuota', 'paket data'] },
+  { id: 'digital', label: 'Produk Digital', emoji: '🎨', description: 'Canva Pro, Nitro, akun premium, dll.', keywords: ['canva', 'nitro', 'premium', 'spotify', 'netflix', 'akun'] },
+  { id: 'voucher', label: 'Voucher / Game Item', emoji: '🎟️', description: 'Voucher game, item, skin, top up game lain', keywords: ['voucher', 'item', 'skin', 'diamond', 'uc', 'top up'] },
+  { id: 'other', label: 'Lainnya', emoji: '🎁', description: 'Hadiah lain — jelaskan di data penerimaan', keywords: [] },
+];
+const rewardTypes = () => {
+  const list = loadConfig().claimRewardTypes;
+  return (Array.isArray(list) && list.length ? list : DEFAULT_REWARDS).slice(0, 25).map((r) => ({ emoji: '🎁', description: '', keywords: [], ...r }));
+};
+const rewardOf = (id) => rewardTypes().find((r) => r.id === id) || { id, label: id || '-', emoji: '🎁' };
+function guessRewardType(prize) {
+  const p = String(prize || '').toLowerCase();
+  // Cek yang paling spesifik dulu (e-wallet sebelum uang tunai karena "Saldo DANA Rp 50.000" juga mengandung "rp").
+  for (const r of rewardTypes()) if ((r.keywords || []).some((k) => p.includes(String(k).toLowerCase()))) return r.id;
+  return null;
+}
+
 // ───────────────────────── Form ─────────────────────────
 function buildForm(type, userId) {
   const modal = new ModalBuilder().setCustomId(`st:form:${type.id}`).setTitle(`${type.label}`.slice(0, 45));
@@ -150,20 +172,43 @@ function buildForm(type, userId) {
               .setCustomId('gaid')
               .setPlaceholder('Pilih giveaway...')
               .setRequired(true)
-              .addOptions(wins.map((g) => ({ label: `${g.id} • ${g.prize}`.slice(0, 100), value: g.id, emoji: '🎁' }))),
+              .addOptions(wins.map((g, i) => ({ label: `${g.id} • ${g.prize}`.slice(0, 100), value: g.id, emoji: '🎁', default: wins.length === 1 && i === 0 }))),
           )
       : new LabelBuilder()
           .setLabel('ID Giveaway / Nama Hadiah')
-          .setDescription('Contoh: GA-0001 atau 100 Robux')
+          .setDescription('Contoh: GA-0001 atau Saldo DANA Rp 50.000')
           .setTextInputComponent(new TextInputBuilder().setCustomId('gatext').setStyle(TextInputStyle.Short).setMaxLength(100).setRequired(true));
+    // Tebak jenis hadiah dari nama hadiah giveaway terbaru (pemenang tetap bisa mengganti).
+    const guess = wins[0] ? guessRewardType(wins[0].prize) : null;
     modal.addLabelComponents(
       first,
       new LabelBuilder()
-        .setLabel('Data Penerimaan Hadiah')
-        .setDescription('Contoh: username Roblox, email, atau data lain yang dibutuhkan.')
-        .setTextInputComponent(
-          new TextInputBuilder().setCustomId('receiver').setStyle(TextInputStyle.Short).setPlaceholder('contoh: Builderman').setMaxLength(100).setRequired(true),
+        .setLabel('Jenis Hadiah')
+        .setDescription('Pilih sesuai hadiah yang kamu menangkan.')
+        .setStringSelectMenuComponent(
+          new StringSelectMenuBuilder()
+            .setCustomId('rtype')
+            .setPlaceholder('Pilih jenis hadiah...')
+            .setRequired(true)
+            .addOptions(
+              rewardTypes().map((r) => ({ label: r.label, description: r.description.slice(0, 100), value: r.id, emoji: r.emoji, default: r.id === guess })),
+            ),
         ),
+      new LabelBuilder()
+        .setLabel('Data Penerimaan Hadiah')
+        .setDescription('Robux: username Roblox • Bank: bank + no. rekening • E-Wallet: jenis + no. HP')
+        .setTextInputComponent(
+          new TextInputBuilder()
+            .setCustomId('receiver')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('contoh: DANA 0812xxxxxxx  /  BCA 1234567890  /  Roblox: Builderman')
+            .setMaxLength(300)
+            .setRequired(true),
+        ),
+      new LabelBuilder()
+        .setLabel('Nama Penerima (a.n.)')
+        .setDescription('Wajib untuk uang tunai / e-wallet, sesuai nama di rekening / akun.')
+        .setTextInputComponent(new TextInputBuilder().setCustomId('holder').setStyle(TextInputStyle.Short).setPlaceholder('contoh: Ahmad Saputra').setMaxLength(100).setRequired(false)),
       new LabelBuilder()
         .setLabel('Catatan (opsional)')
         .setTextInputComponent(new TextInputBuilder().setCustomId('note').setStyle(TextInputStyle.Paragraph).setMaxLength(500).setRequired(false)),
@@ -193,7 +238,7 @@ function buildForm(type, userId) {
 }
 
 // ───────────────────────── Ticket ─────────────────────────
-function buildTicketMessage(guild, cfg, t) {
+function buildTicketMessageLegacy(guild, cfg, t) {
   const type = typeOf(cfg, t.type) || { label: t.type, emoji: '🎫' };
   const closed = t.status !== 'open';
   const e = new EmbedBuilder()
@@ -232,6 +277,116 @@ function buildTicketMessage(guild, cfg, t) {
         ),
       ];
   return { embeds: [e], components, allowedMentions: { parse: [] } };
+}
+
+
+// ───────────────────────── Pesan ticket (Components V2) ─────────────────────────
+const v2text = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000));
+const v2line = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+const V2 = MessageFlags.IsComponentsV2;
+const isV2Msg = (m) => Boolean(m?.flags?.has?.(V2));
+
+/** Kotak V2 sederhana untuk pesan-pesan di dalam ticket. */
+function card({ color, header, thumb, blocks = [], footer: foot, rows = [], top }) {
+  const box = new ContainerBuilder().setAccentColor(color);
+  if (thumb) box.addSectionComponents(new SectionBuilder().addTextDisplayComponents(v2text(header)).setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb)));
+  else box.addTextDisplayComponents(v2text(header));
+  for (const b of blocks.filter(Boolean)) {
+    box.addSeparatorComponents(v2line());
+    box.addTextDisplayComponents(v2text(b));
+  }
+  if (foot) {
+    box.addSeparatorComponents(v2line());
+    box.addTextDisplayComponents(v2text(`-# ${foot}`));
+  }
+  for (const r of rows.filter(Boolean)) box.addActionRowComponents(r);
+  return { components: top ? [v2text(top), box] : [box], flags: V2, allowedMentions: { parse: [] } };
+}
+
+function statusText(t) {
+  if (t.status !== 'open') return `\`🔒 Ditutup\` ${t.closedAt ? ts(t.closedAt, 'R') : ''}`;
+  if (t.delivered) return `\`🎁 Hadiah Terkirim\` ${ts(t.deliveredAt, 'R')}`;
+  if (t.claimedBy) return `\`🙋 Ditangani\` oleh <@${t.claimedBy}>`;
+  return '`⏳ Menunggu Staff`';
+}
+
+function buildTicketMessage(guild, cfg, t) {
+  const type = typeOf(cfg, t.type) || { label: t.type, emoji: '🎫' };
+  const closed = t.status !== 'open';
+  const claim = t.type === 'claim-giveaway';
+  const accent = closed ? 0x95a5a6 : t.delivered ? 0x2ecc71 : t.claimedBy ? 0x9b59b6 : brand(cfg);
+
+  const info = [
+    `**👤 Dibuka Oleh:** <@${t.userId}>`,
+    `**📂 Jenis:** \`${type.label}\``,
+    `**🕒 Dibuat:** ${ts(t.createdAt, 'f')} (${ts(t.createdAt, 'R')})`,
+    `**📌 Status:** ${statusText(t)}`,
+  ].join('\n');
+
+  // Jawaban form: yang pendek digabung jadi baris, yang panjang / code block jadi blok sendiri.
+  const short = [];
+  const long = [];
+  for (const [k, v] of t.answers || []) {
+    const val = String(v || '-');
+    if (val.includes('\n') || val.length > 120) long.push(`### ${k}\n${val}`);
+    else short.push(`**${k}:** ${val}`);
+  }
+  const detailTitle = claim ? '### 🎁 Detail Klaim Hadiah' : '### 📋 Detail Ticket';
+  const verify =
+    t.verified == null
+      ? null
+      : t.verified
+        ? '✅ **Terverifikasi** — member ini tercatat sebagai **pemenang** giveaway tersebut.'
+        : '⚠️ **Belum terverifikasi** — tidak ditemukan di data pemenang giveaway. Staff perlu **cek manual**.';
+  const checklist = claim && !closed
+    ? [
+        '### 🛡️ Checklist Staff',
+        `${t.verified ? '✅' : '▫️'} Cek data pemenang giveaway`,
+        `${t.claimedBy ? '✅' : '▫️'} Tangani ticket & cek data penerimaan`,
+        `${t.delivered ? '✅' : '▫️'} Kirim hadiah lalu klik **🎁 Hadiah Terkirim**`,
+        '▫️ Lampirkan bukti pengiriman & tutup ticket',
+      ].join('\n')
+    : null;
+
+  const rows = [];
+  if (!closed) {
+    const buttons = [
+      new ButtonBuilder()
+        .setCustomId(`st:claim:${t.id}`)
+        .setLabel(t.claimedBy ? 'Sudah Ditangani' : 'Tangani Ticket (Staff)')
+        .setEmoji('🙋')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(Boolean(t.claimedBy)),
+    ];
+    if (claim) {
+      buttons.push(
+        new ButtonBuilder()
+          .setCustomId(`st:deliver:${t.id}`)
+          .setLabel(t.delivered ? 'Hadiah Terkirim' : 'Hadiah Terkirim (Staff)')
+          .setEmoji('🎁')
+          .setStyle(ButtonStyle.Success)
+          .setDisabled(Boolean(t.delivered)),
+      );
+    }
+    buttons.push(new ButtonBuilder().setCustomId(`st:close:${t.id}`).setLabel('Tutup Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger));
+    rows.push(new ActionRowBuilder().addComponents(buttons));
+  }
+
+  return card({
+    color: accent,
+    thumb: t.avatar || guild.iconURL({ extension: 'png', size: 256 }),
+    header: `-# ${guild.name} • NCS Ticket Center\n## ${type.emoji || '🎫'} ${type.label} • ${t.id}\n${type.welcome || 'Tim kami akan segera membantumu.'}`,
+    blocks: [info, short.length || long.length ? [detailTitle, ...short].join('\n') : null, ...long, verify, checklist],
+    footer: `NCS Ticket Center • ${t.id} • ${ts(t.createdAt, 'f')}`,
+    rows,
+  });
+}
+/** Ticket lama (embed) tetap memakai tampilan lama; ticket baru memakai V2. */
+const ticketPayloadFor = (msg, guild, cfg, t) => (msg && !isV2Msg(msg) ? buildTicketMessageLegacy(guild, cfg, t) : buildTicketMessage(guild, cfg, t));
+async function editTicketMsg(channel, guild, cfg, t) {
+  if (!channel || !t.messageId) return;
+  const msg = await channel.messages.fetch(t.messageId).catch(() => null);
+  if (msg) await msg.edit(ticketPayloadFor(msg, guild, cfg, t)).catch((e) => console.warn(`[ticket] edit ${t.id}:`, e.message));
 }
 
 async function createTicket(interaction, type, answers, extra = {}) {
@@ -281,8 +436,8 @@ async function createTicket(interaction, type, answers, extra = {}) {
   });
   t.channelId = channel.id;
   const msg = await channel.send({
-    content: `<@${interaction.user.id}>${staffRole(cfg) ? ` <@&${staffRole(cfg)}>` : ''}`,
     ...buildTicketMessage(guild, cfg, t),
+    components: [v2text(`<@${interaction.user.id}>${staffRole(cfg) ? ` <@&${staffRole(cfg)}>` : ''}`), ...buildTicketMessage(guild, cfg, t).components],
     allowedMentions: { users: [interaction.user.id], roles: staffRole(cfg) ? [staffRole(cfg)] : [] },
   });
   await msg.pin().catch(() => {});
@@ -399,6 +554,20 @@ async function logTicket(guild, cfg, t, kind, files = []) {
   await ch.send({ embeds: [e], files, allowedMentions: { parse: [] } }).catch(() => {});
 }
 
+/** Ambil semua teks dari pesan Components V2 (untuk transcript). */
+function v2Texts(components = []) {
+  const out = [];
+  const walk = (list) => {
+    for (const c of list || []) {
+      const j = c.toJSON ? c.toJSON() : c;
+      if (j.type === 10 && j.content) out.push(j.content.replace(/\n+/g, ' / '));
+      if (j.components) walk(j.components);
+    }
+  };
+  walk(components);
+  return out;
+}
+
 /** Transcript teks seluruh percakapan ticket. */
 async function buildTranscript(channel, t) {
   const lines = [];
@@ -414,7 +583,7 @@ async function buildTranscript(channel, t) {
     .reverse()
     .map((m) => {
       const time = new Date(m.createdTimestamp).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-      const body = [m.content, ...m.embeds.map((e) => `[embed] ${e.title || ''} ${e.description || ''}`.trim()), ...[...m.attachments.values()].map((a) => `[lampiran] ${a.url}`)]
+      const body = [m.content, ...m.embeds.map((e) => `[embed] ${e.title || ''} ${e.description || ''}`.trim()), ...v2Texts(m.components).map((x) => `[kotak] ${x}`), ...[...m.attachments.values()].map((a) => `[lampiran] ${a.url}`)]
         .filter(Boolean)
         .join(' | ');
       return `[${time}] ${m.author?.tag || 'unknown'}: ${body}`;
@@ -435,19 +604,20 @@ async function closeTicket(interaction, t, reason) {
   const channel = await guild.channels.fetch(t.channelId).catch(() => null);
   const secs = Number(cfg.deleteAfterSeconds) || 10;
   if (channel) {
-    if (t.messageId) await channel.messages.edit(t.messageId, buildTicketMessage(guild, cfg, t)).catch(() => {});
+    await editTicketMsg(channel, guild, cfg, t);
     await channel
-      .send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(0xe74c3c)
-            .setTitle('🔒 Ticket Ditutup')
-            .setDescription(`Ticket **${t.id}** ditutup oleh <@${t.closedBy}>.${reason ? `\n📝 **Alasan:** ${reason}` : ''}\n\nChannel ini akan dihapus dalam **${secs} detik**.`)
-            .setFooter(footer(guild, 'NCS Ticket Center'))
-            .setTimestamp(new Date()),
-        ],
-        allowedMentions: { parse: [] },
-      })
+      .send(
+        card({
+          color: 0xe74c3c,
+          header: `## 🔒 Ticket Ditutup\nTicket **${t.id}** ditutup oleh <@${t.closedBy}>.`,
+          blocks: [
+            reason ? `**📝 Alasan:** ${reason}` : null,
+            `**⏱️ Durasi:** \`${duration(t.closedAt - t.createdAt)}\`${t.claimedBy ? ` • **🛡️ Ditangani:** <@${t.claimedBy}>` : ''}\n**📄 Transcript:** dikirim ke DM pembuka ticket`,
+            `⏳ Channel ini akan dihapus dalam **${secs} detik**.`,
+          ],
+          footer: `NCS Ticket Center • ${t.id} • ${ts(Date.now(), 'f')}`,
+        }),
+      )
       .catch(() => {});
   }
   const transcript = channel ? await buildTranscript(channel, t).catch(() => null) : null;
@@ -535,9 +705,19 @@ async function handleInteraction(interaction) {
         const won = g && (g.allWinners || g.winners || []).includes(interaction.user.id);
         answers.push(['🎁 Giveaway', g ? `\`${g.id}\` • **${g.prize}**` : `\`${typed || picked}\``]);
         if (g) answers.push(['📅 Berakhir', g.endedAt ? ts(g.endedAt, 'f') : '-']);
-        answers.push(['📦 Data Penerimaan', `\`${interaction.fields.getTextInputValue('receiver').trim()}\``]);
+        let rtype = null;
+        try {
+          rtype = interaction.fields.getStringSelectValues('rtype')?.[0] || null;
+        } catch {}
+        const reward = rewardOf(rtype || guessRewardType(g?.prize) || 'other');
+        answers.push(['🎀 Jenis Hadiah', `${reward.emoji} \`${reward.label}\``]);
+        answers.push(['📦 Data Penerimaan', '```\n' + interaction.fields.getTextInputValue('receiver').trim().replace(/`/g, 'ˋ') + '\n```']);
+        const holder = optional(interaction.fields, 'holder');
+        if (holder) answers.push(['👤 Nama Penerima', `\`${holder}\``]);
+        else if (['cash', 'ewallet'].includes(reward.id)) answers.push(['👤 Nama Penerima', '`⚠️ Belum diisi — staff akan menanyakan`']);
         const note = optional(interaction.fields, 'note');
         if (note) answers.push(['📝 Catatan', note]);
+        extra.rewardType = reward.id;
         extra.verified = Boolean(won);
         extra.giveawayId = g?.id || null;
       } else {
@@ -576,18 +756,54 @@ async function handleInteraction(interaction) {
       t.claimedAt = Date.now();
       historyLog(interaction.guild, t, `🙋 Ditangani oleh <@${interaction.user.id}>`);
       save();
-      await interaction.update(buildTicketMessage(interaction.guild, cfg, t));
-      await interaction.channel
-        .send({
-          content: `<@${t.userId}>`,
-          embeds: [
-            new EmbedBuilder()
-              .setColor(brand(cfg))
-              .setDescription(`🙋 <@${interaction.user.id}> akan **menangani ticket kamu**. Silakan jelaskan kendalamu di sini ya! 💙`),
-          ],
-          allowedMentions: { users: [t.userId] },
-        })
-        .catch(() => {});
+      await interaction.update(ticketPayloadFor(interaction.message, interaction.guild, cfg, t));
+      const claimTicket = t.type === 'claim-giveaway';
+      const notice = card({
+        color: 0x9b59b6,
+        top: `<@${t.userId}>`,
+        thumb: interaction.user.displayAvatarURL({ extension: 'png', size: 128 }),
+        header: `## 🙋 Ticket Sedang Ditangani\n<@${interaction.user.id}> akan **${claimTicket ? 'memproses klaim hadiahmu' : 'menangani ticket kamu'}**. 💙`,
+        blocks: [
+          claimTicket
+            ? 'Mohon tunggu sebentar — staff sedang **memverifikasi** data giveaway & data penerimaanmu. Jika ada data yang kurang, staff akan menanyakannya di sini.'
+            : 'Silakan jelaskan kendalamu di sini dan lampirkan **screenshot** bila ada.',
+        ],
+        footer: `NCS Ticket Center • ${t.id}`,
+      });
+      notice.allowedMentions = { users: [t.userId] };
+      await interaction.channel.send(notice).catch(() => {});
+      return true;
+    }
+
+    if (action === 'deliver') {
+      if (!isStaff(interaction.member, cfg)) return void (await interaction.reply({ content: '⛔ Hanya **staff** yang bisa menandai hadiah terkirim.', flags: EPH }));
+      if (t.delivered) return void (await interaction.reply({ content: '🎁 Hadiah ticket ini sudah ditandai terkirim.', flags: EPH }));
+      t.delivered = true;
+      t.deliveredAt = Date.now();
+      t.deliveredBy = interaction.user.id;
+      if (!t.claimedBy) {
+        t.claimedBy = interaction.user.id;
+        t.claimedAt = Date.now();
+      }
+      save();
+      historyLog(interaction.guild, t, `🎁 Hadiah dikirim oleh <@${interaction.user.id}>`);
+      await interaction.update(ticketPayloadFor(interaction.message, interaction.guild, cfg, t));
+      const reward = rewardOf(t.rewardType);
+      const g = t.giveawayId && giveaway.getGiveaway ? giveaway.getGiveaway(t.giveawayId) : null;
+      const done = card({
+        color: 0x2ecc71,
+        top: `<@${t.userId}>`,
+        header: `## 🎁 Hadiah Sudah Dikirim!\nSelamat <@${t.userId}>, hadiahmu sudah **dikirim** oleh <@${interaction.user.id}>! 🎉`,
+        blocks: [
+          [g ? `**🎉 Giveaway:** \`${g.id}\` • ${g.prize}` : null, `**🎀 Jenis Hadiah:** ${reward.emoji} \`${reward.label}\``, `**🕒 Dikirim:** ${ts(t.deliveredAt, 'f')}`]
+            .filter(Boolean)
+            .join('\n'),
+          'Silakan **cek** hadiahmu ya. Kalau sudah diterima, kamu boleh menutup ticket ini dengan tombol **🔒 Tutup Ticket**. Terima kasih sudah ikut giveaway kami! 💙',
+        ],
+        footer: `NCS Ticket Center • ${t.id}`,
+      });
+      done.allowedMentions = { users: [t.userId] };
+      await interaction.channel.send(done).catch(() => {});
       return true;
     }
 
