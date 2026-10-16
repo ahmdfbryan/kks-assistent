@@ -133,7 +133,18 @@
         "description": "Demi kelancaran dan keamanan setiap transaksi, mohon pastikan akun Roblox Anda telah memenuhi seluruh ketentuan berikut **sebelum melakukan pemesanan**:\n\n✅ **Verifikasi Usia 18+**\n┗ Akun Roblox Anda telah terverifikasi berusia 18 tahun ke atas.\n\n✅ **Authenticator (V2L) Aktif**\n┗ Fitur Authenticator wajib dalam kondisi aktif pada akun Anda.\n\n✅ **Bebas Limitasi Robux**\n┗ Akun Anda tidak sedang dalam masa pembatasan penerimaan Robux.\n\n⚠️ **Penting:** Pesanan dari akun yang belum memenuhi persyaratan di atas berpotensi mengalami kendala atau penundaan pengiriman. Dengan melanjutkan pembelian, Anda dianggap telah membaca dan menyetujui seluruh ketentuan ini."
       },
       "rate": 145,
-      "presets": [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+      "presets": [
+        100,
+        200,
+        300,
+        400,
+        500,
+        600,
+        700,
+        800,
+        900,
+        1000
+      ],
       "minAmount": 100,
       "maxAmount": 5000,
       "howTo": {
@@ -165,7 +176,13 @@
           "Cukup **username Roblox**, tanpa password",
           "Pilih jumlah bebas hingga **5.000 Robux**"
         ],
-        "priceList": [100, 500, 1000, 2000, 5000],
+        "priceList": [
+          100,
+          500,
+          1000,
+          2000,
+          5000
+        ],
         "thumbnail": "",
         "image": ""
       }
@@ -186,7 +203,14 @@
       "pendingDays": 5,
       "minAmount": 100,
       "maxAmount": 10000,
-      "examples": [500, 1000, 1500, 2000, 2500, 3000],
+      "examples": [
+        500,
+        1000,
+        1500,
+        2000,
+        2500,
+        3000
+      ],
       "tutorial": {
         "title": "📖 Tutorial Order Robux Gamepass",
         "intro": "Ikuti langkah berikut agar order **Robux Gamepass** kamu di **{server}** berjalan lancar:",
@@ -241,7 +265,13 @@
           "Gamepass **dicek otomatis** sebelum ticket dibuat",
           "Tersedia **🧮 Tax Calculator** untuk hitung harga"
         ],
-        "priceList": [500, 1000, 2000, 3000, 5000],
+        "priceList": [
+          500,
+          1000,
+          2000,
+          3000,
+          5000
+        ],
         "thumbnail": "",
         "image": ""
       }
@@ -328,6 +358,94 @@
           "Team **dirawat admin** & dibatasi beberapa email — **awet**",
           "Aktivasi cukup lewat **undangan email**",
           "Diingatkan via DM sebelum masa aktif habis"
+        ],
+        "thumbnail": "",
+        "image": ""
+      }
+    },
+    {
+      "id": "server-boost",
+      "type": "boost",
+      "group": "digital",
+      "label": "Server Boost",
+      "emoji": "🚀",
+      "description": "Tingkatkan server Discord kamu ke level berikutnya dengan **Server Boost premium** — dilengkapi **garansi penuh** selama masa aktif boost! 🚀\n\nSemua boost kami **dibeli secara resmi & legal**, dan kamu juga akan mendapatkan **akun booster** yang digunakan untuk mem-boost server kamu sesuai paket yang dipilih. 💎\n\nCukup kirim **link server Discord** kamu — sisanya biar admin **{server}** yang urus. ⚡",
+      "plans": [
+        {
+          "id": "1m",
+          "label": "1 Bulan",
+          "price": 15000,
+          "days": 30,
+          "months": 1,
+          "emoji": "🗓️"
+        },
+        {
+          "id": "3m",
+          "label": "3 Bulan",
+          "price": 40000,
+          "days": 90,
+          "months": 3,
+          "emoji": "💎"
+        }
+      ],
+      "priceNote": "Harga per 1 boost",
+      "minBoost": 1,
+      "maxBoost": 30,
+      "estimate": "1x24 jam",
+      "stockUnit": "boost",
+      "remindDays": 3,
+      "features": [
+        "**Akun Booster Termasuk** — dapatkan akun yang dipakai untuk mem-boost server kamu *(khusus jumlah boost genap)*",
+        "**Kualitas Terjamin** — boost stabil & terjaga kualitasnya",
+        "**Legal & Aman** — boost dibeli melalui pembelian resmi",
+        "**Tanpa Minimum Order** — pesan sesuai kebutuhan, mulai 1 boost",
+        "**Semua Jenis Server** — bisa untuk server publik maupun privat",
+        "**Proses Cepat** — pesanan diproses maksimal 1x24 jam",
+        "**Garansi Penuh** — berlaku selama masa aktif boost"
+      ],
+      "howItWorks": [
+        "Pilih **paket** & **jumlah boost**, lalu kirim **link server** kamu",
+        "Bayar sesuai **Total Bayar** di ticket",
+        "Admin mem-boost server kamu (estimasi **1x24 jam**) 🚀",
+        "Cek server kamu, lalu klik **✅ Boost Sudah Masuk** di ticket"
+      ],
+      "terms": {
+        "button": "Syarat & Ketentuan",
+        "title": "📌 SYARAT & KETENTUAN SERVER BOOST",
+        "description": "Mohon perhatikan ketentuan berikut **sebelum memesan Server Boost**:\n\n✅ **Link Server Aktif**\n┗ Kirim **link undangan server** yang aktif & **tidak kedaluwarsa** (atur ke *Never Expire*) agar akun booster bisa bergabung.\n\n✅ **Akun Booster**\n┗ Akun booster diberikan untuk jumlah boost **genap** (1 akun = 2 boost). Jumlah boost **ganjil** tidak mendapatkan akun booster.\n\n✅ **Jangan Kick / Ban Booster**\n┗ Mengeluarkan akun booster dari server akan **menghapus boost** & membatalkan garansi.\n\n✅ **Masa Aktif & Garansi**\n┗ Masa aktif dihitung sejak pesanan **selesai (Completed)**. Garansi berlaku selama masa aktif sesuai paket.\n\n✅ **Estimasi Proses**\n┗ Pesanan diproses maksimal **1x24 jam** setelah pembayaran terverifikasi.\n\n⚠️ Dengan melanjutkan pembelian, kamu dianggap telah membaca & menyetujui seluruh ketentuan ini."
+      },
+      "ticketNoteTitle": "📌 Penting — Selama Proses Boost",
+      "ticketNote": "▸ Pastikan **link server** masih aktif & tidak kedaluwarsa.\n▸ **Jangan kick / ban** akun booster yang masuk ke server kamu.\n▸ Estimasi proses **1x24 jam** setelah pembayaran terverifikasi.",
+      "ticket": {
+        "categoryName": "🚀 TICKET BOOST",
+        "idPrefix": "SB"
+      },
+      "howTo": {
+        "intro": "Boost server Discord kamu cukup dengan **link server** — legal, aman, dan bergaransi selama masa aktif. 🚀",
+        "requirements": [
+          "**Link undangan server** Discord yang aktif (atur *Never Expire*)",
+          "Pilih paket **1 Bulan** atau **3 Bulan** & **jumlah boost**"
+        ],
+        "steps": [
+          "Buka channel **Produk Digital**, klik **🚀 Server Boost** ➜ **🛒 Order Sekarang**",
+          "Pilih **paket**, isi **jumlah boost** & **link server**",
+          "Cek ringkasan (nama server & akun booster), lalu klik **Ya, Buat Ticket**",
+          "Bayar sesuai **Total Bayar** di ticket & kirim bukti",
+          "Admin mem-boost server kamu — estimasi **1x24 jam** 🚀",
+          "Cek server, lalu klik **✅ Boost Sudah Masuk**",
+          "Admin menutup ticket — boost **aktif & bergaransi** ✨"
+        ],
+        "tips": [
+          "Pilih jumlah boost **genap** untuk mendapatkan **akun booster** (1 akun = 2 boost).",
+          "Paket **3 Bulan** lebih hemat dibanding 1 bulan."
+        ]
+      },
+      "catalog": {
+        "tagline": "Boost server Discord **legal & bergaransi** — cukup kirim **link server**, akun booster termasuk! 🚀",
+        "highlights": [
+          "**Garansi penuh** selama masa aktif",
+          "Akun booster **termasuk** (jumlah genap)",
+          "Tanpa minimum order • proses **1x24 jam**"
         ],
         "thumbnail": "",
         "image": ""
