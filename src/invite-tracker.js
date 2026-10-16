@@ -8,6 +8,12 @@ const {
   MessageFlags,
   Events,
   RESTJSONErrorCodes,
+  ContainerBuilder,
+  SectionBuilder,
+  TextDisplayBuilder,
+  ThumbnailBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
 } = require('discord.js');
 
 /**
@@ -183,6 +189,7 @@ function stay(ms) {
   return d < 30 ? `${d} hari` : `${Math.floor(d / 30)} bulan`;
 }
 
+/** Top 10 Inviter (Components V2): podium 3 besar + peringkat 4–10 + statistik. */
 function buildLeaderboard(guild, cfg) {
   const lb = cfg.leaderboard || {};
   const medals = ['🥇', '🥈', '🥉'];
@@ -191,26 +198,33 @@ function buildLeaderboard(guild, cfg) {
     .filter(([, s]) => s.total > 0)
     .sort((a, b) => b[1].valid - a[1].valid || b[1].total - a[1].total)
     .slice(0, 10);
-  const lines = top.length
-    ? top.map(([id, s], i) => {
-        const rank = medals[i] || `\`#${i + 1}\``;
-        const extra = [s.left ? `📤 ${num(s.left)} keluar` : null, s.fake ? `⚠️ ${num(s.fake)} fake` : null].filter(Boolean).join(' • ');
-        return `${rank} <@${id}>\n┗ ✅ **${num(s.valid)} undangan**${extra ? ` • ${extra}` : ''}`;
-      })
-    : [lb.empty || '_Belum ada undangan._'];
+  const extra = (s) => [s.left ? `📤 ${num(s.left)} keluar` : null, s.fake ? `⚠️ ${num(s.fake)} fake` : null].filter(Boolean).join(' • ');
+  const podium = top.slice(0, 3).map(([id, s], i) => `${medals[i]} <@${id}>\n┗ ✅ **${num(s.valid)} undangan**${extra(s) ? ` • ${extra(s)}` : ''}`);
+  const rest = top.slice(3).map(([id, s], i) => `\`#${i + 4}\` <@${id}> • ✅ **${num(s.valid)} undangan**${extra(s) ? ` • ${extra(s)}` : ''}`);
   const all = Object.values(stats);
-  const e = new EmbedBuilder()
-    .setColor(color(cfg, 'brand', 0x3498db))
-    .setTitle(fill(lb.title || '🏆 Top 10 Inviter | {server}', guild))
-    .setDescription(`${fill(lb.description || '', guild)}\n​\n${lines.join('\n\n')}`.trim())
-    .setThumbnail(guild.iconURL({ extension: 'png', size: 256 }) || null)
-    .addFields(
-      { name: '✅ Total Undangan Valid', value: `\`${num(all.reduce((a, s) => a + s.valid, 0))}\``, inline: true },
-      { name: '🙋 Total Inviter', value: `\`${num(all.filter((s) => s.total > 0).length)}\``, inline: true },
-    )
-    .setFooter(footer(guild))
-    .setTimestamp(new Date());
-  return { embeds: [e], allowedMentions: { parse: [] } };
+
+  const text = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000));
+  const line = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+  const box = new ContainerBuilder().setAccentColor(color(cfg, 'brand', 0x3498db));
+  const header = `# ${fill(lb.title || '🏆 Top 10 Inviter | {server}', guild)}\n-# ${fill(lb.subtitle || '{server} • Invite Leaderboard', guild)}`;
+  const icon = guild.iconURL({ extension: 'png', size: 256 });
+  if (icon) box.addSectionComponents(new SectionBuilder().addTextDisplayComponents(text(header)).setThumbnailAccessory(new ThumbnailBuilder().setURL(icon)));
+  else box.addTextDisplayComponents(text(header));
+  const blocks = [
+    fill(lb.description || '', guild) || null,
+    top.length ? `### 👑 Podium Inviter\n${podium.join('\n\n')}` : lb.empty || '_Belum ada undangan._',
+    rest.length ? `### 📋 Peringkat 4 – 10\n${rest.join('\n')}` : null,
+    [
+      `✅ **Total Undangan Valid:** \`${num(all.reduce((a, s) => a + s.valid, 0))}\``,
+      `🙋 **Total Inviter:** \`${num(all.filter((s) => s.total > 0).length)}\``,
+    ].join('\n'),
+    `-# 💡 ${lb.tip || 'Cek jumlah undanganmu dengan `/invites`'}\n-# ${guild.name} • Diperbarui <t:${Math.floor(Date.now() / 1000)}:R>`,
+  ];
+  for (const b of blocks.filter(Boolean)) {
+    box.addSeparatorComponents(line());
+    box.addTextDisplayComponents(text(b));
+  }
+  return { components: [box], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } };
 }
 
 // ───────────────────────── Leaderboard (1 pesan, di-edit otomatis) ─────────────────────────
@@ -226,7 +240,18 @@ async function updateLeaderboard(client) {
     if (err.code === RESTJSONErrorCodes.UnknownMessage) {
       data.leaderboard = null; // pesan dihapus manual → berhenti di-update (kirim ulang dengan /invite-log leaderboard)
       save();
-    } else console.error('[invites] gagal update leaderboard:', err.message);
+    } else {
+      // Leaderboard lama format embed tidak bisa diubah ke Components V2 → kirim baru & hapus yang lama.
+      const sent = await channel.send(buildLeaderboard(channel.guild, loadConfig())).catch((e) => {
+        console.error('[invites] gagal update leaderboard:', err.message, '|', e.message);
+        return null;
+      });
+      if (sent) {
+        await channel.messages.delete(loc.messageId).catch(() => {});
+        data.leaderboard = { channelId: channel.id, messageId: sent.id };
+        save();
+      }
+    }
   }
 }
 /** Jeda singkat supaya banyak member masuk bersamaan cukup 1x edit. */
