@@ -292,6 +292,7 @@ async function onProductInfo(interaction, productId) {
   if (product?.type === 'rekber') return interaction.reply(eph(V.buildRekberInfo(interaction.guild, cfg, product)));
   if (product?.type === 'gamepass') return interaction.reply(eph(V.buildGamepassInfo(interaction.guild, cfg, product)));
   if (product?.type === 'canva') return interaction.reply(eph(V.buildCanvaInfo(interaction.guild, cfg, product)));
+  if (product?.type === 'boost') return interaction.reply(eph(V.buildBoostInfo(interaction.guild, cfg, product)));
   if (!product || product.type !== 'robux') {
     return interaction.reply({ content: '🔒 Produk ini **Coming Soon** — nantikan ya!', flags: EPH });
   }
@@ -314,6 +315,7 @@ async function onBuy(interaction, productId) {
   if (product?.type === 'rekber') return onRekberStart(interaction, product);
   if (product?.type === 'gamepass') return onGamepassStart(interaction, product);
   if (product?.type === 'canva') return onCanvaStart(interaction, product);
+  if (product?.type === 'boost') return onBoostStart(interaction, product);
   if (!product || product.type !== 'robux') {
     return interaction.reply({ content: '🔒 Produk ini **Coming Soon** — nantikan ya!', flags: EPH });
   }
@@ -805,6 +807,7 @@ const STEP_LOG = {
 const CLOSE_LOG = {
   robux: { completed: '✅ Robux berhasil dikirim', cancelled: '❌ Order dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
   canva: { completed: '✅ Canva Pro aktif', cancelled: '❌ Order dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
+  boost: { completed: '✅ Server Boost aktif', cancelled: '❌ Order dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
   gamepass: { completed: '✅ Gamepass dibeli — Robux masuk setelah masa pending', cancelled: '❌ Order dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
   rekber: { completed: '✅ Dana dicairkan ke penjual', cancelled: '❌ Transaksi dibatalkan', refund: '💸 Dana dikembalikan ke pembeli' },
 };
@@ -1175,7 +1178,7 @@ const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[a-z]{2,}$/i;
 
 function returnSlot(cfg, t) {
   const product = getProduct(cfg, t.productId);
-  if (product) setStock(product, stockOf(product) + 1);
+  if (product) setStock(product, stockOf(product) + (kindOf(t) === 'boost' ? Number(t.qty) || 1 : 1));
 }
 
 /** "Order Sekarang" → form pilih paket + email. */
@@ -1394,6 +1397,243 @@ async function onCanvaJoined(interaction, ticketId) {
   t.stage.joined = true;
   t.stage.joinedAt = Date.now();
   return advanceCanva(interaction, t, 'joined', '🎉 Pembeli bergabung ke team Canva Pro');
+}
+
+// ══════════════════════ SERVER BOOST ══════════════════════
+const bsSessions = new Map(); // userId → { draft, expires }
+const INVITE_RE = /(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/([a-z0-9-]{2,32})/i;
+
+/** Baca info server dari link undangan (nama, member, jumlah boost, ikon). */
+async function inviteInfo(code) {
+  const inv = await client.fetchInvite(code, { withCounts: true }).catch(() => null);
+  if (!inv?.guild) return null;
+  return {
+    id: inv.guild.id,
+    name: inv.guild.name,
+    members: inv.memberCount || inv.guild.memberCount || null,
+    boosts: inv.guild.premiumSubscriptionCount ?? null,
+    icon: inv.guild.iconURL?.({ extension: 'png', size: 256 }) || null,
+    expiresAt: inv.expiresTimestamp || null,
+  };
+}
+
+/** "Order Sekarang" → form paket, jumlah boost, link server. */
+async function onBoostStart(interaction, product) {
+  if (!isProductOpen(product)) {
+    refreshPanel();
+    const why = stockOf(product) <= 0 ? 'stock sedang **HABIS**' : 'sedang **TUTUP**';
+    return interaction.reply({ content: `🔴 **${product.label}** ${why}. Pantau channel stock untuk info berikutnya.`, flags: EPH });
+  }
+  const active = activeTicketOf({ userId: interaction.user.id, kind: 'boost' });
+  if (active) {
+    return interaction.reply({ content: `⚠️ Kamu masih punya ticket ${product.label} yang sedang berjalan: <#${active.channelId}> (\`${active.id}\`).`, flags: EPH });
+  }
+  const plans = V.canvaPlans(product).slice(0, 25);
+  const max = Math.min(Number(product.maxBoost) || 30, stockOf(product));
+  const modal = new ModalBuilder()
+    .setCustomId(`store:bsmodal:${product.id}`)
+    .setTitle(`Order ${product.label}`.slice(0, 45))
+    .addLabelComponents(
+      new LabelBuilder()
+        .setLabel('Pilih Paket')
+        .setStringSelectMenuComponent(
+          new StringSelectMenuBuilder()
+            .setCustomId('plan')
+            .setPlaceholder('Pilih paket Server Boost...')
+            .setRequired(true)
+            .addOptions(
+              plans.map((x) => ({
+                label: `${x.label} — ${rupiah(x.price)} / boost`.slice(0, 100),
+                description: `Aktif & bergaransi ${num(x.days)} hari`.slice(0, 100),
+                value: x.id,
+                emoji: x.emoji || '🗓️',
+              })),
+            ),
+        ),
+      new LabelBuilder()
+        .setLabel('Jumlah Boost')
+        .setDescription(`Minimal ${num(product.minBoost || 1)}, maksimal ${num(max)} boost. Jumlah genap = dapat akun booster.`)
+        .setTextInputComponent(textInput('qty', { placeholder: 'contoh: 2, 4, 6, 8, 14', min: 1, max: 3 })),
+      new LabelBuilder()
+        .setLabel('Link Server Discord')
+        .setDescription('Link undangan server kamu (atur Never Expire supaya tidak kedaluwarsa).')
+        .setTextInputComponent(textInput('invite', { placeholder: 'contoh: https://discord.gg/namaserver', min: 8, max: 120 })),
+    );
+  return interaction.showModal(modal);
+}
+
+async function onBoostModal(interaction, productId) {
+  await interaction.deferReply({ flags: EPH });
+  const cfg = loadConfig();
+  const product = getProduct(cfg, productId);
+  if (!product || product.type !== 'boost') return interaction.editReply('❌ Produk tidak ditemukan.');
+  if (!isProductOpen(product)) return interaction.editReply(`🔴 **${product.label}** sedang **TUTUP** atau stock habis.`);
+  const plan = V.canvaPlans(product).find((x) => x.id === interaction.fields.getStringSelectValues('plan')?.[0]);
+  if (!plan) return interaction.editReply('❌ Pilih paket terlebih dahulu.');
+  const qty = Number(String(interaction.fields.getTextInputValue('qty')).replace(/[^\d]/g, ''));
+  const min = Number(product.minBoost) || 1;
+  const max = Math.min(Number(product.maxBoost) || 30, stockOf(product));
+  if (!qty || qty < min) return interaction.editReply(`❌ Jumlah boost minimal **${num(min)}**.`);
+  if (qty > max) return interaction.editReply(`❌ Jumlah boost maksimal **${num(max)}** (sisa stock **${num(stockOf(product))} boost**).`);
+  const raw = interaction.fields.getTextInputValue('invite').trim();
+  const m = raw.match(INVITE_RE) || raw.match(/^([a-z0-9-]{2,32})$/i); // link lengkap atau kode undangan saja
+  if (!m) return interaction.editReply('❌ Link server tidak valid. Contoh: `https://discord.gg/namaserver`');
+  const invite = `https://discord.gg/${m[1]}`;
+  const server = await inviteInfo(m[1]);
+  if (!server) return interaction.editReply('❌ Link server **tidak bisa dibuka** (kedaluwarsa / salah). Buat link undangan baru dengan **Never Expire**, lalu coba lagi.');
+  const draft = {
+    productId: product.id,
+    plan: { id: plan.id, label: plan.label, days: Number(plan.days) || 30, price: Number(plan.price) },
+    qty,
+    price: V.boostPrice(plan, qty),
+    invite,
+    server,
+  };
+  bsSessions.set(interaction.user.id, { draft, expires: Date.now() + SESSION_MS });
+  return interaction.editReply(V.buildBoostConfirm(interaction.guild, cfg, product, draft));
+}
+
+async function onBoostConfirm(interaction, yes) {
+  const sess = bsSessions.get(interaction.user.id);
+  bsSessions.delete(interaction.user.id);
+  if (!yes) return interaction.update({ content: '✖️ Pesanan dibatalkan.', embeds: [], components: [] });
+  if (!sess || sess.expires < Date.now()) {
+    return interaction.update({ content: '⌛ Sesi sudah berakhir. Silakan klik Order Sekarang lagi.', embeds: [], components: [] });
+  }
+  const cfg = loadConfig();
+  const guild = interaction.guild;
+  const d = sess.draft;
+  const product = getProduct(cfg, d.productId);
+  if (!isProductOpen(product) || stockOf(product) < d.qty) {
+    return interaction.update({ content: `🔴 Maaf, stock **${product?.label || 'produk ini'}** tidak cukup / baru saja **TUTUP**.`, embeds: [], components: [] });
+  }
+  if (activeTicketOf({ userId: interaction.user.id, kind: 'boost' })) {
+    return interaction.update({ content: '⚠️ Kamu masih punya ticket Server Boost yang sedang berjalan.', embeds: [], components: [] });
+  }
+
+  // Kunci stock boost SEKARANG supaya tidak terjual melebihi stock.
+  setStock(product, stockOf(product) - d.qty);
+  const tc = product.ticket || {};
+  const id = nextTicketId(tc.idPrefix || 'SB', 'boostSeq');
+  const ticket = {
+    id,
+    kind: 'boost',
+    guildId: guild.id,
+    userId: interaction.user.id,
+    channelId: null,
+    messageId: null,
+    productId: product.id,
+    productLabel: product.label,
+    plan: d.plan,
+    qty: d.qty,
+    invite: d.invite,
+    server: d.server,
+    estimate: product.estimate || '1x24 jam',
+    amount: 0,
+    price: d.price,
+    stage: { sent: false, received: false },
+    status: 'open',
+    createdAt: Date.now(),
+  };
+  state.tickets[id] = ticket;
+  save();
+  await interaction.update({ content: '⏳ Sedang membuat ticket kamu...', embeds: [], components: [] });
+
+  try {
+    const category = await getTicketCategory(guild, cfg, tc.categoryName || '🚀 TICKET BOOST');
+    const member = [
+      PermissionFlagsBits.ViewChannel,
+      PermissionFlagsBits.SendMessages,
+      PermissionFlagsBits.ReadMessageHistory,
+      PermissionFlagsBits.AttachFiles,
+      PermissionFlagsBits.EmbedLinks,
+    ];
+    const overwrites = [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: interaction.user.id, allow: member },
+      { id: guild.members.me.id, allow: [...member, PermissionFlagsBits.ManageChannels] },
+    ];
+    const staff = isId(cfg.ticket?.staffRoleId) ? cfg.ticket.staffRoleId : null;
+    if (staff) overwrites.push({ id: staff, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
+    const slug = interaction.user.username.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+    const channel = await guild.channels.create({
+      name: `🚀・${id.toLowerCase()}-${slug}`,
+      type: ChannelType.GuildText,
+      parent: category.id,
+      topic: `${id} • ${product.label} ${d.qty}x ${d.plan.label} • ${interaction.user.tag}`,
+      permissionOverwrites: overwrites,
+    });
+    ticket.channelId = channel.id;
+    const msg = await channel.send(
+      v2({
+        content: `<@${interaction.user.id}>${staff ? ` <@&${staff}>` : ''}`,
+        ...V.buildTicketMessage(guild, cfg, ticket),
+        allowedMentions: { users: [interaction.user.id], roles: staff ? [staff] : [] },
+      }),
+    );
+    await msg.pin().catch(() => {});
+    ticket.messageId = msg.id;
+    save();
+    logOrder(guild, ticket, '🆕 Order masuk & menunggu pembayaran');
+
+    const url = channelUrl(guild.id, channel.id);
+    const dmOk = await interaction.user
+      .send(V.buildDmCreated(guild, cfg, ticket, url))
+      .then(() => true)
+      .catch(() => false);
+    if (!dmOk) channel.send('ℹ️ Bot tidak bisa mengirim DM ke kamu (DM tertutup). Semua info pesanan ada di ticket ini.').catch(() => {});
+    await interaction.editReply({
+      content: `✅ **Ticket berhasil dibuat!** Lanjutkan pembayaran di ${channel}.`,
+      components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Buka Ticket').setEmoji('🎫').setURL(url))],
+    });
+  } catch (err) {
+    console.error('[store] gagal membuat ticket boost:', err);
+    setStock(product, stockOf(product) + d.qty);
+    delete state.tickets[id];
+    save();
+    await interaction.editReply('❌ Gagal membuat ticket. Pastikan bot punya izin **Manage Channels** & **Manage Roles**, lalu coba lagi.').catch(() => {});
+    refreshPanel();
+    return;
+  }
+  refreshPanel();
+  await closeIfSoldOut(guild, `🚀 **Stock ${product.label} sudah HABIS!** ${product.label} otomatis ditutup.`, product);
+}
+
+function boostTicketFor(interaction, ticketId) {
+  const t = state.tickets[ticketId];
+  if (!t || kindOf(t) !== 'boost' || t.status !== 'open') {
+    interaction.reply({ content: 'Ticket ini sudah ditutup.', flags: EPH }).catch(() => {});
+    return null;
+  }
+  t.stage = t.stage || {};
+  return t;
+}
+async function advanceBoost(interaction, t, step, logText) {
+  const cfg = loadConfig();
+  save();
+  logOrder(interaction.guild, t, logText);
+  await interaction.update(ticketPayloadFor(interaction.message, interaction.guild, cfg, t));
+  await interaction.channel.send(v2(V.buildBoostStep(interaction.guild, cfg, t, step))).catch(() => {});
+}
+/** Admin: server pembeli sudah di-boost. */
+async function onBoostSent(interaction, ticketId) {
+  if (!isAdmin(interaction.member)) return interaction.reply({ content: '⛔ Hanya **Administrator** yang bisa menandai boost terkirim.', flags: EPH });
+  const t = boostTicketFor(interaction, ticketId);
+  if (!t) return;
+  if (!V.isPaid(t)) return interaction.reply({ content: '⚠️ Pembayaran ticket ini **belum diverifikasi**. Konfirmasi dana masuk dulu ya.', flags: EPH });
+  t.stage.sent = true;
+  t.stage.sentAt = Date.now();
+  return advanceBoost(interaction, t, 'sent', `🚀 ${num(t.qty)} boost dikirim ke server ${t.server?.name || ''}`.trim());
+}
+/** Pembeli: boost sudah masuk ke server. */
+async function onBoostReceived(interaction, ticketId) {
+  const t = boostTicketFor(interaction, ticketId);
+  if (!t) return;
+  if (interaction.user.id !== t.userId) return interaction.reply({ content: `⛔ Hanya <@${t.userId}> (pembeli) yang bisa mengonfirmasi.`, flags: EPH });
+  if (!t.stage.sent) return interaction.reply({ content: 'Tunggu admin mem-boost server kamu terlebih dahulu.', flags: EPH });
+  t.stage.received = true;
+  t.stage.receivedAt = Date.now();
+  return advanceBoost(interaction, t, 'received', '✅ Pembeli konfirmasi boost sudah masuk');
 }
 
 // ══════════════════════ PEMBAYARAN (semua produk) ══════════════════════
@@ -1745,11 +1985,11 @@ async function onCloseModal(interaction, ticketId) {
     ps.orders += 1;
     ps.robux += t.amount;
     ps.revenue += t.price;
-    if (kindOf(t) === 'canva') t.expiresAt = t.closedAt + (Number(t.plan?.days) || 30) * 86400000;
+    if (kindOf(t) === 'canva' || kindOf(t) === 'boost') t.expiresAt = t.closedAt + (Number(t.plan?.days) || 30) * 86400000;
     t.testimonyDeadline = Date.now() + (Number(cfg.ticket?.testimonyTimeoutHours) || 24) * 3600 * 1000;
   } else {
     if (kindOf(t) === 'robux') state.stock += t.amount; // stock Robux dikembalikan (gamepass tidak memakai stock)
-    if (kindOf(t) === 'canva') returnSlot(cfg, t); // slot Canva dikembalikan
+    if (kindOf(t) === 'canva' || kindOf(t) === 'boost') returnSlot(cfg, t); // slot Canva / stock boost dikembalikan
     t.deleteAt = Date.now() + (Number(cfg.ticket?.deleteAfterSeconds) || 15) * 1000;
   }
   save();
@@ -1787,7 +2027,7 @@ async function onCloseModal(interaction, ticketId) {
         allowedMentions: { users: mentionIds },
       }),
     );
-    if (kindOf(t) === 'robux' || kindOf(t) === 'canva') {
+    if (['robux', 'canva', 'boost'].includes(kindOf(t))) {
       await announce(guild, 'returned', { ticket: t });
       await reopenIfAutoClosed(guild);
     }
@@ -1912,20 +2152,21 @@ async function housekeeping() {
         save();
       }
       // Canva Pro: ingatkan pembeli H-3 & beri tahu admin saat masa aktif habis.
-      if (kindOf(t) === 'canva' && t.status === 'completed' && t.expiresAt) {
+      if ((kindOf(t) === 'canva' || kindOf(t) === 'boost') && t.status === 'completed' && t.expiresAt) {
+        const expiry = kindOf(t) === 'boost' ? V.buildBoostExpiry : V.buildCanvaExpiry;
         const guild = client.guilds.cache.get(t.guildId) || client.guilds.cache.first();
         const remindMs = (Number(getProduct(cfg, t.productId)?.remindDays ?? 3) || 0) * 86400000;
         if (!t.remindedBuyer && remindMs && t.expiresAt - remindMs <= now && t.expiresAt > now && guild) {
           t.remindedBuyer = true;
           save();
           const u = await client.users.fetch(t.userId).catch(() => null);
-          await u?.send(V.buildCanvaExpiry(guild, cfg, t, 'buyer')).catch(() => {});
+          await u?.send(expiry(guild, cfg, t, 'buyer')).catch(() => {});
         }
         if (!t.remindedAdmin && t.expiresAt <= now && guild) {
           t.remindedAdmin = true;
           save();
           const admin = t.closedBy ? await client.users.fetch(t.closedBy).catch(() => null) : null;
-          await admin?.send(V.buildCanvaExpiry(guild, cfg, t, 'admin')).catch(() => {});
+          await admin?.send(expiry(guild, cfg, t, 'admin')).catch(() => {});
         }
       }
       // Hapus channel ticket yang sudah selesai.
@@ -1956,10 +2197,10 @@ async function onChannelDelete(channel) {
     t.closedBy = client.user.id;
     t.note = 'Channel ticket dihapus manual';
     logOrder(channel.guild, t, kindOf(t) === 'rekber' ? '❌ Transaksi dibatalkan' : '❌ Order dibatalkan');
-    if (kindOf(t) !== 'robux' && kindOf(t) !== 'canva') {
+    if (!['robux', 'canva', 'boost'].includes(kindOf(t))) {
       save();
     } else {
-      if (kindOf(t) === 'canva') returnSlot(loadConfig(), t);
+      if (kindOf(t) === 'canva' || kindOf(t) === 'boost') returnSlot(loadConfig(), t);
       else state.stock += t.amount;
       save();
       await announce(channel.guild, 'returned', { ticket: t });
@@ -2096,6 +2337,9 @@ async function handleInteraction(interaction) {
       else if (action === 'cvconfirm') await onCanvaConfirm(interaction, arg === 'yes');
       else if (action === 'cvinvite') await onCanvaInvite(interaction, arg);
       else if (action === 'cvjoined') await onCanvaJoined(interaction, arg);
+      else if (action === 'bsconfirm') await onBoostConfirm(interaction, arg === 'yes');
+      else if (action === 'bssent') await onBoostSent(interaction, arg);
+      else if (action === 'bsdone') await onBoostReceived(interaction, arg);
       else if (action === 'howtobtn') {
         const cfg = loadConfig();
         const guide = H.buildHowToGuide(interaction.guild, cfg, arg);
@@ -2112,6 +2356,7 @@ async function handleInteraction(interaction) {
       else if (action === 'rbmodal') await onRekberModal(interaction, arg);
       else if (action === 'gpmodal') await onGamepassModal(interaction, arg);
       else if (action === 'cvmodal') await onCanvaModal(interaction, arg);
+      else if (action === 'bsmodal') await onBoostModal(interaction, arg);
       else if (action === 'paymodal') await onPayModal(interaction, arg);
       else if (action === 'payrejmodal') await onPayRejectModal(interaction, arg);
       else if (action === 'gpcalcprice' || action === 'gpcalctax') await onGamepassCalcModal(interaction, arg, action === 'gpcalctax' ? 'tax' : 'price');
