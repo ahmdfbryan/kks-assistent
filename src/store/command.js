@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, EmbedBuilder } = require('discord.js');
 const { loadConfig, isId, rupiah, num, color, channelOf, GROUPS } = require('./config');
-const { state, save, productState, isProductOpen, hasStock, stockOf, setStock, stockUnit } = require('./state');
+const { state, save, productState, isProductOpen, hasStock, stockOf, setStock, stockUnit, planStockOf, setPlanStock } = require('./state');
 const V = require('./views');
 const SP = require('./spender');
 const H = require('./howto');
@@ -23,10 +23,13 @@ function rateChoices() {
 }
 /** Pilihan produk yang memakai stock (Robux Visend, Canva Pro, ...). */
 function stockChoices() {
-  return (loadConfig()?.products || [])
-    .filter(hasStock)
-    .slice(0, 25)
-    .map((p) => ({ name: `${p.emoji || '•'} ${p.label}`.slice(0, 100), value: p.id }));
+  const out = [];
+  for (const p of (loadConfig()?.products || []).filter(hasStock)) {
+    // Server Boost: stock diatur per paket (1 Bulan / 3 Bulan).
+    if (p.type === 'boost') for (const x of p.plans || []) out.push({ name: `${p.emoji || '•'} ${p.label} • ${x.label}`.slice(0, 100), value: `${p.id}:${x.id}` });
+    else out.push({ name: `${p.emoji || '•'} ${p.label}`.slice(0, 100), value: p.id });
+  }
+  return out.slice(0, 25);
 }
 const stockProductOption = (o) => {
   o.setName('produk').setDescription('Produk yang diatur stock-nya (default: Robux Visend)');
@@ -110,7 +113,7 @@ const storeCommand = {
     .addSubcommand((s) =>
       s
         .setName('stok-set')
-        .setDescription('Atur stock produk (Robux: jumlah Robux • Canva Pro: jumlah slot email)')
+        .setDescription('Atur stock produk (Robux: jumlah Robux • Canva: slot • Server Boost: boost per paket)')
         .addIntegerOption((o) => o.setName('jumlah').setDescription('Jumlah stock (Robux / slot)').setRequired(true).setMinValue(0).setMaxValue(10_000_000))
         .addStringOption(stockProductOption),
     )
@@ -201,21 +204,26 @@ const storeCommand = {
     if (sub === 'stok-set' || sub === 'stok-tambah') {
       const n = interaction.options.getInteger('jumlah');
       const pick = interaction.options.getString('produk');
-      const target = pick ? (cfg.products || []).find((p) => p.id === pick && hasStock(p)) : product;
+      const [pickId, planId] = String(pick || '').split(':');
+      const target = pick ? (cfg.products || []).find((p) => p.id === pickId && hasStock(p)) : product;
       if (!target) return interaction.editReply('❌ Produk ber-stock tidak ditemukan di store.json.');
+      const plan = target.type === 'boost' ? (target.plans || []).find((x) => x.id === planId) || (target.plans || [])[0] : null;
+      if (target.type === 'boost' && !plan) return interaction.editReply('❌ Paket Server Boost tidak ditemukan di store.json.');
       const unit = stockUnit(target);
-      const before = stockOf(target);
-      const after = setStock(target, sub === 'stok-set' ? n : before + n);
+      const label = plan ? `${target.label} (${plan.label})` : target.label;
+      const before = plan ? planStockOf(target, plan.id) : stockOf(target);
+      const after = plan ? setPlanStock(target, plan.id, sub === 'stok-set' ? n : before + n) : setStock(target, sub === 'stok-set' ? n : before + n);
       save();
       refreshPanel();
       await announce(guild, 'stock', {
         product: target,
-        text: `Stock **${target.label}** diperbarui: **${num(before)} → ${num(after)} ${unit}**.`,
+        text: `Stock **${label}** diperbarui: **${num(before)} → ${num(after)} ${unit}**.`,
       });
       await closeIfSoldOut(guild, `📦 **Stock ${target.label} sudah HABIS!** ${target.label} otomatis ditutup.`, target);
       const reopened = await reopenIfAutoClosed(guild, target);
       return interaction.editReply(
-        `📦 Stock **${target.label}**: **${num(before)} → ${num(after)} ${unit}**.` +
+        `📦 Stock **${label}**: **${num(before)} → ${num(after)} ${unit}**.` +
+          (plan ? `\n🚀 Total stock ${target.label}: **${num(stockOf(target))} ${unit}**` : '') +
           (reopened ? `\n🟢 **${target.label}** otomatis **DIBUKA** lagi (sebelumnya tutup karena stock habis).` : '') +
           (!isProductOpen(target) && after > 0 ? `\n**${target.label}** masih TUTUP (ditutup manual) — buka dengan \`/store buka\`.` : ''),
       );
