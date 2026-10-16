@@ -46,11 +46,11 @@ function card(cfg, guild, { header, blocks = [], image, rows = [], thumb = true 
   return { components: [box], flags: V2, allowedMentions: { parse: [] } };
 }
 
-const panelUrl = (guild) =>
-  state.panel ? `https://discord.com/channels/${guild.id}/${state.panel.channelId}/${state.panel.messageId}` : null;
+const { groupOf } = require('./config');
 
-function storeLinkButton(guild, label = 'Order di Store') {
-  const url = panelUrl(guild);
+function storeLinkButton(guild, label = 'Order di Store', product = null) {
+  // Produk digital (Canva Pro, ...) → link ke panel Produk Digital.
+  const url = V.panelUrlFor(guild, product ? groupOf(product) : 'main');
   return url ? new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(label).setEmoji('🛒').setURL(url) : null;
 }
 const linkRow = (guild, label) => {
@@ -148,7 +148,7 @@ function buildHowToGuide(guild, cfg, value) {
   }
 
   const buttons = [];
-  const link = storeLinkButton(guild);
+  const link = storeLinkButton(guild, 'Order di Store', p);
   if (link) buttons.push(link);
   if (p.type === 'gamepass') {
     buttons.push(
