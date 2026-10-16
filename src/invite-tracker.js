@@ -141,43 +141,67 @@ function inviterText(rec) {
   return `<@${rec.inviterId}>`;
 }
 
+/** Kotak V2 untuk log invite. */
+function logCard({ accent, header, thumb, blocks, guild }) {
+  const text = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000));
+  const line = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
+  const box = new ContainerBuilder().setAccentColor(accent);
+  if (thumb) box.addSectionComponents(new SectionBuilder().addTextDisplayComponents(text(header)).setThumbnailAccessory(new ThumbnailBuilder().setURL(thumb)));
+  else box.addTextDisplayComponents(text(header));
+  for (const b of [...blocks.filter(Boolean), `-# ${guild.name} • Invite Log • ${ts(Date.now(), 'f')}`]) {
+    box.addSeparatorComponents(line());
+    box.addTextDisplayComponents(text(b));
+  }
+  return { components: [box], flags: MessageFlags.IsComponentsV2, allowedMentions: { parse: [] } };
+}
+const userLine = (member) => `**👤 Member:** \`${member.user.globalName || member.user.username}\` • @${member.user.username}`;
+
 function buildJoinLog(member, rec, cfg) {
   const guild = member.guild;
   const s = rec?.inviterId && rec.inviterId !== 'vanity' ? statsOf(rec.inviterId) : null;
-  const e = new EmbedBuilder()
-    .setColor(color(cfg, 'join', 0x2ecc71))
-    .setAuthor({ name: '📥 Member Baru Bergabung', iconURL: member.user.displayAvatarURL({ size: 128 }) })
-    .setDescription(`<@${member.id}> bergabung ke **${guild.name}**! 🎉`)
-    .setThumbnail(member.user.displayAvatarURL({ extension: 'png', size: 256 }))
-    .addFields(
-      { name: '👤 Member', value: `\`${member.user.globalName || member.user.username}\`\n┗ @${member.user.username}`, inline: true },
-      { name: '🎫 Diundang Oleh', value: inviterText(rec), inline: true },
-      { name: '🔗 Kode Undangan', value: rec?.code ? `\`${rec.code}\`` : '`-`', inline: true },
-      { name: '📅 Akun Dibuat', value: ts(member.user.createdTimestamp, 'R'), inline: true },
-      { name: '🔢 Member Ke-', value: `\`#${num(guild.memberCount)}\``, inline: true },
-    );
-  if (s) e.addFields({ name: '📊 Undangan Inviter', value: `\`✅ ${num(s.valid)} valid\` • \`📥 ${num(s.total)} total\``, inline: true });
-  if (rec?.fake) e.addFields({ name: '⚠️ Akun Baru', value: `Umur akun kurang dari **${num(cfg.fakeDays)} hari** — tidak dihitung di leaderboard.` });
-  if (rec?.rejoin) e.addFields({ name: '🔁 Rejoin', value: 'Member ini pernah bergabung sebelumnya.' });
-  return { embeds: [e.setFooter(footer(guild)).setTimestamp(new Date())], allowedMentions: { parse: [] } };
+  const notes = [];
+  if (rec?.fake) notes.push(`⚠️ **Akun Baru** — umur akun kurang dari **${num(cfg.fakeDays)} hari**, tidak dihitung di leaderboard.`);
+  if (rec?.rejoin) notes.push('🔁 **Rejoin** — member ini pernah bergabung sebelumnya.');
+  return logCard({
+    guild,
+    accent: color(cfg, 'join', 0x2ecc71),
+    thumb: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
+    header: `## 📥 Member Baru Bergabung\n<@${member.id}> bergabung ke **${guild.name}**! 🎉`,
+    blocks: [
+      [userLine(member), `**📅 Akun Dibuat:** ${ts(member.user.createdTimestamp, 'D')} (${ts(member.user.createdTimestamp, 'R')})`, `**🔢 Member Ke:** \`#${num(guild.memberCount)}\``].join('\n'),
+      [
+        '### 🎫 Info Undangan',
+        `**🙋 Diundang Oleh:** ${inviterText(rec)}`,
+        `**🔗 Kode Undangan:** ${rec?.code ? `\`${rec.code}\`` : '`-`'}`,
+        s ? `**📊 Undangan Inviter:** \`✅ ${num(s.valid)} valid\` • \`📥 ${num(s.total)} total\`` : null,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+      notes.length ? notes.join('\n') : null,
+    ],
+  });
 }
 
 function buildLeaveLog(member, rec, cfg) {
   const guild = member.guild;
   const joinedAt = member.joinedTimestamp || rec?.joinedAt || null;
   const s = rec?.inviterId && rec.inviterId !== 'vanity' ? statsOf(rec.inviterId) : null;
-  const e = new EmbedBuilder()
-    .setColor(color(cfg, 'leave', 0xe74c3c))
-    .setAuthor({ name: '📤 Member Keluar', iconURL: member.user.displayAvatarURL({ size: 128 }) })
-    .setDescription(`<@${member.id}> telah meninggalkan **${guild.name}**.`)
-    .setThumbnail(member.user.displayAvatarURL({ extension: 'png', size: 256 }))
-    .addFields(
-      { name: '👤 Member', value: `\`${member.user.globalName || member.user.username}\`\n┗ @${member.user.username}`, inline: true },
-      { name: '🎫 Diundang Oleh', value: inviterText(rec), inline: true },
-      { name: '⏳ Lama di Server', value: joinedAt ? `\`${stay(Date.now() - joinedAt)}\`` : '`-`', inline: true },
-    );
-  if (s) e.addFields({ name: '📊 Undangan Inviter', value: `\`✅ ${num(s.valid)} valid\` • \`📤 ${num(s.left)} keluar\``, inline: true });
-  return { embeds: [e.setFooter(footer(guild)).setTimestamp(new Date())], allowedMentions: { parse: [] } };
+  return logCard({
+    guild,
+    accent: color(cfg, 'leave', 0xe74c3c),
+    thumb: member.user.displayAvatarURL({ extension: 'png', size: 256 }),
+    header: `## 📤 Member Keluar\n<@${member.id}> telah meninggalkan **${guild.name}**.`,
+    blocks: [
+      [userLine(member), `**⏳ Lama di Server:** ${joinedAt ? `\`${stay(Date.now() - joinedAt)}\`` : '`-`'}`, `**👥 Sisa Member:** \`${num(guild.memberCount)}\``].join('\n'),
+      [
+        '### 🎫 Info Undangan',
+        `**🙋 Diundang Oleh:** ${inviterText(rec)}`,
+        s ? `**📊 Undangan Inviter:** \`✅ ${num(s.valid)} valid\` • \`📤 ${num(s.left)} keluar\`` : null,
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    ],
+  });
 }
 
 function stay(ms) {
@@ -272,7 +296,7 @@ async function sendLog(guild, payload) {
       return;
     } catch (e) {
       if (i === 1 || e.code === 50013 || e.code === 50001) {
-        return console.error(`[invites] gagal kirim log (${e.code || ''} ${e.message}) — cek izin bot di channel invite log: View Channel, Send Messages, Embed Links.`);
+        return console.error(`[invites] gagal kirim log (${e.code || ''} ${e.message}) — cek izin bot di channel invite log: View Channel, Send Messages.`);
       }
       await new Promise((r) => setTimeout(r, 2000));
     }
