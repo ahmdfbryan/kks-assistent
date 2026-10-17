@@ -55,8 +55,8 @@ function productsOf(cfg, group = 'main') {
 const channelOf = (cfg, key) => cfg?.channels?.[key] || DEFAULT_CHANNELS[key] || null;
 const DIGITAL_TEXT = {
   panel: {
-    title: '🛒 Produk Digital | {server}',
-    subtitle: 'Digital Store • {server}',
+    title: '🛒 Produk Digital',
+    subtitle: 'Official Store • {server}',
     description:
       'Butuh **akun premium & produk digital** dengan harga super hemat? ✨\n\nPilih produk di bawah untuk melihat detail & membuka ticket pemesanan. Proses **cepat, aman,** dan dibantu admin sampai aktif!',
   },
