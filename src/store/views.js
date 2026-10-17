@@ -2279,7 +2279,7 @@ function buildLeaderboardV2(guild, cfg) {
   return pcard({
     accent: color(cfg, 'brand', 0x3498db),
     thumb: icon256(guild),
-    header: `# 🏆 Top 10 Spender\n-# ${name} • Spender Leaderboard`,
+    header: `# 🏆 Top 10 Spender | ${guild.name}\n-# ${name} • Spender Leaderboard`,
     blocks: [
       top.length ? `### 👑 Podium Sultan\n${podium.join('\n\n')}` : '_Belum ada transaksi. Jadilah spender pertama!_ 🚀',
       rest.length ? `### 📋 Peringkat 4 – 10\n${rest.join('\n')}` : null,
