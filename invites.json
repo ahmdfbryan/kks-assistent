@@ -3,12 +3,11 @@
     "File ini dibaca ulang setiap dipakai — tidak perlu restart setelah mengubah teks.",
     "channelId = channel LOG invite (member masuk / keluar).",
     "leaderboardChannelId = channel Top 10 Inviter (1 pesan yang ter-update otomatis). Kirim dengan /invite-log leaderboard.",
-    "fakeDays = akun Discord yang umurnya kurang dari X hari dianggap 'fake' & tidak dihitung di leaderboard (0 = matikan).",
+    "Undangan dihitung VALID setelah member yang diundang verifikasi (role = roleId di verify.json). Tidak ada sistem fake untuk akun baru.",
     "Bot butuh izin Manage Server (untuk membaca daftar undangan) di server ini."
   ],
   "channelId": "1559920442318258359",
   "leaderboardChannelId": "1560212055074799696",
-  "fakeDays": 7,
   "colors": {
     "brand": "#3498DB",
     "join": "#2ECC71",
