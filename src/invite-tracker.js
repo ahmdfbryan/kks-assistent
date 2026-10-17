@@ -19,6 +19,8 @@ const {
 /**
  * Invite Log + Top 10 Inviter (channel terpisah, ter-update otomatis).
  * - Member masuk → log siapa yang mengundang (link siapa, kode, total undangan inviter).
+ * - Undangan baru dihitung VALID setelah member yang diundang verifikasi (dapat role verifikasi di verify.json).
+ *   Tidak ada sistem "fake" — akun baru tetap valid asalkan sudah verifikasi.
  * - Member keluar → log + jumlah undangan inviter dikurangi.
  * - Top 10 Inviter di channel terpisah (leaderboardChannelId), 1 pesan yang di-edit otomatis.
  * Setiap member hanya dihitung 1x per inviter (keluar-masuk tidak menggandakan hitungan).
@@ -30,7 +32,7 @@ const num = (n) => Math.round(Number(n) || 0).toLocaleString('id-ID');
 const ts = (ms, s = 'R') => `<t:${Math.floor(ms / 1000)}:${s}>`;
 
 // Pengaturan bawaan kalau invites.json belum ada / rusak (supaya bot tetap jalan).
-const DEFAULT_CONFIG = { channelId: '1559920442318258359', leaderboardChannelId: '1560212055074799696', fakeDays: 7, colors: {}, leaderboard: {} };
+const DEFAULT_CONFIG = { channelId: '1559920442318258359', leaderboardChannelId: '1560212055074799696', colors: {}, leaderboard: {} };
 let warned = false;
 function loadConfig() {
   try {
@@ -43,6 +45,20 @@ function loadConfig() {
     return DEFAULT_CONFIG;
   }
 }
+/** Role verifikasi diambil dari verify.json (roleId). */
+function verifyRoleId() {
+  try {
+    const id = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'verify.json'), 'utf8')).roleId;
+    return isId(id) ? String(id) : null;
+  } catch {
+    return null;
+  }
+}
+/** Kalau role verifikasi belum diatur, semua undangan langsung valid (supaya tidak macet). */
+const isVerifiedMember = (member) => {
+  const rid = verifyRoleId();
+  return !rid || Boolean(member?.roles?.cache?.has(rid));
+};
 function loadData() {
   try {
     const d = JSON.parse(fs.readFileSync(DATA, 'utf8'));
@@ -66,20 +82,22 @@ const fill = (t, guild) => String(t || '').replace(/\{server\}/g, guild.name);
 const footer = (guild) => ({ text: guild.name, iconURL: guild.iconURL({ extension: 'png', size: 128 }) || undefined });
 
 // ───────────────────────── Statistik ─────────────────────────
-/** { inviterId: { total, left, fake, valid } } dihitung dari data member. */
+/** { inviterId: { total, left, pending, valid } } dihitung dari data member.
+ *  valid = sudah verifikasi & masih di server • pending = belum verifikasi • left = sudah keluar. */
+const EMPTY = () => ({ total: 0, left: 0, pending: 0, valid: 0 });
 function computeStats() {
   const stats = {};
   for (const m of Object.values(data.members)) {
     if (!m.inviterId || m.inviterId === 'vanity') continue;
-    const s = (stats[m.inviterId] ||= { total: 0, left: 0, fake: 0, valid: 0 });
+    const s = (stats[m.inviterId] ||= EMPTY());
     s.total += 1;
     if (m.left) s.left += 1;
-    else if (m.fake) s.fake += 1;
+    else if (m.verified === false) s.pending += 1;
     else s.valid += 1;
   }
   return stats;
 }
-const statsOf = (userId) => computeStats()[userId] || { total: 0, left: 0, fake: 0, valid: 0 };
+const statsOf = (userId) => computeStats()[userId] || EMPTY();
 
 // ───────────────────────── Cache undangan ─────────────────────────
 const cache = new Map(); // guildId → Map(code → { uses, inviterId, maxUses })
@@ -160,7 +178,7 @@ function buildJoinLog(member, rec, cfg) {
   const guild = member.guild;
   const s = rec?.inviterId && rec.inviterId !== 'vanity' ? statsOf(rec.inviterId) : null;
   const notes = [];
-  if (rec?.fake) notes.push(`⚠️ **Akun Baru** — umur akun kurang dari **${num(cfg.fakeDays)} hari**, tidak dihitung di leaderboard.`);
+  if (rec?.inviterId && rec.inviterId !== 'vanity' && rec.verified === false) notes.push('⏳ **Menunggu Verifikasi** — undangan dihitung **valid** setelah member ini menyelesaikan verifikasi.');
   if (rec?.rejoin) notes.push('🔁 **Rejoin** — member ini pernah bergabung sebelumnya.');
   return logCard({
     guild,
@@ -219,12 +237,11 @@ function buildLeaderboard(guild, cfg) {
   const medals = ['🥇', '🥈', '🥉'];
   const stats = computeStats();
   const top = Object.entries(stats)
-    .filter(([, s]) => s.total > 0)
-    .sort((a, b) => b[1].valid - a[1].valid || b[1].total - a[1].total)
+    .filter(([, s]) => s.valid > 0)
+    .sort((a, b) => b[1].valid - a[1].valid)
     .slice(0, 10);
-  const extra = (s) => [s.left ? `📤 ${num(s.left)} keluar` : null, s.fake ? `⚠️ ${num(s.fake)} fake` : null].filter(Boolean).join(' • ');
-  const podium = top.slice(0, 3).map(([id, s], i) => `${medals[i]} <@${id}>\n┗ ✅ **${num(s.valid)} undangan**${extra(s) ? ` • ${extra(s)}` : ''}`);
-  const rest = top.slice(3).map(([id, s], i) => `\`#${i + 4}\` <@${id}> • ✅ **${num(s.valid)} undangan**${extra(s) ? ` • ${extra(s)}` : ''}`);
+  const podium = top.slice(0, 3).map(([id, s], i) => `${medals[i]} <@${id}>\n┗ ✅ **${num(s.valid)} undangan valid**`);
+  const rest = top.slice(3).map(([id, s], i) => `\`#${i + 4}\` <@${id}> • ✅ **${num(s.valid)} undangan valid**`);
   const all = Object.values(stats);
 
   const text = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000));
@@ -240,9 +257,9 @@ function buildLeaderboard(guild, cfg) {
     rest.length ? `### 📋 Peringkat 4 – 10\n${rest.join('\n')}` : null,
     [
       `✅ **Total Undangan Valid:** \`${num(all.reduce((a, s) => a + s.valid, 0))}\``,
-      `🙋 **Total Inviter:** \`${num(all.filter((s) => s.total > 0).length)}\``,
+      `🙋 **Total Inviter:** \`${num(all.filter((s) => s.valid > 0).length)}\``,
     ].join('\n'),
-    `-# 💡 ${lb.tip || 'Cek jumlah undanganmu dengan `/invites`'}\n-# ${guild.name} • Diperbarui <t:${Math.floor(Date.now() / 1000)}:R>`,
+    `-# ✅ Undangan dihitung valid setelah member yang diundang menyelesaikan verifikasi.\n-# 💡 ${lb.tip || 'Cek jumlah undanganmu dengan `/invites`'}\n-# ${guild.name} • Diperbarui <t:${Math.floor(Date.now() / 1000)}:R>`,
   ];
   for (const b of blocks.filter(Boolean)) {
     box.addSeparatorComponents(line());
@@ -310,6 +327,7 @@ function registerInviteTracker(client) {
       await refreshCache(guild);
       // Simpan semua member ke cache supaya data "lama di server" tersedia saat member keluar.
       await guild.members?.fetch().catch((e) => console.warn('[invites] gagal memuat daftar member:', e.message));
+      syncVerified(guild);
     }
     if (data.leaderboard) scheduleLeaderboard(client);
   });
@@ -330,12 +348,11 @@ function registerInviteTracker(client) {
         const cfg = loadConfig();
         const found = member.user.bot ? null : await detectInvite(member.guild);
         const old = data.members[member.id];
-        const fakeMs = (Number(cfg.fakeDays) || 0) * 86400000;
         const rec = {
           inviterId: found?.inviterId || null,
           code: found?.code || null,
           joinedAt: Date.now(),
-          fake: Boolean(fakeMs && Date.now() - member.user.createdTimestamp < fakeMs),
+          verified: isVerifiedMember(member),
           left: false,
           rejoin: Boolean(old),
           bot: member.user.bot || undefined,
@@ -351,6 +368,18 @@ function registerInviteTracker(client) {
       })
       .catch((e) => console.error('[invites] join:', e.message));
     queues.set(member.guild.id, next);
+  });
+
+  // Member mendapat role verifikasi → undangannya menjadi valid.
+  client.on(Events.GuildMemberUpdate, (oldM, newM) => {
+    if (newM.user?.bot) return;
+    const rec = data.members[newM.id];
+    if (!rec || rec.left || rec.verified !== false) return;
+    if (!isVerifiedMember(newM)) return;
+    rec.verified = true;
+    rec.verifiedAt = Date.now();
+    save();
+    if (rec.inviterId && rec.inviterId !== 'vanity') scheduleLeaderboard(client);
   });
 
   client.on(Events.GuildMemberRemove, async (member) => {
@@ -369,6 +398,27 @@ function registerInviteTracker(client) {
   });
 }
 
+/** Saat bot menyala: cocokkan status verifikasi semua member tercatat (role bisa berubah saat bot mati). */
+function syncVerified(guild) {
+  const rid = verifyRoleId();
+  let changed = false;
+  for (const [id, rec] of Object.entries(data.members)) {
+    if (rec.left) continue;
+    const m = guild.members.cache.get(id);
+    if (!m) continue;
+    const v = !rid || m.roles.cache.has(rid);
+    if (rec.verified !== v) {
+      rec.verified = v;
+      changed = true;
+    }
+    if ('fake' in rec) {
+      delete rec.fake;
+      changed = true;
+    }
+  }
+  if (changed) save();
+}
+
 // ───────────────────────── Command ─────────────────────────
 /** /invites [member] → statistik undangan (hanya terlihat yang memakai command). */
 const invitesCommand = {
@@ -383,7 +433,8 @@ const invitesCommand = {
     const s = statsOf(user.id);
     const stats = computeStats();
     const rank = Object.entries(stats)
-      .sort((a, b) => b[1].valid - a[1].valid || b[1].total - a[1].total)
+      .filter(([, x]) => x.valid > 0)
+      .sort((a, b) => b[1].valid - a[1].valid)
       .findIndex(([id]) => id === user.id);
     const rec = data.members[user.id];
     const e = new EmbedBuilder()
@@ -393,9 +444,9 @@ const invitesCommand = {
       .addFields(
         { name: '✅ Valid', value: `\`${num(s.valid)}\``, inline: true },
         { name: '📥 Total', value: `\`${num(s.total)}\``, inline: true },
-        { name: '🏆 Peringkat', value: rank >= 0 && s.total ? `\`#${rank + 1}\`` : '`-`', inline: true },
+        { name: '🏆 Peringkat', value: rank >= 0 ? `\`#${rank + 1}\`` : '`-`', inline: true },
         { name: '📤 Keluar', value: `\`${num(s.left)}\``, inline: true },
-        { name: '⚠️ Fake', value: `\`${num(s.fake)}\``, inline: true },
+        { name: '⏳ Belum Verifikasi', value: `\`${num(s.pending)}\``, inline: true },
         { name: '🎫 Diundang Oleh', value: inviterText(rec), inline: true },
       )
       .setFooter(footer(interaction.guild))
