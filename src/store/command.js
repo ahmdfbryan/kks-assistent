@@ -213,6 +213,7 @@ const storeCommand = {
       const label = plan ? `${target.label} (${plan.label})` : target.label;
       const before = plan ? planStockOf(target, plan.id) : stockOf(target);
       const after = plan ? setPlanStock(target, plan.id, sub === 'stok-set' ? n : before + n) : setStock(target, sub === 'stok-set' ? n : before + n);
+      if (target.type === 'robux') state.stockBase = after; // patokan bar "Ketersediaan Stock" di pengumuman terjual
       save();
       refreshPanel();
       await announce(guild, 'stock', {
