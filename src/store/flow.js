@@ -569,7 +569,29 @@ async function createOrder(interaction, productId, amount) {
   }
 
   refreshPanel();
-  await closeIfSoldOut(guild, `📦 **Stock Robux hari ini sudah HABIS!** ${product.label} otomatis ditutup.`);
+  const closed = await closeIfSoldOut(guild, `📦 **Stock Robux hari ini sudah HABIS!** ${product.label} otomatis ditutup.`);
+  // Info sisa stock di channel stock (kalau habis → sudah diumumkan lewat pengumuman tutup).
+  if (!closed) announceSold(guild, product, amount);
+}
+
+/**
+ * Pengumuman "Robux terjual, sisa stock X" di channel stock.
+ * Order beruntun dalam 15 detik digabung jadi 1 pengumuman (tidak spam).
+ * Matikan dengan "announceSold": false di store.json.
+ */
+const soldBuffer = new Map(); // productId → { amount, count, timer }
+function announceSold(guild, product, amount) {
+  if (loadConfig()?.announceSold === false) return;
+  const b = soldBuffer.get(product.id) || { amount: 0, count: 0, timer: null };
+  b.amount += amount;
+  b.count += 1;
+  clearTimeout(b.timer);
+  b.timer = setTimeout(() => {
+    soldBuffer.delete(product.id);
+    if (stockOf(product) <= 0) return; // sudah habis → pengumuman tutup sudah terkirim
+    announce(guild, 'sold', { product, amount: b.amount, count: b.count }).catch(() => {});
+  }, 15000);
+  soldBuffer.set(product.id, b);
 }
 
 // ══════════════════════ REKBER (rekening bersama) ══════════════════════
