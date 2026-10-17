@@ -2120,7 +2120,7 @@ function buildPanelV2(guild, cfg, group = 'main') {
   return pcard({
     accent: color(cfg, 'brand', 0x3498db),
     thumb: icon256(guild),
-    header: `# ${fill(p.title || '🛒 {server}', name)}\n-# ${fill(p.subtitle || (digital ? 'Digital Store • {server}' : 'Official Store • {server}'), name)}`,
+    header: `# ${fill(p.title || '🛒 {server}', name)}\n-# ${fill(p.subtitle || 'Official Store • {server}', name)}`,
     image: p.bannerImage || null,
     blocks: [fill(p.description, name) || null, stats.join('\n')],
     footer: `${name.name} • Diperbarui <t:${Math.floor(Date.now() / 1000)}:R>`,
