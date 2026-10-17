@@ -452,6 +452,29 @@ function buildStoreAnnouncement(guild, cfg, kind, extra = {}) {
         { name: '🏪 Status', value: sp && isProductOpen(sp) ? '`🟢 BUKA`' : '`🔴 TUTUP`', inline: true },
       );
     if (sp?.type === 'boost') e.addFields({ name: '🚀 Stock per Paket', value: boostStockLines(sp) || '-' });
+  } else if (kind === 'sold') {
+    // extra.product = produk Robux yang terjual, extra.amount = jumlah terjual, extra.count = jumlah order
+    const sp = extra.product || robux;
+    const unit = stockUnit(sp);
+    const left = stockOf(sp);
+    const sold = Number(extra.amount) || 0;
+    const total = Math.max(Number(state.stockBase) || 0, left + sold); // patokan = stock yang terakhir dibuka admin
+    const pct = total > 0 ? Math.round((left / total) * 100) : 0;
+    const filled = Math.round(pct / 10);
+    const bar = `${'🟦'.repeat(filled)}${'⬛'.repeat(10 - filled)} \`${pct}%\``;
+    e.setColor(color(cfg, 'brand', 0x3498db))
+      .setTitle(`🛒 ${sp?.label || 'Robux'} Baru Saja Terjual!`)
+      .setDescription(
+        `${extra.count > 1 ? `**${num(extra.count)} pesanan**` : 'Ada pesanan'} masuk sebanyak **${num(sold)} ${unit}**. 🎉\n` +
+          `Sisa stock tinggal **${num(left)} ${unit}** — buruan order sebelum kehabisan! 🔥` +
+          (panelLink ? `\n\n🛒 Order sekarang: ${panelLink}` : ''),
+      )
+      .addFields(
+        { name: '📤 Terjual', value: `\`${num(sold)} ${unit}\``, inline: true },
+        { name: '📦 Sisa Stock', value: `\`${num(left)} ${unit}\``, inline: true },
+        { name: '💱 Rate', value: `\`${rupiah(rateOf(cfg, sp))} / Robux\``, inline: true },
+        { name: '📊 Ketersediaan Stock', value: bar },
+      );
   } else if (kind === 'returned') {
     const t = extra.ticket;
     const sp = (cfg.products || []).find((x) => x.id === t.productId) || robux;
