@@ -19,6 +19,7 @@ const {
 } = require('discord.js');
 const { loadConfig, isId, rupiah, num, getProduct, GROUPS, productsOf } = require('./config');
 const { archiveStoreTicket } = require('../ticket-archive');
+const REP = require('./reputation');
 const { state, save, productState, productStatsOf, hasStock, stockOf, setStock, stockUnit, isProductOpen, kindOf, activeTicketOf, nextTicketId, planStockOf, setPlanStock } = require('./state');
 const { lookupRobloxUser, lookupGamepass, parseGamepassId } = require('./roblox');
 const V = require('./views');
@@ -161,7 +162,12 @@ async function refreshCatalog(group = 'main') {
     }
   }
 }
-const refreshLeaderboard = () => debounce('leaderboard', () => editTracked('leaderboard', V.buildLeaderboard));
+const refreshLeaderboard = () => {
+  debounce('leaderboard', () => editTracked('leaderboard', V.buildLeaderboard));
+  refreshReputation();
+};
+// Panel Store Reputation (rating, statistik, feedback terbaru).
+const refreshReputation = () => debounce('reputation', () => editTracked('reputation', REP.buildReputation), 2500);
 
 // ══════════════════════ Pengumuman di channel stock ══════════════════════
 async function announce(guild, kind, extra = {}, ping = false) {
@@ -2139,6 +2145,7 @@ async function postTestimony(guild, t) {
   t.testimonyMessageId = msg?.id || null;
   t.testimonyPosted = true;
   save();
+  refreshReputation();
 }
 
 async function onTestimonyModal(interaction, ticketId) {
