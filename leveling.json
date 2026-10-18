@@ -1,0 +1,43 @@
+{
+  "_petunjuk": [
+    "Leveling: XP dari chat & voice. File ini dibaca ulang otomatis (tidak perlu restart).",
+    "channelId = channel notifikasi naik level + Top 10 Level sticky (kirim dengan /level panel).",
+    "xp.messageMin / messageMax = XP acak per pesan, cooldownSeconds = jeda dapat XP chat (anti spam).",
+    "xp.voicePerMinute = XP per menit di voice (minimal voiceMinMembers orang, tidak deafen, bukan channel AFK). voiceEnabled false = matikan XP voice.",
+    "ignoredChannels = ID channel / kategori yang tidak memberi XP. ignoredRoles = role yang tidak mendapat XP.",
+    "titles = gelar sesuai level (hanya tampilan, belum ada reward role). pingOnLevelUp = mention member saat naik level.",
+    "Rumus: XP ke level berikutnya = 5 × level² + 50 × level + 100 (Lv1 = 100 XP, Lv5 = 1.150 XP total, Lv10 = 4.675 XP total)."
+  ],
+  "channelId": "1529215816539701308",
+  "color": "#3498DB",
+  "xp": {
+    "messageMin": 15,
+    "messageMax": 25,
+    "cooldownSeconds": 60,
+    "voiceEnabled": true,
+    "voicePerMinute": 10,
+    "voiceMinMembers": 2
+  },
+  "ignoredChannels": [],
+  "ignoredRoles": [],
+  "pingOnLevelUp": true,
+  "stickyLeaderboard": true,
+  "titles": [
+    { "level": 0, "name": "🌱 Newbie" },
+    { "level": 5, "name": "🌿 Member Aktif" },
+    { "level": 10, "name": "⚡ Regular" },
+    { "level": 20, "name": "🔥 Veteran" },
+    { "level": 30, "name": "💎 Elite" },
+    { "level": 50, "name": "👑 Legend" },
+    { "level": 75, "name": "🌌 Mythic" }
+  ],
+  "levelUp": {
+    "title": "🎉 Level Up!",
+    "message": "Selamat {user}! Kamu naik ke **Level {level}** 🚀\nTerus aktif ngobrol & nongkrong di voice untuk naik level berikutnya!"
+  },
+  "leaderboard": {
+    "title": "🏆 Top 10 Level | {server}",
+    "subtitle": "{server} • Level Leaderboard",
+    "bannerImage": ""
+  }
+}
