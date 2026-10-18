@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, EmbedBuilder } = require('discord.js');
 const { loadConfig, isId, rupiah, num, color, channelOf, GROUPS } = require('./config');
+const REP = require('./reputation');
 const { state, save, productState, isProductOpen, hasStock, stockOf, setStock, stockUnit, planStockOf, setPlanStock } = require('./state');
 const V = require('./views');
 const SP = require('./spender');
@@ -86,6 +87,12 @@ const storeCommand = {
     )
     .addSubcommand((s) =>
       s
+        .setName('reputation')
+        .setDescription('Kirim / pindahkan panel Reputasi Toko (rating, statistik, feedback terbaru)')
+        .addChannelOption((o) => o.setName('channel').setDescription('Default: channels.reputation di store.json').addChannelTypes(...TEXT)),
+    )
+    .addSubcommand((s) =>
+      s
         .setName('catalog')
         .setDescription('Kirim / pindahkan katalog store / produk digital (ter-update otomatis)')
         .addStringOption((o) =>
@@ -160,6 +167,13 @@ const storeCommand = {
       if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
       await placeTracked(interaction, sub, channel, V.buildLeaderboard);
       return interaction.editReply(`✅ Leaderboard dikirim ke ${channel} dan akan ter-update otomatis.`);
+    }
+
+    if (sub === 'reputation') {
+      const channel = await resolveChannel(interaction, 'reputation');
+      if (!channel?.isTextBased()) return interaction.editReply('❌ Channel tidak ditemukan.');
+      await placeTracked(interaction, 'reputation', channel, REP.buildReputation);
+      return interaction.editReply(`✅ Panel **Reputasi Toko** dikirim ke ${channel} dan akan ter-update otomatis setiap ada testimoni / order selesai.`);
     }
 
     if (sub === 'catalog') {
