@@ -17,6 +17,7 @@ const supportTicket = require('./support-ticket');
 const suggestions = require('./suggestions');
 const booster = require('./booster');
 const system = require('./system');
+const leveling = require('./leveling');
 
 const byName = new Map(commands.map((c) => [c.data.name, c]));
 // GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
@@ -43,6 +44,7 @@ supportTicket.registerSupportTickets(client);
 suggestions.registerSuggestions(client);
 booster.registerBooster(client);
 system.registerSystem(client);
+leveling.registerLeveling(client);
 
 client.once(Events.ClientReady, (c) => {
   console.log(`🤖 Login sebagai ${c.user.tag}`);
