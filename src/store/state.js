@@ -14,6 +14,7 @@ const DEFAULT = {
   rates: {}, // { productId: rate }
   panel: null, // { channelId, messageId }
   leaderboard: null, // { channelId, messageId }
+  reputation: null, // panel Store Reputation { channelId, messageId }
   howto: null, // panel How to Order { channelId, messageId }
   catalog: null, // { channelId, headerId, cards: { productId: messageId } }
   digitalPanel: null, // panel Produk Digital { channelId, messageId }
