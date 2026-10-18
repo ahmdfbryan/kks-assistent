@@ -354,6 +354,13 @@ async function updateLeaderboard() {
   const cfg = loadConfig();
   const payload = buildLeaderboard(ch.guild, cfg);
   // Sticky: kalau ada pesan baru di bawahnya → kirim ulang supaya leaderboard tetap paling bawah.
+  // Pesan leaderboard dihapus manual → berhenti (tidak dikirim ulang).
+  const old = await ch.messages.fetch(loc.messageId).catch((e) => (e.code === 10008 ? false : null));
+  if (old === false) {
+    data.panel = null;
+    saveNow();
+    return;
+  }
   const isLast = ch.lastMessageId === loc.messageId;
   if (repost && cfg.stickyLeaderboard !== false && !isLast) {
     const sent = await ch.send(payload);
@@ -362,13 +369,7 @@ async function updateLeaderboard() {
     saveNow();
     return;
   }
-  try {
-    await ch.messages.edit(loc.messageId, payload);
-  } catch {
-    const sent = await ch.send(payload);
-    data.panel = { channelId: ch.id, messageId: sent.id };
-    saveNow();
-  }
+  await ch.messages.edit(loc.messageId, payload).catch((e) => console.warn('[level] edit leaderboard:', e.message));
 }
 
 // ───────────────────────── Event ─────────────────────────
@@ -487,6 +488,7 @@ const levelCommand = {
         .addUserOption((o) => o.setName('member').setDescription('Member').setRequired(true))
         .addIntegerOption((o) => o.setName('xp').setDescription('Contoh: 500 atau -200').setRequired(true).setMinValue(-1000000).setMaxValue(1000000)),
     )
+    .addSubcommand((s) => s.setName('hapus-panel').setDescription('(Admin) Hapus Top 10 Level sticky dari channel'))
     .addSubcommand((s) => s.setName('sinkron-role').setDescription('(Admin) Pasang ulang role level ke semua member sesuai level mereka'))
     .addSubcommand((s) =>
       s
@@ -568,6 +570,16 @@ const levelCommand = {
       await btn.update({ content: '♻️ Level semua member sudah direset ke 0. Melepas role level…', components: [] });
       const res2 = await syncAll(interaction.guild, cfg);
       return btn.editReply({ content: `♻️ Level semua member sudah direset ke 0. Role level dilepas dari **${num(res2.changed)}** member.`, components: [] });
+    }
+    if (sub === 'hapus-panel') {
+      const loc = data.panel;
+      if (!loc) return interaction.reply({ content: 'ℹ️ Tidak ada panel Top 10 Level yang aktif.', flags: EPH });
+      data.panel = null;
+      clearTimeout(lbTimer);
+      saveNow();
+      const ch = await interaction.guild.channels.fetch(loc.channelId).catch(() => null);
+      await ch?.messages.delete(loc.messageId).catch(() => {});
+      return interaction.reply({ content: `🗑️ Panel Top 10 Level di <#${loc.channelId}> sudah dihapus dan tidak akan dikirim ulang. Kirim lagi kapan saja dengan \`/level panel\`.`, flags: EPH });
     }
     if (sub === 'sinkron-role') {
       await interaction.deferReply({ flags: EPH });
