@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { fetchAllMembers } = require('./member-cache');
 const path = require('path');
 const {
   ActionRowBuilder,
@@ -279,7 +280,7 @@ const boosterCommand = {
     const cfg = loadConfig();
 
     if (sub === 'list') {
-      await guild.members.fetch().catch(() => {});
+      await fetchAllMembers(guild);
       const list = [...activeBoosters(guild).values()];
       const shown = list.slice(0, 25).map((m, i) => `\`${i + 1}.\` <@${m.id}> • sejak ${ts(m.premiumSinceTimestamp, 'D')} (${ts(m.premiumSinceTimestamp, 'R')})`);
       return interaction.reply({
