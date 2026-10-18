@@ -25,6 +25,7 @@ const {
  * - Top 10 Inviter di channel terpisah (leaderboardChannelId), 1 pesan yang di-edit otomatis.
  * Setiap member hanya dihitung 1x per inviter (keluar-masuk tidak menggandakan hitungan).
  */
+const { fetchAllMembers } = require('./member-cache');
 const FILE = path.join(__dirname, '..', 'invites.json');
 const DATA = path.join(__dirname, '..', 'data', 'invites.json');
 const isId = (v) => /^\d{17,20}$/.test(String(v || ''));
@@ -326,7 +327,7 @@ function registerInviteTracker(client) {
     for (const guild of client.guilds.cache.values()) {
       await refreshCache(guild);
       // Simpan semua member ke cache supaya data "lama di server" tersedia saat member keluar.
-      await guild.members?.fetch().catch((e) => console.warn('[invites] gagal memuat daftar member:', e.message));
+      await fetchAllMembers(guild);
       syncVerified(guild);
     }
     if (data.leaderboard) scheduleLeaderboard(client);
