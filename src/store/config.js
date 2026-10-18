@@ -34,7 +34,7 @@ const GROUPS = {
   main: { panelKey: 'panel', catalogKey: 'catalog' },
   digital: { panelKey: 'digitalPanel', catalogKey: 'digitalCatalog' },
 };
-const DEFAULT_CHANNELS = { digitalPanel: '1560602559062999120', digitalCatalog: '1560602363553775686' };
+const DEFAULT_CHANNELS = { digitalPanel: '1560602559062999120', digitalCatalog: '1560602363553775686', reputation: '1561325807559901234' };
 /** Grup produk: store.json → products[].group, atau otomatis (Canva = digital). */
 const groupOf = (p) => p?.group || (['canva', 'boost'].includes(p?.type) ? 'digital' : 'main');
 /** Daftar produk per grup. Panel digital otomatis punya tombol Coming Soon kalau belum ada. */
