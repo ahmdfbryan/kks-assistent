@@ -1,0 +1,24 @@
+{
+  "_petunjuk": [
+    "Ticket Archive = arsip lengkap setiap ticket yang selesai (kartu Components V2 + galeri bukti gambar + file transkrip chat HTML).",
+    "orderChannelId = channel arsip ticket ORDER (Robux Visend, Gamepass, Canva Pro, Server Boost, Rekber). ncsChannelId = channel arsip ticket NCS Ticket Center.",
+    "Gunakan channel PRIVATE (hanya owner / admin). Bot butuh izin: View Channel, Send Messages, Attach Files.",
+    "Arsip dibuat otomatis tepat sebelum channel ticket dihapus. Kalau channel dihapus manual, arsip tetap dibuat tanpa transkrip.",
+    "galleryImages = jumlah gambar dari ticket (bukti transfer, screenshot) yang disimpan permanen di galeri arsip (maks 10).",
+    "inlineImages = true → gambar ikut tersimpan di dalam file transkrip HTML (tetap bisa dilihat walau link Discord kedaluwarsa).",
+    "maxUploadMB = batas total ukuran upload per arsip (default 9 MB, batas Discord 10 MB). maxMessages = jumlah pesan maksimal yang ditranskrip."
+  ],
+  "orderChannelId": "1561261218168184862",
+  "ncsChannelId": "1561261090443104366",
+  "galleryImages": 6,
+  "inlineImages": true,
+  "maxUploadMB": 9,
+  "maxMessages": 1000,
+  "colors": {
+    "completed": "#2ECC71",
+    "cancelled": "#E74C3C",
+    "refund": "#E67E22",
+    "closed": "#3498DB",
+    "brand": "#3498DB"
+  }
+}
