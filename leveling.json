@@ -3,7 +3,7 @@
     "Leveling: XP dari chat & voice. File ini dibaca ulang otomatis (tidak perlu restart).",
     "channelId = channel notifikasi naik level + Top 10 Level sticky (kirim dengan /level panel).",
     "xp.messageMin / messageMax = XP acak per pesan, cooldownSeconds = jeda dapat XP chat (anti spam).",
-    "xp.voicePerMinute = XP per menit di voice (minimal voiceMinMembers orang, tidak deafen, bukan channel AFK). voiceEnabled false = matikan XP voice.",
+    "xp.voicePerMinute = XP per menit di voice (tidak deafen, bukan channel AFK; voiceMinMembers = minimal jumlah orang bukan bot di voice supaya dapat XP, 1 = sendirian pun dapat). Waktu voice tetap tercatat walau tidak dapat XP. voiceEnabled false = matikan XP voice.",
     "ignoredChannels = ID channel / kategori yang tidak memberi XP. ignoredRoles = role yang tidak mendapat XP.",
     "titles = gelar sesuai level (hanya tampilan, belum ada reward role). pingOnLevelUp = mention member saat naik level.",
     "Rumus: XP ke level berikutnya = 5 × level² + 50 × level + 100 (Lv1 = 100 XP, Lv5 = 1.150 XP total, Lv10 = 4.675 XP total)."
@@ -16,7 +16,7 @@
     "cooldownSeconds": 60,
     "voiceEnabled": true,
     "voicePerMinute": 10,
-    "voiceMinMembers": 2
+    "voiceMinMembers": 1
   },
   "ignoredChannels": [],
   "ignoredRoles": [],
