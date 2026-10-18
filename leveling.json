@@ -5,7 +5,7 @@
     "xp.messageMin / messageMax = XP acak per pesan, cooldownSeconds = jeda dapat XP chat (anti spam).",
     "xp.voicePerMinute = XP per menit di voice (tidak deafen, bukan channel AFK; voiceMinMembers = minimal jumlah orang bukan bot di voice supaya dapat XP, 1 = sendirian pun dapat). Waktu voice tetap tercatat walau tidak dapat XP. voiceEnabled false = matikan XP voice.",
     "ignoredChannels = ID channel / kategori yang tidak memberi XP. ignoredRoles = role yang tidak mendapat XP.",
-    "titles = gelar sesuai level (hanya tampilan, belum ada reward role). pingOnLevelUp = mention member saat naik level.",
+    "titles = role reward per level (level, name = nama gelar di /rank & kartu level up, roleId = role yang diberikan otomatis). keepPreviousRoles false = member hanya memegang role level tertinggi (role lama dilepas), true = semua role yang sudah dicapai tetap dipasang. Bot butuh izin Manage Roles & role bot harus DI ATAS semua role level. Setelah mengubah titles, jalankan /level sinkron-role.",
     "Rumus: XP ke level berikutnya = 5 × level² + 50 × level + 100 (Lv1 = 100 XP, Lv5 = 1.150 XP total, Lv10 = 4.675 XP total)."
   ],
   "channelId": "1529215816539701308",
@@ -22,14 +22,18 @@
   "ignoredRoles": [],
   "pingOnLevelUp": true,
   "stickyLeaderboard": true,
+  "keepPreviousRoles": false,
   "titles": [
-    { "level": 0, "name": "🌱 Newbie" },
-    { "level": 5, "name": "🌿 Member Aktif" },
-    { "level": 10, "name": "⚡ Regular" },
-    { "level": 20, "name": "🔥 Veteran" },
-    { "level": 30, "name": "💎 Elite" },
-    { "level": 50, "name": "👑 Legend" },
-    { "level": 75, "name": "🌌 Mythic" }
+    { "level": 1, "name": "🌱 Fresh Face", "roleId": "1561435377921818815" },
+    { "level": 5, "name": "🗨️ Talker", "roleId": "1561435283663224933" },
+    { "level": 10, "name": "🎧 Hangout Buddy", "roleId": "1561435479122120774" },
+    { "level": 15, "name": "⚡ Energizer", "roleId": "1561435543454351470" },
+    { "level": 25, "name": "🔥 Hype Maker", "roleId": "1561435612546863194" },
+    { "level": 35, "name": "🌟 Rising Star", "roleId": "1561435673276325888" },
+    { "level": 45, "name": "💎 Core Member", "roleId": "1561435728112525392" },
+    { "level": 50, "name": "🛡️ Server Guardian", "roleId": "1561435817010798712" },
+    { "level": 75, "name": "👑 Veteran", "roleId": "1561435882052124742" },
+    { "level": 100, "name": "🏆 Hall of Fame", "roleId": "1561435942714343424" }
   ],
   "levelUp": {
     "title": "🎉 Level Up!",
