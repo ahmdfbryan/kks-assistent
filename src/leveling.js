@@ -379,7 +379,7 @@ const levelCommand = {
     .setName('level')
     .setDescription('Sistem leveling')
     .setDMPermission(false)
-    .addSubcommand((s) => s.setName('leaderboard').setDescription('Lihat Top 10 Level'))
+    .addSubcommand((s) => s.setName('leaderboard').setDescription('Lihat Top 10 Level (hanya terlihat oleh kamu)'))
     .addSubcommand((s) =>
       s
         .setName('panel')
@@ -409,7 +409,11 @@ const levelCommand = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const cfg = loadConfig();
-    if (sub === 'leaderboard') return interaction.reply(buildLeaderboard(interaction.guild, cfg));
+    if (sub === 'leaderboard') {
+      // Hanya terlihat oleh yang memakai command.
+      const p = buildLeaderboard(interaction.guild, cfg);
+      return interaction.reply({ ...p, flags: p.flags | EPH });
+    }
 
     if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
       return interaction.reply({ content: '⛔ Hanya admin (Manage Server) yang bisa memakai perintah ini.', flags: EPH });
