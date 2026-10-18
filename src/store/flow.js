@@ -18,6 +18,7 @@ const {
   Events,
 } = require('discord.js');
 const { loadConfig, isId, rupiah, num, getProduct, GROUPS, productsOf } = require('./config');
+const { archiveStoreTicket } = require('../ticket-archive');
 const { state, save, productState, productStatsOf, hasStock, stockOf, setStock, stockUnit, isProductOpen, kindOf, activeTicketOf, nextTicketId, planStockOf, setPlanStock } = require('./state');
 const { lookupRobloxUser, lookupGamepass, parseGamepassId } = require('./roblox');
 const V = require('./views');
@@ -2203,8 +2204,13 @@ async function housekeeping() {
         t.deleted = true;
         save();
         const ch = await client.channels.fetch(t.channelId).catch(() => null);
+        const guild = client.guilds.cache.get(t.guildId) || ch?.guild;
+        // Arsip ticket (info lengkap + transkrip chat) ke channel arsip private sebelum channel dihapus.
+        if (guild && !t.archived) {
+          await archiveStoreTicket(guild, t, ch).catch((e) => console.error(`[store] arsip ${t.id}:`, e.message));
+          save();
+        }
         if (ch) await ch.delete(`Ticket ${t.id} selesai`).catch(() => {});
-        const guild = client.guilds.cache.get(t.guildId);
         // Tunggu log selesai (gambar bukti sudah ter-upload) sebelum file bukti dihapus.
         if (guild) await (logQueues.get(t.id) || Promise.resolve());
         if (t.proofFile) fs.rm(t.proofFile, { force: true }, () => {});
@@ -2237,6 +2243,11 @@ async function onChannelDelete(channel) {
     }
     refreshPanel();
   } else save();
+  // Channel sudah terhapus → arsip tetap dibuat (tanpa transkrip chat).
+  if (!t.archived) {
+    await archiveStoreTicket(channel.guild, t, null).catch((e) => console.error(`[store] arsip ${t.id}:`, e.message));
+    save();
+  }
 }
 
 // ══════════════════════ How to Order ══════════════════════
