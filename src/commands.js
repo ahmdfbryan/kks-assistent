@@ -13,6 +13,7 @@ const { suggestionCommand } = require('./suggestions');
 const { boosterCommand } = require('./booster');
 const { systemCommand } = require('./system');
 const { userInfoCommand, robloxCommand } = require('./profile-info');
+const { clearCommand } = require('./clear');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -42,6 +43,6 @@ const welcomeCommand = {
   },
 };
 
-const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, danaMasukCommand, spenderCommand, socialCommand, invitesCommand, inviteLogCommand, giveawayCommand, serverStatsCommand, ticketCommand, suggestionCommand, boosterCommand, systemCommand, userInfoCommand, robloxCommand];
+const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, danaMasukCommand, spenderCommand, socialCommand, invitesCommand, inviteLogCommand, giveawayCommand, serverStatsCommand, ticketCommand, suggestionCommand, boosterCommand, systemCommand, userInfoCommand, robloxCommand, clearCommand];
 
 module.exports = { commands };
