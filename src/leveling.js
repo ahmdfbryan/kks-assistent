@@ -25,6 +25,7 @@ const {
  * - Notifikasi naik level di channel leveling + Top 10 Level sticky (selalu di paling bawah).
  * - /rank [member] • /level leaderboard • /level panel • /level set / tambah-xp / reset (admin).
  */
+const { fetchAllMembers } = require('./member-cache');
 const FILE = path.join(__dirname, '..', 'leveling.json');
 const DATA = path.join(__dirname, '..', 'data', 'leveling.json');
 const V2 = MessageFlags.IsComponentsV2;
@@ -36,13 +37,16 @@ const text = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000)
 const line = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
 
 const DEFAULT_TITLES = [
-  { level: 0, name: '🌱 Newbie' },
-  { level: 5, name: '🌿 Member Aktif' },
-  { level: 10, name: '⚡ Regular' },
-  { level: 20, name: '🔥 Veteran' },
-  { level: 30, name: '💎 Elite' },
-  { level: 50, name: '👑 Legend' },
-  { level: 75, name: '🌌 Mythic' },
+  { level: 1, name: '🌱 Fresh Face' },
+  { level: 5, name: '🗨️ Talker' },
+  { level: 10, name: '🎧 Hangout Buddy' },
+  { level: 15, name: '⚡ Energizer' },
+  { level: 25, name: '🔥 Hype Maker' },
+  { level: 35, name: '🌟 Rising Star' },
+  { level: 45, name: '💎 Core Member' },
+  { level: 50, name: '🛡️ Server Guardian' },
+  { level: 75, name: '👑 Veteran' },
+  { level: 100, name: '🏆 Hall of Fame' },
 ];
 const DEFAULT = {
   channelId: '1529215816539701308',
@@ -52,6 +56,7 @@ const DEFAULT = {
   ignoredRoles: [],
   pingOnLevelUp: true,
   stickyLeaderboard: true,
+  keepPreviousRoles: false,
   titles: DEFAULT_TITLES,
   levelUp: { title: '🎉 Level Up!', message: 'Selamat {user}! Kamu naik ke **Level {level}** 🚀\nTerus aktif ngobrol & nongkrong di voice untuk naik level berikutnya!' },
   leaderboard: { title: '🏆 Top 10 Level | {server}', subtitle: '{server} • Level Leaderboard', bannerImage: '' },
@@ -117,7 +122,7 @@ const totalForLevel = (l) => {
   for (let i = 0; i < l; i++) t += needFor(i);
   return t;
 };
-const titleFor = (cfg, level) => [...cfg.titles].sort((a, b) => b.level - a.level).find((t) => level >= t.level) || cfg.titles[0];
+const titleFor = (cfg, level) => [...cfg.titles].sort((a, b) => b.level - a.level).find((t) => level >= t.level) || { level: 0, name: '🥚 Belum Ada Gelar', none: true };
 const nextTitle = (cfg, level) => [...cfg.titles].sort((a, b) => a.level - b.level).find((t) => t.level > level) || null;
 const bar = (pct, size = 12) => {
   const f = Math.min(size, Math.round((pct / 100) * size));
@@ -163,7 +168,7 @@ function rankCard(guild, cfg, user, member) {
         `**🏅 Level:** \`${info.level}\` • **🏆 Peringkat:** \`${rank ? `#${num(rank)} dari ${num(total)}` : '-'}\``,
         `**💠 Total XP:** \`${num(u.xp)}\``,
         `**💬 Pesan:** \`${num(u.messages)}\`${cfg.xp.voiceEnabled ? ` • **🎙️ Voice:** \`${voiceText(u.voiceMin)}\`` : ''}`,
-        next ? `**🎯 Gelar Berikutnya:** ${next.name} di Level \`${next.level}\`` : '**🎯 Gelar:** `Gelar tertinggi tercapai! 👑`',
+        next ? `**🎯 Role Berikutnya:** ${next.name} di Level \`${next.level}\`` : '**🎯 Gelar:** `Gelar tertinggi tercapai! 👑`',
         voiceLine(cfg, member),
       ]
         .filter(Boolean)
@@ -224,7 +229,7 @@ function buildLeaderboard(guild, cfg) {
   return { components: [box], flags: V2, allowedMentions: { parse: [] } };
 }
 
-function levelUpCard(guild, cfg, member, from, to) {
+function levelUpCard(guild, cfg, member, from, to, newRoles = []) {
   const u = data.users[member.id];
   const oldTitle = titleFor(cfg, from);
   const newTitle = titleFor(cfg, to);
@@ -242,13 +247,50 @@ function levelUpCard(guild, cfg, member, from, to) {
       [
         `**🏅 Level:** \`${from}\` ➜ \`${to}\` • **🏆 Peringkat:** \`#${num(rankOf(member.id))}\``,
         newTitle.name !== oldTitle.name ? `**🎖️ Gelar Baru:** ${newTitle.name}` : `**🎖️ Gelar:** ${newTitle.name}`,
+        newRoles.length ? `**🎁 Role Baru:** ${newRoles.map((id) => `<@&${id}>`).join(' ')}` : null,
+        nextTitle(cfg, to) ? `**🎯 Role Berikutnya:** ${nextTitle(cfg, to).name} di Level \`${nextTitle(cfg, to).level}\`` : null,
         `**✨ Menuju Level ${to + 1}:** ${bar(info.pct, 10)} \`${num(info.current)} / ${num(info.need)} XP\``,
-      ].join('\n'),
+      ]
+        .filter(Boolean)
+        .join('\n'),
     ),
   );
   box.addSeparatorComponents(line());
   box.addTextDisplayComponents(text(`-# 💡 Cek progresmu dengan \`/rank\` • ${guild.name}`));
   return { components: [box], flags: V2, allowedMentions: { users: cfg.pingOnLevelUp ? [member.id] : [] } };
+}
+
+// ───────────────────────── Reward role ─────────────────────────
+/** Role level yang seharusnya dimiliki member (keepPreviousRoles false = hanya role tertinggi). */
+function wantedRoles(cfg, level) {
+  const earned = cfg.titles.filter((t) => isId(t.roleId) && level >= t.level).sort((a, b) => b.level - a.level);
+  return cfg.keepPreviousRoles ? earned.map((t) => t.roleId) : earned.slice(0, 1).map((t) => t.roleId);
+}
+let warnedRoles = false;
+/** Pasang / lepas role level sesuai level member sekarang. Mengembalikan role yang baru ditambahkan. */
+async function syncRoles(member, cfg = loadConfig()) {
+  if (!member?.guild || member.user?.bot) return [];
+  const all = cfg.titles.map((t) => t.roleId).filter(isId);
+  if (!all.length) return [];
+  const level = levelInfo(data.users[member.id]?.xp || 0).level;
+  const want = new Set(wantedRoles(cfg, level));
+  const me = member.guild.members.me;
+  const usable = (id) => {
+    const role = member.guild.roles.cache.get(id);
+    return role && me && role.position < me.roles.highest.position;
+  };
+  const add = [...want].filter((id) => !member.roles.cache.has(id));
+  const remove = all.filter((id) => !want.has(id) && member.roles.cache.has(id));
+  const blocked = [...add, ...remove].filter((id) => !usable(id));
+  if (blocked.length && !warnedRoles) {
+    warnedRoles = true;
+    console.warn('[level] beberapa role level tidak bisa diatur — pastikan bot punya izin Manage Roles & role bot berada DI ATAS semua role level.');
+  }
+  const addOk = add.filter(usable);
+  const removeOk = remove.filter(usable);
+  if (addOk.length) await member.roles.add(addOk, `Leveling: Level ${level}`).catch((e) => console.warn('[level] gagal tambah role:', e.message));
+  if (removeOk.length) await member.roles.remove(removeOk, `Leveling: Level ${level}`).catch((e) => console.warn('[level] gagal lepas role:', e.message));
+  return addOk;
 }
 
 // ───────────────────────── XP & level up ─────────────────────────
@@ -267,9 +309,10 @@ async function addXp(member, amount, kind) {
 }
 async function announceLevelUp(member, from, to, cfg = loadConfig()) {
   saveNow();
+  const newRoles = await syncRoles(member, cfg).catch(() => []);
   if (isId(cfg.channelId)) {
     const ch = await member.guild.channels.fetch(cfg.channelId).catch(() => null);
-    if (ch?.isTextBased()) await ch.send(levelUpCard(member.guild, cfg, member, from, to)).catch((e) => console.warn('[level] gagal kirim level up:', e.message));
+    if (ch?.isTextBased()) await ch.send(levelUpCard(member.guild, cfg, member, from, to, newRoles)).catch((e) => console.warn('[level] gagal kirim level up:', e.message));
   }
   scheduleLeaderboard(true);
 }
@@ -377,8 +420,30 @@ function registerLeveling(c) {
     clearTimeout(lbTimer);
     lbTimer = setTimeout(() => updateLeaderboard().catch(() => {}), 8000);
   });
+  // Member keluar lalu masuk lagi → role level dikembalikan.
+  c.on(Events.GuildMemberAdd, (m) => {
+    if (data.users[m.id]?.xp) syncRoles(m).catch(() => {});
+  });
   process.on('SIGINT', () => saveTimer && saveNow());
   process.on('SIGTERM', () => saveTimer && saveNow());
+}
+
+/** Sinkron role level semua member yang punya data level / memegang role level. */
+async function syncAll(guild, cfg = loadConfig()) {
+  await fetchAllMembers(guild);
+  const all = cfg.titles.map((t) => t.roleId).filter(isId);
+  let checked = 0;
+  let changed = 0;
+  for (const m of guild.members.cache.values()) {
+    if (m.user.bot) continue;
+    if (!data.users[m.id] && !all.some((id) => m.roles.cache.has(id))) continue;
+    checked += 1;
+    const before = all.filter((id) => m.roles.cache.has(id)).join(',');
+    await syncRoles(m, cfg).catch(() => {});
+    const want = wantedRoles(cfg, levelInfo(data.users[m.id]?.xp || 0).level).join(',');
+    if (before !== want) changed += 1;
+  }
+  return { checked, changed };
 }
 
 // ───────────────────────── Command ─────────────────────────
@@ -422,6 +487,7 @@ const levelCommand = {
         .addUserOption((o) => o.setName('member').setDescription('Member').setRequired(true))
         .addIntegerOption((o) => o.setName('xp').setDescription('Contoh: 500 atau -200').setRequired(true).setMinValue(-1000000).setMaxValue(1000000)),
     )
+    .addSubcommand((s) => s.setName('sinkron-role').setDescription('(Admin) Pasang ulang role level ke semua member sesuai level mereka'))
     .addSubcommand((s) =>
       s
         .setName('reset')
@@ -466,7 +532,10 @@ const levelCommand = {
       const after = levelInfo(u.xp).level;
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
       if (after > before && member) await announceLevelUp(member, before, after, cfg);
-      else scheduleLeaderboard(false);
+      else {
+        if (member) await syncRoles(member, cfg).catch(() => {});
+        scheduleLeaderboard(false);
+      }
       return interaction.reply({ content: `✅ <@${user.id}> sekarang **Level ${after}** (\`${num(u.xp)} XP\`).`, flags: EPH, allowedMentions: { parse: [] } });
     }
     if (sub === 'reset') {
@@ -474,6 +543,8 @@ const levelCommand = {
       if (user) {
         delete data.users[user.id];
         saveNow();
+        const m = await interaction.guild.members.fetch(user.id).catch(() => null);
+        if (m) await syncRoles(m, cfg).catch(() => {});
         scheduleLeaderboard(false);
         return interaction.reply({ content: `♻️ Level <@${user.id}> direset ke 0.`, flags: EPH, allowedMentions: { parse: [] } });
       }
@@ -494,7 +565,15 @@ const levelCommand = {
       data.users = {};
       saveNow();
       scheduleLeaderboard(false);
-      return btn.update({ content: '♻️ Level semua member sudah direset ke 0.', components: [] });
+      await btn.update({ content: '♻️ Level semua member sudah direset ke 0. Melepas role level…', components: [] });
+      const res2 = await syncAll(interaction.guild, cfg);
+      return btn.editReply({ content: `♻️ Level semua member sudah direset ke 0. Role level dilepas dari **${num(res2.changed)}** member.`, components: [] });
+    }
+    if (sub === 'sinkron-role') {
+      await interaction.deferReply({ flags: EPH });
+      if (!cfg.titles.some((t) => isId(t.roleId))) return interaction.editReply('❌ Belum ada roleId di titles pada leveling.json.');
+      const res2 = await syncAll(interaction.guild, cfg);
+      return interaction.editReply(`✅ Role level disinkronkan: **${num(res2.changed)}** member diperbarui dari **${num(res2.checked)}** member yang dicek.`);
     }
   },
 };
