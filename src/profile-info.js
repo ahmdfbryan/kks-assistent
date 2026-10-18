@@ -25,7 +25,6 @@ const { request, DOMAIN } = require('./store/roblox');
  */
 const V2 = MessageFlags.IsComponentsV2;
 const BRAND = 0x3498db;
-const ROBLOX_RED = 0xe2231a;
 const text = (c) => new TextDisplayBuilder().setContent(String(c).slice(0, 4000));
 const line = () => new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small);
 const num = (n) => Math.round(Number(n) || 0).toLocaleString('id-ID');
@@ -122,7 +121,7 @@ const userInfoCommand = {
 
     const avatar = (member || user).displayAvatarURL({ extension: 'png', size: 1024, forceStatic: false });
     const banner = user.bannerURL?.({ size: 1024 }) || null;
-    const accent = user.accentColor || member?.displayColor || BRAND;
+    const accent = BRAND;
     const badges = (user.flags?.toArray?.() || []).map((f) => BADGE[f]).filter(Boolean);
     if (member?.premiumSinceTimestamp) badges.push('🚀 Server Booster');
     if (guild.ownerId === user.id) badges.unshift('👑 Pemilik Server');
@@ -293,7 +292,7 @@ const robloxCommand = {
     }
 
     const pres = PRESENCE[r.presence?.userPresenceType ?? 0] || PRESENCE[0];
-    const accent = r.banned ? 0xe74c3c : r.presence ? pres.color : ROBLOX_RED;
+    const accent = r.banned ? 0xe74c3c : BRAND; // biru, merah hanya untuk akun yang di-banned
     const profile = `https://www.roblox.com/users/${r.id}/profile`;
     const header = [
       `# ${r.displayName}${r.verified ? ' ☑️' : ''}`,
