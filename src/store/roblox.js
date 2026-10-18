@@ -100,4 +100,4 @@ async function lookupGamepass(id) {
   };
 }
 
-module.exports = { lookupRobloxUser, lookupGamepass, parseGamepassId };
+module.exports = { lookupRobloxUser, lookupGamepass, parseGamepassId, request, DOMAIN };
