@@ -25,6 +25,7 @@ const {
   MediaGalleryItemBuilder,
 } = require('discord.js');
 const giveaway = require('./giveaway');
+const { archiveNcsTicket } = require('./ticket-archive');
 
 /**
  * NCS Ticket Center — ticket layanan (Support, Claim Giveaway, ...), terpisah dari ticket jualan.
@@ -622,6 +623,9 @@ async function closeTicket(interaction, t, reason) {
   }
   const transcript = channel ? await buildTranscript(channel, t).catch(() => null) : null;
   await logTicket(guild, cfg, t, 'close', transcript ? [transcript] : []);
+  // Arsip lengkap (kartu V2 + transkrip HTML) ke channel arsip NCS — sebelum channel dihapus.
+  await archiveNcsTicket(guild, cfg, t, channel).catch((e) => console.error(`[ticket] arsip ${t.id}:`, e.message));
+  save();
   historyLog(guild, t, `🔒 Ditutup oleh <@${t.closedBy}>`);
 
   // DM pembuka ticket
@@ -931,6 +935,9 @@ function registerSupportTickets(c) {
     t.closeReason = 'Channel dihapus manual';
     historyLog(ch.guild, t, '🗑️ Channel ticket dihapus manual');
     save();
+    archiveNcsTicket(ch.guild, loadConfig(), t, null)
+      .then(() => save())
+      .catch((e) => console.error(`[ticket] arsip ${t.id}:`, e.message));
     refreshPanel().catch(() => {});
   });
 }
