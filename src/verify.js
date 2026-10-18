@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { fetchAllMembers } = require('./member-cache');
 const path = require('path');
 const {
   ActionRowBuilder,
@@ -280,7 +281,8 @@ const verifyCommand = {
     }
 
     if (sub === 'beri-semua') {
-      const members = await interaction.guild.members.fetch();
+      await fetchAllMembers(interaction.guild);
+      const members = interaction.guild.members.cache;
       const targets = members.filter((m) => !m.user.bot && !m.roles.cache.has(role.id));
       if (!targets.size) return interaction.editReply(`Semua member sudah punya role ${role}.`);
 
