@@ -47,7 +47,7 @@ const DEFAULT_TITLES = [
 const DEFAULT = {
   channelId: '1529215816539701308',
   color: '#3498DB',
-  xp: { messageMin: 15, messageMax: 25, cooldownSeconds: 60, voicePerMinute: 10, voiceEnabled: true, voiceMinMembers: 2 },
+  xp: { messageMin: 15, messageMax: 25, cooldownSeconds: 60, voicePerMinute: 10, voiceEnabled: true, voiceMinMembers: 1 },
   ignoredChannels: [],
   ignoredRoles: [],
   pingOnLevelUp: true,
@@ -164,12 +164,22 @@ function rankCard(guild, cfg, user, member) {
         `**💠 Total XP:** \`${num(u.xp)}\``,
         `**💬 Pesan:** \`${num(u.messages)}\`${cfg.xp.voiceEnabled ? ` • **🎙️ Voice:** \`${voiceText(u.voiceMin)}\`` : ''}`,
         next ? `**🎯 Gelar Berikutnya:** ${next.name} di Level \`${next.level}\`` : '**🎯 Gelar:** `Gelar tertinggi tercapai! 👑`',
-      ].join('\n'),
+        voiceLine(cfg, member),
+      ]
+        .filter(Boolean)
+        .join('\n'),
     ),
   );
   box.addSeparatorComponents(line());
   box.addTextDisplayComponents(text(`-# 💡 Dapatkan XP dengan chat${cfg.xp.voiceEnabled ? ' & nongkrong di voice' : ''} • ${guild.name}`));
   return { components: [box], flags: V2, allowedMentions: { parse: [] } };
+}
+function voiceLine(cfg, member) {
+  if (!cfg.xp.voiceEnabled || !member?.voice?.channel) return null;
+  const st = voiceStatus(cfg, member, member.voice.channel);
+  return st.xp
+    ? `**🎙️ Status Voice:** \`🟢 Mendapat XP\` di <#${member.voice.channelId}>`
+    : `**🎙️ Status Voice:** \`⏸️ Tidak dapat XP\` — ${st.reason}`;
 }
 function voiceText(min) {
   const m = Math.round(Number(min) || 0);
@@ -264,6 +274,19 @@ async function announceLevelUp(member, from, to, cfg = loadConfig()) {
   scheduleLeaderboard(true);
 }
 
+/** Status voice member: counted = waktu dicatat, xp = dapat XP, reason = alasan tidak dapat XP. */
+function voiceStatus(cfg, member, channel) {
+  if (!channel) return { counted: false, xp: false, reason: 'tidak sedang di voice' };
+  if (channel.id === channel.guild.afkChannelId) return { counted: false, xp: false, reason: 'berada di channel AFK' };
+  if (ignored(cfg, member, channel)) return { counted: false, xp: false, reason: 'channel / role ini tidak mendapat XP' };
+  const v = member.voice;
+  if (v?.selfDeaf || v?.serverDeaf) return { counted: false, xp: false, reason: 'sedang deafen 🔇' };
+  const min = Math.max(1, Number(cfg.xp.voiceMinMembers ?? 1) || 1);
+  const humans = [...channel.members.values()].filter((m) => !m.user.bot).length;
+  if (humans < min) return { counted: true, xp: false, reason: `butuh minimal ${min} orang (bukan bot) di voice` };
+  return { counted: true, xp: true, reason: null };
+}
+
 const ignored = (cfg, member, channel) =>
   (cfg.ignoredChannels || []).includes(channel?.id) ||
   (cfg.ignoredChannels || []).includes(channel?.parentId) ||
@@ -335,15 +358,14 @@ function registerLeveling(c) {
     const cfg = loadConfig();
     if (!cfg.xp.voiceEnabled) return;
     for (const guild of c.guilds.cache.values()) {
-      for (const ch of guild.channels.cache.values()) {
-        if (!ch.isVoiceBased?.() || ch.id === guild.afkChannelId) continue;
-        const humans = [...ch.members.values()].filter((m) => !m.user.bot);
-        if (humans.length < (Number(cfg.xp.voiceMinMembers) || 2)) continue;
-        for (const m of humans) {
-          const v = m.voice;
-          if (v.selfDeaf || v.serverDeaf || ignored(cfg, m, ch)) continue;
-          await addXp(m, Number(cfg.xp.voicePerMinute) || 10, 'voice').catch(() => {});
-        }
+      for (const vs of guild.voiceStates.cache.values()) {
+        const m = vs.member;
+        const ch = vs.channel;
+        if (!m || m.user.bot || !ch) continue;
+        const status = voiceStatus(cfg, m, ch);
+        if (!status.counted) continue;
+        // Waktu voice selalu dicatat; XP hanya kalau syarat terpenuhi (anti AFK sendirian).
+        await addXp(m, status.xp ? Number(cfg.xp.voicePerMinute) || 10 : 0, 'voice').catch(() => {});
       }
     }
   }, 60000);
