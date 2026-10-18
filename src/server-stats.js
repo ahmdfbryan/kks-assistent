@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { fetchAllMembers } = require('./member-cache');
 const path = require('path');
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, MessageFlags, Events } = require('discord.js');
 const { state: storeState } = require('./store/state');
@@ -49,7 +50,7 @@ function save() {
  */
 async function memberCount(guild, cfg) {
   if (cfg.countBots) return guild.memberCount;
-  if (guild.members.cache.size < guild.memberCount) await guild.members.fetch({ time: 20000 }).catch(() => {});
+  if (guild.members.cache.size < guild.memberCount) await fetchAllMembers(guild);
   if (guild.members.cache.size >= guild.memberCount * 0.95) return guild.members.cache.filter((m) => !m.user.bot).size;
   return guild.memberCount;
 }
