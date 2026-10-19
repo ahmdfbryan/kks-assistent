@@ -46,7 +46,8 @@ function loadPanel() {
 function savePanel(v) {
   try {
     fs.mkdirSync(path.dirname(PANEL_FILE), { recursive: true });
-    fs.writeFileSync(PANEL_FILE, JSON.stringify(v, null, 2));
+    fs.writeFileSync(`${PANEL_FILE}.tmp`, JSON.stringify(v, null, 2));
+    fs.renameSync(`${PANEL_FILE}.tmp`, PANEL_FILE);
   } catch (err) {
     console.warn('[verify] gagal simpan lokasi panel:', err.message);
   }
