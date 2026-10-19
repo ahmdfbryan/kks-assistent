@@ -186,7 +186,8 @@ function loadSent() {
 }
 function saveSent(v) {
   fs.mkdirSync(path.dirname(SENT_FILE), { recursive: true });
-  fs.writeFileSync(SENT_FILE, JSON.stringify(v, null, 2));
+  fs.writeFileSync(`${SENT_FILE}.tmp`, JSON.stringify(v, null, 2));
+  fs.renameSync(`${SENT_FILE}.tmp`, SENT_FILE);
 }
 
 /** Tombol "Bahasa Inggris": tampilkan versi Inggris khusus untuk yang klik. */
