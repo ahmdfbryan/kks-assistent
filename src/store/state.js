@@ -56,7 +56,9 @@ const state = load();
 function save() {
   fs.mkdirSync(path.dirname(FILE), { recursive: true });
   const tmp = `${FILE}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
+  // Data besar (banyak ticket) → simpan ringkas tanpa spasi supaya lebih cepat & hemat disk.
+  const pretty = Object.keys(state.tickets || {}).length < 300;
+  fs.writeFileSync(tmp, pretty ? JSON.stringify(state, null, 2) : JSON.stringify(state));
   fs.renameSync(tmp, FILE);
 }
 
