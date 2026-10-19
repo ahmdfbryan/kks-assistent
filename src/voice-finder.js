@@ -51,7 +51,8 @@ function parseColor(value, fallback) {
 let panels = readJson(PANEL_FILE, {}); // { "<channelId>": "<messageId>" }
 function savePanels() {
   fs.mkdirSync(path.dirname(PANEL_FILE), { recursive: true });
-  fs.writeFileSync(PANEL_FILE, JSON.stringify(panels, null, 2));
+  fs.writeFileSync(`${PANEL_FILE}.tmp`, JSON.stringify(panels, null, 2));
+  fs.renameSync(`${PANEL_FILE}.tmp`, PANEL_FILE);
 }
 
 // ---------- Tampilan (Components V2) ----------
