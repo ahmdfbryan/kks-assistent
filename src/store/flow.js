@@ -2174,8 +2174,17 @@ async function onTestimonyModal(interaction, ticketId) {
 }
 
 // ══════════════════════ Tugas berkala: batas testimoni & hapus channel ══════════════════════
+/** Hapus sesi order yang ditinggalkan (tidak dikonfirmasi) supaya memori tidak menumpuk. */
+function sweepSessions() {
+  const now = Date.now();
+  for (const map of [sessions, rekberSessions, gpSessions, cvSessions, bsSessions]) {
+    for (const [k, v] of map) if (!v?.expires || v.expires < now) map.delete(k);
+  }
+}
+
 async function housekeeping() {
   if (!client) return;
+  sweepSessions();
   const cfg = loadConfig();
   const now = Date.now();
   for (const t of Object.values(state.tickets)) {
