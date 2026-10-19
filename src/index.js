@@ -121,6 +121,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err));
+// ───── Pengaman global: error tidak membuat bot mati / crash-loop ─────
+client.on(Events.Error, (err) => console.error('[client] error:', err?.message || err));
+client.on(Events.ShardError, (err, id) => console.error(`[shard ${id}] koneksi error:`, err?.message || err));
+client.on(Events.ShardDisconnect, (ev, id) => console.warn(`[shard ${id}] terputus (kode ${ev?.code}) — menyambung ulang otomatis...`));
+client.on(Events.ShardReconnecting, (id) => console.warn(`[shard ${id}] menyambung ulang...`));
+client.on(Events.ShardResume, (id, replayed) => console.log(`[shard ${id}] tersambung kembali (${replayed} event diputar ulang).`));
+process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err?.stack || err));
+process.on('uncaughtException', (err) => console.error('[uncaughtException]', err?.stack || err));
 
 client.login(config.token);
