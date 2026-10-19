@@ -61,6 +61,7 @@ function onCooldown(interaction, sec = 8) {
   const key = `${interaction.commandName}:${interaction.user.id}`;
   const left = (cooldowns.get(key) || 0) - Date.now();
   if (left > 0) return Math.ceil(left / 1000);
+  if (cooldowns.size > 500) for (const [k, t] of cooldowns) if (t < Date.now()) cooldowns.delete(k);
   cooldowns.set(key, Date.now() + sec * 1000);
   return 0;
 }
