@@ -340,9 +340,15 @@ let lbTimer = null;
 let lbRepost = false;
 function scheduleLeaderboard(repost) {
   if (!data.panel) return;
+  // Throttle: update biasa maksimal 1x per menit (tidak tertunda terus walau XP masuk tiap detik);
+  // repost (ada level up / pesan baru) dipercepat jadi 4 detik.
+  if (lbTimer && (!repost || lbRepost)) return;
   lbRepost ||= repost;
   clearTimeout(lbTimer);
-  lbTimer = setTimeout(() => updateLeaderboard().catch((e) => console.warn('[level] leaderboard:', e.message)), repost ? 4000 : 60000);
+  lbTimer = setTimeout(() => {
+    lbTimer = null;
+    updateLeaderboard().catch((e) => console.warn('[level] leaderboard:', e.message));
+  }, repost ? 4000 : 60000);
 }
 async function updateLeaderboard() {
   const loc = data.panel;
@@ -419,14 +425,15 @@ function registerLeveling(c) {
     if (!data.panel || msg.channelId !== data.panel.channelId || msg.author?.id === c.user?.id) return;
     lbRepost = true;
     clearTimeout(lbTimer);
-    lbTimer = setTimeout(() => updateLeaderboard().catch(() => {}), 8000);
+    lbTimer = setTimeout(() => {
+      lbTimer = null;
+      updateLeaderboard().catch(() => {});
+    }, 8000);
   });
   // Member keluar lalu masuk lagi → role level dikembalikan.
   c.on(Events.GuildMemberAdd, (m) => {
     if (data.users[m.id]?.xp) syncRoles(m).catch(() => {});
   });
-  process.on('SIGINT', () => saveTimer && saveNow());
-  process.on('SIGTERM', () => saveTimer && saveNow());
 }
 
 /** Sinkron role level semua member yang punya data level / memegang role level. */
@@ -576,6 +583,7 @@ const levelCommand = {
       if (!loc) return interaction.reply({ content: 'ℹ️ Tidak ada panel Top 10 Level yang aktif.', flags: EPH });
       data.panel = null;
       clearTimeout(lbTimer);
+      lbTimer = null;
       saveNow();
       const ch = await interaction.guild.channels.fetch(loc.channelId).catch(() => null);
       await ch?.messages.delete(loc.messageId).catch(() => {});
