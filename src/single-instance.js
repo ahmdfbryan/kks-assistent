@@ -41,8 +41,20 @@ function ensureSingleInstance() {
       /* abaikan */
     }
   };
-  process.on('exit', release);
-  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
+  process.on('exit', (code) => {
+    release();
+    if (code) {
+      const t = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'medium' });
+      console.error(`💥 Bot berhenti dengan kode ${code} • ${t} WIB — kemungkinan error, cek log error.`);
+    }
+  });
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      const t = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'medium' });
+      console.log(`🛑 Bot dimatikan (${sig}) • ${t} WIB — restart / stop manual, bukan crash.`);
+      process.exit(0);
+    });
+  }
 }
 
 module.exports = { ensureSingleInstance };
