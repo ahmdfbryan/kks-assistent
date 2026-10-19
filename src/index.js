@@ -46,8 +46,10 @@ booster.registerBooster(client);
 system.registerSystem(client);
 leveling.registerLeveling(client);
 
+const wib = () => new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'medium' });
 client.once(Events.ClientReady, (c) => {
-  console.log(`🤖 Login sebagai ${c.user.tag}`);
+  const restarts = process.env.restart_time ? ` • restart ke-${process.env.restart_time} (pm2)` : '';
+  console.log(`🤖 Login sebagai ${c.user.tag} • ${wib()} WIB${restarts}`);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -128,6 +130,6 @@ client.on(Events.ShardDisconnect, (ev, id) => console.warn(`[shard ${id}] terput
 client.on(Events.ShardReconnecting, (id) => console.warn(`[shard ${id}] menyambung ulang...`));
 client.on(Events.ShardResume, (id, replayed) => console.log(`[shard ${id}] tersambung kembali (${replayed} event diputar ulang).`));
 process.on('unhandledRejection', (err) => console.error('[unhandledRejection]', err?.stack || err));
-process.on('uncaughtException', (err) => console.error('[uncaughtException]', err?.stack || err));
+process.on('uncaughtException', (err) => console.error(`[uncaughtException] ${wib()} WIB`, err?.stack || err));
 
 client.login(config.token);
