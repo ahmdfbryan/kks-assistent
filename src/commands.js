@@ -15,6 +15,7 @@ const { systemCommand } = require('./system');
 const { userInfoCommand, robloxCommand } = require('./profile-info');
 const { clearCommand } = require('./clear');
 const { rankCommand, levelCommand } = require('./leveling');
+const { membersCommand } = require('./member-list');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -44,6 +45,6 @@ const welcomeCommand = {
   },
 };
 
-const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, danaMasukCommand, spenderCommand, socialCommand, invitesCommand, inviteLogCommand, giveawayCommand, serverStatsCommand, ticketCommand, suggestionCommand, boosterCommand, systemCommand, userInfoCommand, robloxCommand, clearCommand, rankCommand, levelCommand];
+const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, danaMasukCommand, spenderCommand, socialCommand, invitesCommand, inviteLogCommand, giveawayCommand, serverStatsCommand, ticketCommand, suggestionCommand, boosterCommand, systemCommand, userInfoCommand, robloxCommand, clearCommand, rankCommand, levelCommand, membersCommand];
 
 module.exports = { commands };
