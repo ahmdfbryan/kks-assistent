@@ -236,31 +236,37 @@ const serverCheckCommand = {
     .setDescription('Cek info server Discord lain lewat link invite')
     .setDMPermission(false)
     .addStringOption((o) => o.setName('link').setDescription('Link invite, contoh: discord.gg/abcd atau kodenya saja').setRequired(true).setMaxLength(120))
-    .addBooleanOption((o) => o.setName('publik').setDescription('Tampilkan hasil ke semua orang di channel (default: hanya kamu)')),
+    .addBooleanOption((o) => o.setName('privat').setDescription('Hanya terlihat oleh kamu (default: tampil ke semua orang di channel)')),
   async execute(interaction) {
     const left = (cooldowns.get(interaction.user.id) || 0) - Date.now();
     if (left > 0) return interaction.reply({ content: `⏳ Tunggu **${Math.ceil(left / 1000)} detik** sebelum cek server lagi.`, flags: EPH });
     if (cooldowns.size > 500) for (const [k, t] of cooldowns) if (t < Date.now()) cooldowns.delete(k);
     cooldowns.set(interaction.user.id, Date.now() + 5000);
 
-    const isPublic = interaction.options.getBoolean('publik') || false;
+    const isPublic = !interaction.options.getBoolean('privat'); // default: tampil publik
     const code = parseCode(interaction.options.getString('link'));
     if (!code) {
       return interaction.reply({ ...errorCard('❌ Link Tidak Valid', 'Gunakan link invite seperti `https://discord.gg/abcd`, `discord.com/invite/abcd`, atau kodenya saja (`abcd`).'), flags: V2 | EPH });
     }
     await interaction.deferReply({ flags: isPublic ? undefined : EPH });
+    // Pesan gagal hanya terlihat oleh pemakai command (pesan publik yang tertunda dihapus).
+    const fail = async (card) => {
+      if (!isPublic) return interaction.editReply(card);
+      await interaction.deleteReply().catch(() => {});
+      return interaction.followUp({ ...card, flags: V2 | EPH });
+    };
     let invite;
     try {
       invite = await interaction.client.fetchInvite(code);
     } catch (err) {
       const notFound = err.code === 10006;
-      return interaction.editReply(
+      return fail(
         notFound
           ? errorCard('❌ Invite Tidak Ditemukan', `Invite \`${code}\` tidak valid, sudah kedaluwarsa, atau sudah dihapus.`)
           : errorCard('⚠️ Gagal Mengecek', 'Discord sedang tidak bisa dihubungi atau membatasi permintaan. Coba lagi beberapa saat lagi.'),
       );
     }
-    if (!invite.guild) return interaction.editReply(errorCard('ℹ️ Bukan Invite Server', 'Link ini adalah invite **grup DM / teman**, bukan server.'));
+    if (!invite.guild) return fail(errorCard('ℹ️ Bukan Invite Server', 'Link ini adalah invite **grup DM / teman**, bukan server.'));
     return interaction.editReply({ components: [buildCard(invite, interaction.user)], flags: V2, allowedMentions: { parse: [] } });
   },
 };
