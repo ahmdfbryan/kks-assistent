@@ -18,6 +18,7 @@ const { rankCommand, levelCommand } = require('./leveling');
 const { membersCommand } = require('./member-list');
 const { serverCheckCommand } = require('./server-check');
 const { botPanelCommand } = require('./bot-panel');
+const { canvaCommand } = require('./canva-manager');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -72,6 +73,7 @@ const commands = [
   membersCommand,
   serverCheckCommand,
   botPanelCommand,
+  canvaCommand,
 ];
 
 module.exports = { commands };
