@@ -20,7 +20,10 @@ const { request, DOMAIN } = require('./store/roblox');
 
 /**
  * Info akun (publik, untuk semua member):
- * - /userinfo [member]  → profil akun Discord + info di server (Components V2).
+ * - /userinfo [member | cari]  → profil akun Discord + info di server (Components V2).
+ *     member = pilih member • cari = User ID / mention / username.
+ *     User ID bisa untuk akun SIAPA SAJA (termasuk di luar server). Username hanya bisa dicari
+ *     di antara member server yang juga dimasuki bot (Discord tidak menyediakan pencarian username global).
  * - /roblox <username>  → profil akun Roblox (avatar, status, sosial, grup, username lama).
  */
 const V2 = MessageFlags.IsComponentsV2;
@@ -87,6 +90,10 @@ function card({ accent, thumb, header, banner, blocks, footer, buttons }) {
 }
 const link = (label, emoji, url) => new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(label).setEmoji(emoji).setURL(url);
 const footerOf = (interaction) => `${interaction.guild?.name || 'Noname Studios Creative'} • Diminta oleh @${interaction.user.username} • ${ts(Date.now(), 'f')}`;
+const errorCard = (title, desc) => ({
+  components: [new ContainerBuilder().setAccentColor(0xe74c3c).addTextDisplayComponents(text(`## ${title}\n${desc}`))],
+  flags: V2,
+});
 
 // ═════════════════════════════════ /userinfo ═════════════════════════════════
 const BADGE = {
@@ -105,19 +112,82 @@ const BADGE = {
   VerifiedBot: '✅ Verified Bot',
 };
 
+/**
+ * Cari akun dari teks: User ID / mention → akun siapa saja (lewat API Discord).
+ * Username / nama → dicari di member server ini, lalu server lain yang dimasuki bot.
+ * Hasil: { user } | { notFound: true } | { many: [user...] }
+ */
+async function resolveUser(interaction, input) {
+  const raw = String(input || '').trim();
+  const idMatch = raw.match(/^<@!?(\d{17,20})>$/) || raw.match(/^(\d{17,20})$/);
+  if (idMatch) {
+    const u = await interaction.client.users.fetch(idMatch[1], { force: true }).catch(() => null);
+    return u ? { user: u } : { notFound: true };
+  }
+  const q = raw.replace(/^@/, '').toLowerCase();
+  if (q.length < 2) return { notFound: true };
+  const guilds = [interaction.guild, ...interaction.client.guilds.cache.filter((g) => g.id !== interaction.guildId).values()].filter(Boolean);
+
+  // 1) Username persis (unik di Discord).
+  for (const g of guilds) {
+    const m = g.members.cache.find((x) => x.user.username.toLowerCase() === q);
+    if (m) return { user: m.user };
+  }
+  // 2) Belum ada di cache → minta Discord mencari di server ini (1 permintaan ringan).
+  const found = await interaction.guild.members.search({ query: q, limit: 10 }).catch(() => null);
+  const exact = found?.find((m) => m.user.username.toLowerCase() === q);
+  if (exact) return { user: exact.user };
+  // 3) Nama tampilan / nickname mirip.
+  const loose = new Map();
+  for (const m of [...(found?.values() || []), ...guilds.flatMap((g) => [...g.members.cache.values()])]) {
+    const names = [m.user.username, m.user.globalName, m.nickname, m.displayName].filter(Boolean).map((n) => n.toLowerCase());
+    if (names.some((n) => n === q)) return { user: m.user };
+    if (names.some((n) => n.includes(q))) loose.set(m.user.id, m.user);
+    if (loose.size >= 6) break;
+  }
+  if (loose.size === 1) return { user: [...loose.values()][0] };
+  if (loose.size > 1) return { many: [...loose.values()] };
+  return { notFound: true };
+}
+
 const userInfoCommand = {
   data: new SlashCommandBuilder()
     .setName('userinfo')
-    .setDescription('Lihat informasi akun Discord kamu / member lain')
+    .setDescription('Lihat informasi akun Discord (member, User ID, atau username)')
     .setDMPermission(false)
-    .addUserOption((o) => o.setName('member').setDescription('Default: kamu sendiri')),
+    .addUserOption((o) => o.setName('member').setDescription('Pilih member (default: kamu sendiri)'))
+    .addStringOption((o) => o.setName('cari').setDescription('User ID (akun siapa saja) atau username member').setMaxLength(64)),
   async execute(interaction) {
     const wait = onCooldown(interaction);
     if (wait) return interaction.reply({ content: `⏳ Tunggu **${wait} detik** sebelum memakai command ini lagi.`, flags: MessageFlags.Ephemeral });
     await interaction.deferReply();
     const guild = interaction.guild;
-    const picked = interaction.options.getUser('member') || interaction.user;
-    const user = await interaction.client.users.fetch(picked.id, { force: true }).catch(() => picked); // force → banner & warna profil
+
+    let picked = interaction.options.getUser('member');
+    const query = interaction.options.getString('cari');
+    if (!picked && query) {
+      const res = await resolveUser(interaction, query);
+      if (res.many) {
+        return interaction.editReply(
+          errorCard(
+            '🔎 Ditemukan Beberapa Akun',
+            `Ada beberapa akun yang cocok dengan \`${query.slice(0, 40)}\`:\n${res.many.map((u) => `▸ <@${u.id}> • \`@${u.username}\` • \`${u.id}\``).join('\n')}\n-# Cari lagi pakai **username persis** atau **User ID**.`,
+          ),
+        );
+      }
+      if (res.notFound) {
+        return interaction.editReply(
+          errorCard(
+            '❌ Akun Tidak Ditemukan',
+            `Tidak ada akun yang cocok dengan \`${query.slice(0, 40)}\`.\n-# Username hanya bisa dicari untuk member server yang juga dimasuki bot. Untuk akun di luar server, pakai **User ID** (klik kanan profil → Copy User ID).`,
+          ),
+        );
+      }
+      picked = res.user;
+    }
+    picked ||= interaction.user;
+
+    const user = await interaction.client.users.fetch(picked.id, { force: true }).catch(() => picked); // force → banner
     const member = await guild.members.fetch(user.id).catch(() => null);
 
     const avatar = (member || user).displayAvatarURL({ extension: 'png', size: 1024, forceStatic: false });
@@ -146,7 +216,6 @@ const userInfoCommand = {
     let server = null;
     let community = null;
     if (member) {
-      // Urutan bergabung (member ke-#) — butuh daftar member lengkap.
       let joinPos = null;
       if (guild.members.cache.size >= guild.memberCount - 5) {
         joinPos = [...guild.members.cache.values()].filter((m) => m.joinedTimestamp).sort((a, b) => a.joinedTimestamp - b.joinedTimestamp).findIndex((m) => m.id === user.id) + 1;
@@ -168,7 +237,6 @@ const userInfoCommand = {
         roles.size ? `**🎨 Role (${num(roles.size)}):** ${shown.join(' ')}${roles.size > shown.length ? ` \`+${roles.size - shown.length}\`` : ''}` : null,
       ];
 
-      // Aktivitas komunitas: undangan & belanja di Noname Store.
       const rows = [];
       try {
         const inv = require('./invite-tracker').computeStats()[user.id];
@@ -194,7 +262,7 @@ const userInfoCommand = {
       banner,
       thumb: avatar,
       header,
-      blocks: [account.filter(Boolean).join('\n'), server ? server.filter(Boolean).join('\n') : '-# ⚠️ Member ini tidak berada di server.', community],
+      blocks: [account.filter(Boolean).join('\n'), server ? server.filter(Boolean).join('\n') : `-# ℹ️ Akun ini **tidak berada** di ${guild.name}.`, community],
       footer: footerOf(interaction),
       buttons: [
         link('Avatar', '🖼️', user.displayAvatarURL({ size: 4096, forceStatic: false })),
@@ -209,11 +277,11 @@ const userInfoCommand = {
 
 // ═════════════════════════════════ /roblox ═════════════════════════════════
 const PRESENCE = {
-  0: { label: '⚫ Offline', color: 0x95a5a6 },
-  1: { label: '🟢 Online', color: 0x2ecc71 },
-  2: { label: '🎮 Sedang Bermain', color: 0x3498db },
-  3: { label: '🛠️ Di Roblox Studio', color: 0xe67e22 },
-  4: { label: '⚫ Invisible', color: 0x95a5a6 },
+  0: { label: '⚫ Offline' },
+  1: { label: '🟢 Online' },
+  2: { label: '🎮 Sedang Bermain' },
+  3: { label: '🛠️ Di Roblox Studio' },
+  4: { label: '⚫ Invisible' },
 };
 const api = (sub, p) => `https://${sub}.${DOMAIN}${p}`;
 const safe = (p) => p.then((v) => v).catch(() => null);
@@ -251,7 +319,7 @@ async function fetchRoblox(input) {
     created: detail.created ? Date.parse(detail.created) : null,
     banned: Boolean(detail.isBanned),
     verified: Boolean(detail.hasVerifiedBadge),
-    headshot: head?.data?.[0]?.state === 'Completed' ? head.data[0].imageUrl : head?.data?.[0]?.imageUrl || null,
+    headshot: head?.data?.[0]?.imageUrl || null,
     avatar: full?.data?.[0]?.state === 'Completed' ? full.data[0].imageUrl : null,
     friends: friends?.count ?? null,
     followers: followers?.count ?? null,
@@ -282,14 +350,9 @@ const robloxCommand = {
       return interaction.editReply({ content: '⚠️ Server Roblox sedang tidak bisa dihubungi. Coba lagi beberapa saat lagi.' });
     }
     if (!r || r.invalid) {
-      return interaction.editReply({
-        components: [
-          new ContainerBuilder()
-            .setAccentColor(0xe74c3c)
-            .addTextDisplayComponents(text(`## ❌ Akun Tidak Ditemukan\nAkun Roblox \`${String(input).slice(0, 40)}\` tidak ditemukan.\n-# Pastikan memakai **username** (bukan display name), user ID, atau link profil.`)),
-        ],
-        flags: V2,
-      });
+      return interaction.editReply(
+        errorCard('❌ Akun Tidak Ditemukan', `Akun Roblox \`${String(input).slice(0, 40)}\` tidak ditemukan.\n-# Pastikan memakai **username** (bukan display name), user ID, atau link profil.`),
+      );
     }
 
     const pres = PRESENCE[r.presence?.userPresenceType ?? 0] || PRESENCE[0];
@@ -317,7 +380,9 @@ const robloxCommand = {
       `**🤝 Teman:** \`${r.friends == null ? '-' : num(r.friends)}\` • **❤️ Followers:** \`${r.followers == null ? '-' : num(r.followers)}\` • **➡️ Following:** \`${r.following == null ? '-' : num(r.following)}\``,
       `**🏘️ Grup:** \`${num(r.groups.length)} grup\``,
     ];
-    const bio = r.description.trim() ? `### 📝 Bio\n${r.description.trim().slice(0, 350).split('\n').map((l) => `> ${l}`).join('\n')}${r.description.length > 350 ? '…' : ''}` : null;
+    const bio = r.description.trim()
+      ? `### 📝 Bio\n${r.description.trim().slice(0, 350).split('\n').map((l) => `> ${l}`).join('\n')}${r.description.length > 350 ? '…' : ''}`
+      : null;
     const topGroups = [...r.groups].sort((a, b) => b.rank - a.rank || b.members - a.members).slice(0, 5);
     const groups = topGroups.length
       ? `### 🏘️ Grup Teratas\n${topGroups
@@ -330,14 +395,7 @@ const robloxCommand = {
       accent,
       thumb: r.headshot,
       header,
-      blocks: [
-        account.filter(Boolean).join('\n'),
-        social.join('\n'),
-        bio,
-        groups,
-        history,
-        r.avatar ? { gallery: r.avatar, desc: `Avatar ${r.displayName}` } : null,
-      ],
+      blocks: [account.filter(Boolean).join('\n'), social.join('\n'), bio, groups, history, r.avatar ? { gallery: r.avatar, desc: `Avatar ${r.displayName}` } : null],
       footer: footerOf(interaction),
       buttons: [
         link('Profil Roblox', '🎮', profile),
@@ -350,4 +408,4 @@ const robloxCommand = {
   },
 };
 
-module.exports = { userInfoCommand, robloxCommand, fetchRoblox };
+module.exports = { userInfoCommand, robloxCommand, fetchRoblox, resolveUser };
