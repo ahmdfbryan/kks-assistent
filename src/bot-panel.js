@@ -14,6 +14,7 @@ const {
   SeparatorSpacingSize,
   ButtonBuilder,
   ButtonStyle,
+  ActionRowBuilder,
   ModalBuilder,
   LabelBuilder,
   TextInputBuilder,
@@ -26,10 +27,12 @@ const { serverCheckCommand } = require('./server-check');
 /**
  * Bot Command Center — panel sticky (Components V2) di channel bot command.
  * Tombol: 👤 Info Akun Discord • 🎮 Info Akun Roblox • 🔍 Cek Server.
- * Tombol membuka form kecil → hasil memakai tampilan /userinfo, /roblox, /cekserver (hanya terlihat oleh pemakai).
+ * Tombol membuka form kecil → hasil (tampilan /userinfo, /roblox, /cekserver) dikirim PUBLIK ke channel hasil (RESULT_CHANNEL);
+ * pemakai mendapat info + tombol menuju hasilnya. Pesan gagal (tidak ditemukan, dll) hanya terlihat oleh pemakai.
  * Panel selalu dipindah ke paling bawah saat ada pesan baru di channel.
  */
 const DEFAULT_CHANNEL = '1553613922639151176';
+const RESULT_CHANNEL = '1563185053834412134'; // hasil pengecekan dari panel tampil publik di sini
 const DATA = path.join(__dirname, '..', 'data', 'bot-panel.json');
 const V2 = MessageFlags.IsComponentsV2;
 const EPH = MessageFlags.Ephemeral;
@@ -74,7 +77,7 @@ function buildPanel(guild, client) {
   box.addSectionComponents(item('🔍 Cek Server Discord', 'Member, online, boost, fitur & info invite server lain.', 'bp:server', 'Cek Server', '🔍'));
 
   box.addSeparatorComponents(line());
-  box.addTextDisplayComponents(text('-# 🔒 Hasil dari tombol hanya terlihat oleh kamu\n-# ⌨️ Bisa juga lewat `/userinfo` • `/roblox` • `/cekserver`'));
+  box.addTextDisplayComponents(text(`-# 📬 Hasil pengecekan dikirim ke <#${RESULT_CHANNEL}>\n-# ⌨️ Bisa juga lewat \`/userinfo\` • \`/roblox\` • \`/cekserver\``));
   return { components: [box], flags: V2, allowedMentions: { parse: [] } };
 }
 
@@ -117,9 +120,37 @@ function serverModal() {
     );
 }
 
+const KIND = { userinfo: '👤 Info Akun Discord', roblox: '🎮 Info Akun Roblox', cekserver: '🔍 Cek Server Discord' };
+
+/** Hasil sukses = kartu V2 yang punya tombol (Profil / Gabung Server). Kartu gagal tidak punya tombol. */
+function isResult(p) {
+  const box = p?.components?.[0];
+  const json = box?.toJSON ? box.toJSON() : box;
+  return Boolean(json?.type === 17 && json.components?.some((c) => c.type === 1));
+}
+
+/** Kirim hasil ke channel publik, lalu beri tahu pemakai (hanya terlihat olehnya). */
+async function publishResult(i, commandName, payload) {
+  const ch = await i.client.channels.fetch(RESULT_CHANNEL).catch(() => null);
+  if (!ch?.isTextBased()) return i.editReply(payload); // channel hasil tidak bisa diakses → tampilkan langsung ke pemakai
+  const top = new TextDisplayBuilder().setContent(`-# ${KIND[commandName] || '🔎 Hasil Pengecekan'} • diminta oleh <@${i.user.id}>`);
+  const sent = await ch.send({ components: [top, ...payload.components], flags: V2, allowedMentions: { parse: [] } }).catch((e) => {
+    console.warn('[bot-panel] gagal kirim hasil:', e.message);
+    return null;
+  });
+  if (!sent) return i.editReply(payload);
+  const box = new ContainerBuilder()
+    .setAccentColor(0x2ecc71)
+    .addTextDisplayComponents(text(`## ✅ Pengecekan Selesai!\nHasil **${KIND[commandName] || 'pengecekan'}** sudah dikirim ke <#${RESULT_CHANNEL}>.\nSilakan cek hasilnya di channel tersebut 👇`))
+    .addActionRowComponents(
+      new ActionRowBuilder().addComponents(new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Lihat Hasil').setEmoji('📬').setURL(sent.url)),
+    );
+  return i.editReply({ components: [box], flags: V2 });
+}
+
 /**
  * Jalankan command yang sudah ada (/userinfo, /roblox, /cekserver) dari form panel.
- * Semua balasan dipaksa "hanya terlihat oleh kamu" supaya channel tidak penuh & panel tetap rapi.
+ * Balasan sementara & pesan gagal hanya terlihat oleh pemakai; hasil sukses dikirim ke channel hasil.
  */
 function asCommand(i, commandName, values) {
   const eph = (p = {}) => (typeof p === 'string' ? { content: p, flags: EPH } : { ...p, flags: (p.flags || 0) | EPH });
@@ -145,7 +176,7 @@ function asCommand(i, commandName, values) {
     },
     deferReply: () => i.deferReply({ flags: EPH }),
     reply: (p) => i.reply(eph(p)),
-    editReply: (p) => i.editReply(p),
+    editReply: (p) => (isResult(p) ? publishResult(i, commandName, p) : i.editReply(p)),
     followUp: (p) => i.followUp(eph(p)),
     deleteReply: () => Promise.resolve(), // pesan sudah privat → tidak perlu dihapus
     fetchReply: () => i.fetchReply(),
