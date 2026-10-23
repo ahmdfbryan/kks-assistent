@@ -46,6 +46,30 @@ const welcomeCommand = {
   },
 };
 
-const commands = [welcomeCommand, verifyCommand, rulesCommand, voiceFinderCommand, storeCommand, danaMasukCommand, spenderCommand, socialCommand, invitesCommand, inviteLogCommand, giveawayCommand, serverStatsCommand, ticketCommand, suggestionCommand, boosterCommand, systemCommand, userInfoCommand, robloxCommand, clearCommand, rankCommand, levelCommand, membersCommand];
+const commands = [
+  welcomeCommand,
+  verifyCommand,
+  rulesCommand,
+  voiceFinderCommand,
+  storeCommand,
+  danaMasukCommand,
+  spenderCommand,
+  socialCommand,
+  invitesCommand,
+  inviteLogCommand,
+  giveawayCommand,
+  serverStatsCommand,
+  ticketCommand,
+  suggestionCommand,
+  boosterCommand,
+  systemCommand,
+  userInfoCommand,
+  robloxCommand,
+  clearCommand,
+  rankCommand,
+  levelCommand,
+  membersCommand,
+  serverCheckCommand,
+];
 
 module.exports = { commands };
