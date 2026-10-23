@@ -19,6 +19,7 @@ const booster = require('./booster');
 const system = require('./system');
 const leveling = require('./leveling');
 const botPanel = require('./bot-panel');
+const canvaManager = require('./canva-manager');
 
 const byName = new Map(commands.map((c) => [c.data.name, c]));
 // GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
@@ -47,6 +48,7 @@ booster.registerBooster(client);
 system.registerSystem(client);
 leveling.registerLeveling(client);
 botPanel.registerBotPanel(client);
+canvaManager.registerCanvaManager(client);
 
 const wib = () => new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'medium' });
 client.once(Events.ClientReady, (c) => {
@@ -69,6 +71,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (await system.handleInteraction(interaction)) return;
   // Bot Command Center: tombol & form panel ("bp:...") — ditangani di bot-panel.js
   if (typeof interaction.customId === 'string' && interaction.customId.startsWith('bp:')) return;
+  // Canva Manager: dashboard, form & tombol pengingat ("cv:...") — ditangani di canva-manager.js
+  if (typeof interaction.customId === 'string' && interaction.customId.startsWith('cv:')) return;
   // Autocomplete ID giveaway
   if (interaction.isAutocomplete()) {
     const cmd = byName.get(interaction.commandName);
