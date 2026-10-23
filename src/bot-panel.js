@@ -69,7 +69,7 @@ function buildPanel(guild, client) {
       .addTextDisplayComponents(text(`### ${title}\n${desc}`))
       .setButtonAccessory(new ButtonBuilder().setCustomId(id).setLabel(label).setEmoji(emoji).setStyle(style));
 
-  box.addSectionComponents(item('👤 Info Akun Discord', 'Profil, badge, umur akun, role & aktivitas di server.', 'bp:user', 'Cek Akun', '👤'));
+  box.addSectionComponents(item('👤 Info Akun Discord', 'Profil, badge, umur akun & role — via member, User ID, atau username.', 'bp:user', 'Cek Akun', '👤'));
   box.addSectionComponents(item('🎮 Info Akun Roblox', 'Avatar, status, teman, grup & username lama.', 'bp:roblox', 'Cek Roblox', '🎮'));
   box.addSectionComponents(item('🔍 Cek Server Discord', 'Member, online, boost, fitur & info invite server lain.', 'bp:server', 'Cek Server', '🔍'));
 
@@ -86,8 +86,12 @@ function userModal() {
     .addLabelComponents(
       new LabelBuilder()
         .setLabel('Pilih Member')
-        .setDescription('Kosongkan untuk melihat akun kamu sendiri.')
-        .setUserSelectMenuComponent(new UserSelectMenuBuilder().setCustomId('member').setPlaceholder('🔍 Cari member...').setMinValues(0).setMaxValues(1).setRequired(false)),
+        .setDescription('Kosongkan keduanya untuk melihat akun kamu sendiri.')
+        .setUserSelectMenuComponent(new UserSelectMenuBuilder().setCustomId('member').setPlaceholder('🔍 Cari member server...').setMinValues(0).setMaxValues(1).setRequired(false)),
+      new LabelBuilder()
+        .setLabel('Atau User ID / Username')
+        .setDescription('User ID = akun siapa saja (termasuk di luar server). Username = member server.')
+        .setTextInputComponent(new TextInputBuilder().setCustomId('cari').setStyle(TextInputStyle.Short).setPlaceholder('contoh: 123456789012345678 atau budi_123').setMaxLength(64).setRequired(false)),
     );
 }
 function robloxModal() {
@@ -161,7 +165,8 @@ async function handleInteraction(i) {
     if (i.isModalSubmit()) {
       if (id === 'bp:m:user') {
         const picked = i.fields.getSelectedUsers?.('member')?.first?.() || null;
-        await userInfoCommand.execute(asCommand(i, 'userinfo', { member: picked }));
+        const cari = (i.fields.getTextInputValue('cari') || '').trim() || null;
+        await userInfoCommand.execute(asCommand(i, 'userinfo', { member: picked, cari }));
       } else if (id === 'bp:m:roblox') {
         await robloxCommand.execute(asCommand(i, 'roblox', { username: i.fields.getTextInputValue('username') }));
       } else if (id === 'bp:m:server') {
