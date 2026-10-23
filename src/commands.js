@@ -17,6 +17,7 @@ const { clearCommand } = require('./clear');
 const { rankCommand, levelCommand } = require('./leveling');
 const { membersCommand } = require('./member-list');
 const { serverCheckCommand } = require('./server-check');
+const { botPanelCommand } = require('./bot-panel');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
@@ -70,6 +71,7 @@ const commands = [
   levelCommand,
   membersCommand,
   serverCheckCommand,
+  botPanelCommand,
 ];
 
 module.exports = { commands };
