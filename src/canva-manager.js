@@ -784,6 +784,104 @@ function toCsv() {
   return `﻿${rows.map((r) => r.map(esc).join(',')).join('\n')}`;
 }
 
+/** Laporan HTML (dibuka di browser): ringkasan, cari, filter status, urutkan kolom, salin email, chat WA. */
+function toHtml(guildName = 'Noname Store') {
+  const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const items = allItems().sort((a, b) => a.done - b.done || a.expiresAt - b.expiresAt);
+  const count = { active: 0, soon: 0, expired: 0, done: 0 };
+  for (const it of items) count[statusOf(it).key] += 1;
+  const d = new Date(Date.now() + 7 * 3600000);
+  const monthStart = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) - 7 * 3600000;
+  const pays = (it) => it.payments || (it.price ? [{ at: it.startAt, amount: it.price }] : []);
+  const revMonth = items.reduce((a, it) => a + pays(it).filter((p) => p.at >= monthStart).reduce((x, p) => x + (Number(p.amount) || 0), 0), 0);
+  const revAll = items.reduce((a, it) => a + pays(it).reduce((x, p) => x + (Number(p.amount) || 0), 0), 0);
+  const generated = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'full', timeStyle: 'short' });
+  const rows = items
+    .map((it) => {
+      const st = statusOf(it);
+      const left = it.done ? '' : it.expiresAt <= Date.now() ? `lewat ${Math.abs(daysLeft(it)) || 0} hari` : `${daysLeft(it)} hari lagi`;
+      const wa = waLink(it.contact);
+      return `<tr data-status="${st.key}" data-search="${esc([it.id, it.email, it.buyer, it.contact, it.source, it.note].join(' ').toLowerCase())}">
+<td><span class="badge ${st.key}">${st.emoji} ${esc(st.key === 'done' ? 'Selesai' : st.key === 'expired' ? 'Habis' : st.key === 'soon' ? 'Mau Habis' : 'Aktif')}</span></td>
+<td class="mono">${esc(it.id)}${it.origin === 'discord' ? ' <span class="tag">Discord</span>' : ''}</td>
+<td><div class="email"><span class="mono">${esc(it.email)}</span><button class="copy" data-copy="${esc(it.email)}" title="Salin email">⧉</button></div></td>
+<td>${esc(it.buyer || (it.buyerId ? `Discord ${it.buyerId}` : '-'))}</td>
+<td>${it.contact ? (wa ? `<a href="${esc(wa)}" target="_blank" rel="noopener">${esc(it.contact)}</a>` : esc(it.contact)) : '<span class="muted">-</span>'}</td>
+<td>${esc(it.source || '-')}</td>
+<td class="plan">${esc(it.plan)}</td>
+<td data-sort="${it.startAt}">${esc(dmy(it.startAt))}</td>
+<td data-sort="${it.expiresAt}"><b>${esc(dmy(it.expiresAt))}</b><div class="muted small">${esc(left)}</div></td>
+<td data-sort="${Number(it.price) || 0}" class="num">${it.price ? esc(rupiah(it.price)) : '<span class="muted">-</span>'}</td>
+<td class="note">${esc(it.note || '')}</td>
+</tr>`;
+    })
+    .join('\n');
+  return `<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Canva Manager — ${esc(guildName)}</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--text:#1d2433;--muted:#6b7385;--line:#e4e8f0;--brand:#3498db;--ok:#2ecc71;--warn:#f1c40f;--bad:#e74c3c;--done:#95a5a6}
+@media(prefers-color-scheme:dark){:root{--bg:#15171c;--card:#1e2128;--text:#e6e9ef;--muted:#9aa2b1;--line:#2c313b}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px}
+.wrap{max-width:1280px;margin:0 auto;padding:24px 16px 48px}
+.hero{background:linear-gradient(135deg,#1f6fb2,#3498db 60%,#5dade2);color:#fff;border-radius:18px;padding:24px 26px;display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.hero h1{margin:0 0 4px;font-size:26px}.hero p{margin:0;opacity:.9}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;cursor:pointer;transition:.15s}
+.stat:hover,.stat.on{border-color:var(--brand);box-shadow:0 0 0 2px color-mix(in srgb,var(--brand) 25%,transparent)}
+.stat .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}.stat .v{font-size:24px;font-weight:700;margin-top:4px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0 12px}
+.bar input{flex:1;min-width:220px;padding:11px 14px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--text);font-size:14px}
+.count{color:var(--muted)}
+.table{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:auto}
+table{border-collapse:collapse;width:100%;min-width:1050px}
+th,td{padding:11px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:var(--card);font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);cursor:pointer;user-select:none;white-space:nowrap}
+th:hover{color:var(--brand)}tr:hover td{background:color-mix(in srgb,var(--brand) 6%,transparent)}
+.badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.badge.active{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+.badge.soon{background:color-mix(in srgb,var(--warn) 22%,transparent);color:#b7950b}
+.badge.expired{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+.badge.done{background:color-mix(in srgb,var(--done) 22%,transparent);color:var(--muted)}
+.tag{font-size:10px;background:#5865f2;color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px;font-family:inherit}
+.mono{font-family:Consolas,"SFMono-Regular",monospace;font-size:13px}.muted{color:var(--muted)}.small{font-size:12px}.num{text-align:right;white-space:nowrap}
+.email{display:flex;gap:6px;align-items:center}.copy{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:6px;cursor:pointer;padding:1px 6px}
+.copy:hover{color:var(--brand);border-color:var(--brand)}.note{max-width:220px;color:var(--muted)}
+td[data-sort],td.plan{white-space:nowrap}
+a{color:var(--brand);text-decoration:none}a:hover{text-decoration:underline}
+.foot{margin-top:18px;color:var(--muted);text-align:center;font-size:12px}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1d2433;color:#fff;padding:9px 16px;border-radius:10px;opacity:0;transition:.2s}.toast.show{opacity:1}
+</style></head><body><div class="wrap">
+<div class="hero"><div><h1>🎨 Canva Manager</h1><p>${esc(guildName)} • Laporan Pelanggan Canva Pro</p></div><div class="small">Dibuat ${esc(generated)} WIB</div></div>
+<div class="grid">
+<div class="stat on" data-f="all"><div class="k">🗂️ Semua</div><div class="v">${num(items.length)}</div></div>
+<div class="stat" data-f="active"><div class="k">🟢 Aktif</div><div class="v">${num(count.active)}</div></div>
+<div class="stat" data-f="soon"><div class="k">🟡 Mau Habis</div><div class="v">${num(count.soon)}</div></div>
+<div class="stat" data-f="expired"><div class="k">🔴 Habis</div><div class="v">${num(count.expired)}</div></div>
+<div class="stat" data-f="done"><div class="k">✅ Selesai</div><div class="v">${num(count.done)}</div></div>
+<div class="stat" data-f="none"><div class="k">💰 Bulan Ini</div><div class="v" style="font-size:18px">${esc(rupiah(revMonth))}</div><div class="muted small">Total ${esc(rupiah(revAll))}</div></div>
+</div>
+<div class="bar"><input id="q" placeholder="🔎 Cari email, nama, kontak, ID, catatan..." autocomplete="off"><span class="count" id="count"></span></div>
+<div class="table"><table id="t"><thead><tr>
+<th>Status</th><th>ID</th><th>Email</th><th>Pembeli</th><th>Kontak</th><th>Sumber</th><th>Paket</th><th data-type="n">Mulai</th><th data-type="n">Habis ▲</th><th data-type="n">Harga</th><th>Catatan</th>
+</tr></thead><tbody>
+${rows || '<tr><td colspan="11" class="muted" style="text-align:center;padding:30px">Belum ada data.</td></tr>'}
+</tbody></table></div>
+<div class="foot">Noname Store • Canva Manager • Klik kartu ringkasan untuk filter, klik judul kolom untuk mengurutkan</div>
+</div><div class="toast" id="toast">Email disalin ✓</div>
+<script>
+const rows=[...document.querySelectorAll('#t tbody tr[data-status]')];let f='all';
+function apply(){const q=document.getElementById('q').value.toLowerCase().trim();let n=0;for(const r of rows){const ok=(f==='all'||r.dataset.status===f)&&(!q||r.dataset.search.includes(q));r.style.display=ok?'':'none';if(ok)n++}document.getElementById('count').textContent=n+' data'}
+document.getElementById('q').addEventListener('input',apply);
+document.querySelectorAll('.stat[data-f]').forEach(s=>s.addEventListener('click',()=>{if(s.dataset.f==='none')return;f=s.dataset.f;document.querySelectorAll('.stat').forEach(x=>x.classList.toggle('on',x===s));apply()}));
+document.querySelectorAll('th').forEach((th,i)=>{let asc=true;th.addEventListener('click',()=>{const tb=th.closest('table').tBodies[0];const num=th.dataset.type==='n';
+const val=r=>{const c=r.children[i];return num?Number(c.dataset.sort||0):c.textContent.trim().toLowerCase()};
+rows.sort((a,b)=>(val(a)>val(b)?1:val(a)<val(b)?-1:0)*(asc?1:-1));rows.forEach(r=>tb.appendChild(r));
+document.querySelectorAll('th').forEach(x=>x.textContent=x.textContent.replace(/ [▲▼]$/,''));th.textContent+=asc?' ▲':' ▼';asc=!asc})});
+document.querySelectorAll('.copy').forEach(b=>b.addEventListener('click',()=>{navigator.clipboard?.writeText(b.dataset.copy);const t=document.getElementById('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1200)}));
+apply();
+</script></body></html>`;
+}
+
 // ───────────────────────── Register & command ─────────────────────────
 function registerCanvaManager(c) {
   client = c;
@@ -832,7 +930,17 @@ const canvaCommand = {
         .setDescription('Cari pelanggan (email / nama / kontak / ID)')
         .addStringOption((o) => o.setName('kata').setDescription('Kata kunci').setRequired(true).setMinLength(2).setMaxLength(80)),
     )
-    .addSubcommand((s) => s.setName('export').setDescription('Download semua data pelanggan (CSV / Excel)'))
+    .addSubcommand((s) =>
+      s
+        .setName('export')
+        .setDescription('Download semua data pelanggan (laporan HTML untuk browser / CSV untuk Excel)')
+        .addStringOption((o) =>
+          o
+            .setName('format')
+            .setDescription('Default: HTML + CSV')
+            .addChoices({ name: '🌐 HTML (buka di browser)', value: 'html' }, { name: '📊 CSV (Excel / Google Sheets)', value: 'csv' }, { name: '📦 Keduanya', value: 'both' }),
+        ),
+    )
     .addSubcommand((s) => s.setName('cek-pengingat').setDescription('Cek & kirim pengingat sekarang')),
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -874,8 +982,19 @@ const canvaCommand = {
     }
     if (sub === 'cari') return interaction.reply(searchResult(interaction.options.getString('kata')));
     if (sub === 'export') {
-      const file = new AttachmentBuilder(Buffer.from(toCsv(), 'utf8'), { name: `canva-pelanggan-${dmy(Date.now())}.csv` });
-      return interaction.reply({ content: `📦 Data **${num(allItems().length)} pelanggan** Canva Pro — bisa dibuka di Excel / Google Sheets.`, files: [file], flags: EPH });
+      const format = interaction.options.getString('format') || 'both';
+      const name = `canva-pelanggan-${dmy(Date.now())}`;
+      const files = [];
+      if (format !== 'csv') files.push(new AttachmentBuilder(Buffer.from(toHtml(interaction.guild?.name), 'utf8'), { name: `${name}.html` }));
+      if (format !== 'html') files.push(new AttachmentBuilder(Buffer.from(toCsv(), 'utf8'), { name: `${name}.csv` }));
+      return interaction.reply({
+        content:
+          `📦 Data **${num(allItems().length)} pelanggan** Canva Pro.` +
+          (format !== 'csv' ? '\n🌐 **.html** → download lalu buka di browser (bisa cari, filter status, urutkan kolom, salin email).' : '') +
+          (format !== 'html' ? '\n📊 **.csv** → buka di Excel / Google Sheets.' : ''),
+        files,
+        flags: EPH,
+      });
     }
     if (sub === 'cek-pengingat') {
       await interaction.deferReply({ flags: EPH });
