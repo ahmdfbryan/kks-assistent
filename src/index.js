@@ -18,6 +18,7 @@ const suggestions = require('./suggestions');
 const booster = require('./booster');
 const system = require('./system');
 const leveling = require('./leveling');
+const botPanel = require('./bot-panel');
 
 const byName = new Map(commands.map((c) => [c.data.name, c]));
 // GuildMembers wajib untuk fitur welcome → aktifkan "Server Members Intent" di Discord Developer Portal.
@@ -45,6 +46,7 @@ suggestions.registerSuggestions(client);
 booster.registerBooster(client);
 system.registerSystem(client);
 leveling.registerLeveling(client);
+botPanel.registerBotPanel(client);
 
 const wib = () => new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'medium' });
 client.once(Events.ClientReady, (c) => {
@@ -65,6 +67,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (await booster.handleInteraction(interaction)) return;
   // System Operational: tombol Refresh Status ("sys:refresh")
   if (await system.handleInteraction(interaction)) return;
+  // Bot Command Center: tombol & form panel ("bp:...") — ditangani di bot-panel.js
+  if (typeof interaction.customId === 'string' && interaction.customId.startsWith('bp:')) return;
   // Autocomplete ID giveaway
   if (interaction.isAutocomplete()) {
     const cmd = byName.get(interaction.commandName);
