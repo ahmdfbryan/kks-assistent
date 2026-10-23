@@ -1,0 +1,17 @@
+{
+  "_petunjuk": [
+    "Canva Manager: daftar pelanggan Canva Pro (WhatsApp / luar Discord + order ticket Discord) dengan dashboard & pengingat otomatis.",
+    "channelId = channel dashboard + pengingat (gunakan channel PRIVATE). Kirim dashboard dengan /canva panel.",
+    "pingUserId = ID akun yang di-mention di setiap pengingat (kosong = admin yang menambahkan data / admin yang menutup ticket Discord).",
+    "remindDays = pengingat sebelum habis (hari). Contoh [3, 1] = H-3 & H-1. Hari H selalu diingatkan.",
+    "overdueEveryHours = kalau sudah habis tapi belum diklik 'Sudah Dikeluarkan' / 'Perpanjang', diingatkan lagi tiap X jam.",
+    "quietHours = jam tenang WIB (pengingat tidak dikirim di jam ini, ditunda sampai pagi). start 22 & end 8 = 22.00–08.00.",
+    "includeDiscordOrders = true → order Canva Pro dari ticket Discord (Completed) otomatis ikut tampil & diingatkan."
+  ],
+  "channelId": "1563232116202807366",
+  "pingUserId": "",
+  "remindDays": [3, 1],
+  "overdueEveryHours": 24,
+  "quietHours": { "start": 22, "end": 8 },
+  "includeDiscordOrders": true
+}
