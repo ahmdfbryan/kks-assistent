@@ -16,6 +16,7 @@ const { userInfoCommand, robloxCommand } = require('./profile-info');
 const { clearCommand } = require('./clear');
 const { rankCommand, levelCommand } = require('./leveling');
 const { membersCommand } = require('./member-list');
+const { serverCheckCommand } = require('./server-check');
 
 const TEXT_CHANNELS = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 
